@@ -10,7 +10,7 @@
  *   bankAccounts  → Banka hesapları (ödemenin geldiği yeri bilmek için)
  *   orders        → Siparişler (müşteriye bağlı, kalemler ve ödeme planı içerir)
  *   payments      → Ödeme kayıtları (sipariş + plan kalemine bağlı)
- *   rates         → Manuel döviz kurları (USD bazında, raporlar için)
+ *   rates         → Manuel döviz kurları (USD baazında, raporlar için)
  *
  * STORAGE: İki mod destekler:
  *   1. Yerel mod (localStorage): tek kullanıcı, tarayıcı yerel
@@ -929,8 +929,8 @@ function Sidebar({ view, setView, storageMode, storageLabel }) {
           </svg>
         </div>
         <div>
-          <div className="font-semibold text-white tracking-wider text-[15px]" style={{ fontFamily: FONT_DISPLAY, letterSpacing: "0.05em" }}>EXPORT-FLOW</div>
-          <div className="text-[10px] uppercase tracking-widest" style={{ color: TOKENS.gold }}>İhracat Yönetimi</div>
+          <div className="font-semibold text-white tracking-wider text-[13px]" style={{ fontFamily: FONT_DISPLAY, letterSpacing: "0.05em" }}>İHRACAT OPERASYONLARI</div>
+          <div className="text-[10px] uppercase tracking-widest" style={{ color: TOKENS.gold }}>Yönetim Sistemi</div>
         </div>
       </div>
 
@@ -1141,24 +1141,28 @@ function DashboardView({ customers, products, orders, payments, rates, setView }
 
         {/* GRAFİKLER */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card title="Aylık Ciro" subtitle="Son 12 ay · USD" className="lg:col-span-2">
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={monthlyRevenue} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+          <Card title="Aylık Ciro" subtitle="Son 12 ay · USD bazında" className="lg:col-span-2">
+            <ResponsiveContainer width="100%" height={280}>
+              <AreaChart data={monthlyRevenue} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%"   stopColor={TOKENS.gold} stopOpacity={0.45} />
+                    <stop offset="0%"   stopColor={TOKENS.gold} stopOpacity={0.55} />
                     <stop offset="100%" stopColor={TOKENS.gold} stopOpacity={0.02} />
                   </linearGradient>
+                  <linearGradient id="revStroke" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%"   stopColor={TOKENS.copper} />
+                    <stop offset="100%" stopColor={TOKENS.gold} />
+                  </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="2 4" stroke={TOKENS.border} vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 10, fill: TOKENS.muted }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: TOKENS.muted }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} axisLine={false} tickLine={false} />
+                <CartesianGrid strokeDasharray="3 6" stroke={TOKENS.border} vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 12, fill: TOKENS.ink, fontWeight: 600 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: TOKENS.muted, fontWeight: 500 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} axisLine={false} tickLine={false} />
                 <Tooltip
-                  formatter={(v) => fmtMoney(v)}
-                  contentStyle={{ fontSize: 11, borderRadius: 6, border: `1px solid ${TOKENS.border}` }}
+                  formatter={(v) => [fmtMoney(v), "Ciro"]}
+                  contentStyle={{ fontSize: 13, borderRadius: 8, border: `1px solid ${TOKENS.border}`, fontWeight: 600, padding: "8px 12px" }}
                   cursor={{ stroke: TOKENS.gold, strokeWidth: 1, strokeDasharray: "3 3" }}
                 />
-                <Area type="monotone" dataKey="value" stroke={TOKENS.gold} strokeWidth={2} fill="url(#revGrad)" />
+                <Area type="monotone" dataKey="value" stroke="url(#revStroke)" strokeWidth={3} fill="url(#revGrad)" dot={{ r: 4, fill: TOKENS.gold, strokeWidth: 2, stroke: "white" }} activeDot={{ r: 6, fill: TOKENS.copper, strokeWidth: 2, stroke: "white" }} />
               </AreaChart>
             </ResponsiveContainer>
           </Card>
@@ -1255,16 +1259,28 @@ function DashboardView({ customers, products, orders, payments, rates, setView }
 
 function KPICard({ icon: Icon, label, value, sub, accent }) {
   return (
-    <div className="rounded-lg p-5 relative overflow-hidden transition-shadow hover:shadow-sm" style={{ background: "white", border: `1px solid ${TOKENS.border}` }}>
-      <div className="absolute top-0 left-0 right-0 h-1" style={{ background: accent }} />
-      <div className="flex items-center justify-between mb-3 mt-2">
-        <span className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: TOKENS.muted }}>{label}</span>
-        <Icon size={16} style={{ color: accent }} />
+    <div className="rounded-xl p-5 relative overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
+      style={{ background: "white", border: `1px solid ${TOKENS.border}`, boxShadow: "0 1px 3px rgba(15, 26, 46, 0.04)" }}>
+      {/* Üstteki renkli aksent şerit */}
+      <div className="absolute top-0 left-0 right-0 h-1.5"
+        style={{ background: `linear-gradient(90deg, ${accent}, ${accent}90)` }} />
+      {/* Sağ üstteki büyük şeffaf icon */}
+      <div className="absolute top-3 right-3 opacity-[0.07]" style={{ color: accent }}>
+        <Icon size={70} strokeWidth={1.5} />
       </div>
-      <div className="text-2xl tabular-nums leading-tight" style={{ color: TOKENS.ink, fontFamily: FONT_DISPLAY, fontWeight: 600 }}>
-        {value}
+      <div className="relative">
+        <div className="flex items-center gap-2 mb-3 mt-2">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ background: accent + "18" }}>
+            <Icon size={15} style={{ color: accent }} strokeWidth={2.2} />
+          </div>
+          <span className="text-[10px] uppercase tracking-widest font-bold" style={{ color: TOKENS.muted }}>{label}</span>
+        </div>
+        <div className="text-3xl tabular-nums leading-tight" style={{ color: TOKENS.ink, fontWeight: 700, letterSpacing: "-0.02em" }}>
+          {value}
+        </div>
+        <div className="text-xs mt-1.5 font-semibold" style={{ color: TOKENS.muted }}>{sub}</div>
       </div>
-      <div className="text-[11px] mt-1" style={{ color: TOKENS.muted }}>{sub}</div>
     </div>
   );
 }
@@ -1344,7 +1360,16 @@ function CustomersView({ customers, setCustomers, orders, payments, rates, showT
     setOpen(true);
   };
 
-  const openEdit = (c) => { setEditing({ ...c }); setOpen(true); };
+  const openEdit = (c) => {
+    setEditing({
+      defaultPaymentMethod: "bank_transfer",
+      defaultPrepaymentPct: 30,
+      defaultPreShipmentPct: 40,
+      defaultDeferredPct: 30,
+      ...c, // Mevcut değerler varsayılanları üzerine yazar
+    });
+    setOpen(true);
+  };
 
   const save = () => {
     if (!editing.name?.trim()) return showToast("Müşteri adı zorunlu", "error");
@@ -1934,9 +1959,50 @@ function BankAccountsView({ bankAccounts, setBankAccounts, payments, rates, show
     showToast("Hesap silindi", "success");
   };
 
+  const handleExport = () => {
+    if (!bankAccounts.length) return showToast("Aktarılacak hesap yok", "error");
+    exportToExcel(bankAccounts.map((b) => ({
+      "Hesap Adı": b.name, "Banka": b.bankName, "Para Birimi": b.currency,
+      "IBAN": b.iban || "", "SWIFT/BIC": b.swift || "", "Hesap No": b.accountNumber || "",
+      "Şube": b.branch || "", "Notlar": b.notes || "",
+    })), `banka_hesaplari_${todayISO()}.xlsx`, "Banka Hesapları");
+    showToast("Excel'e aktarıldı", "success");
+  };
+
+  const handleImport = async (file) => {
+    if (!file) return;
+    try {
+      const rows = await importFromExcel(file);
+      const added = rows.map((r) => ({
+        id: uid(),
+        name: String(r["Hesap Adı"] || "").trim(),
+        bankName: String(r["Banka"] || "").trim(),
+        currency: String(r["Para Birimi"] || "USD").toUpperCase(),
+        iban: String(r["IBAN"] || ""),
+        swift: String(r["SWIFT/BIC"] || ""),
+        accountNumber: String(r["Hesap No"] || ""),
+        branch: String(r["Şube"] || ""),
+        notes: String(r["Notlar"] || ""),
+        createdAt: todayISO(),
+      })).filter((b) => b.name && b.bankName);
+      setBankAccounts((arr) => [...arr, ...added]);
+      showToast(`${added.length} hesap içe aktarıldı`, "success");
+    } catch (e) { showToast("Hata: " + e.message, "error"); }
+  };
+
+  const downloadTemplate = () => exportToExcel([{
+    "Hesap Adı": "Garanti USD", "Banka": "Garanti BBVA", "Para Birimi": "USD",
+    "IBAN": "TR00 0006 2000 0000 0000 0000 01", "SWIFT/BIC": "TGBATRIS",
+    "Hesap No": "1234567", "Şube": "Denizli", "Notlar": "",
+  }], "banka_sablonu.xlsx", "Şablon");
+
   return (
     <div>
       <PageHeader title="Banka Hesapları" subtitle="Tahsilatların geleceği hesapları kaydet — akreditif ve havale takibi için kritik">
+        <input id="bank-import" type="file" accept=".xlsx,.xls" onChange={(e) => { handleImport(e.target.files[0]); e.target.value = ""; }} className="hidden" />
+        <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>Şablon</Btn>
+        <Btn variant="secondary" size="sm" icon={FileUp} onClick={() => document.getElementById("bank-import").click()}>İçe Aktar</Btn>
+        <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>Dışa Aktar</Btn>
         <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>Yeni Hesap</Btn>
       </PageHeader>
 
@@ -2147,6 +2213,75 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
     showToast("Excel'e aktarıldı", "success");
   };
 
+  // Excel'den sipariş içe aktar — her satır bir kalem, sipariş no'lara göre gruplanır
+  const handleImport = async (file) => {
+    if (!file) return;
+    try {
+      const rows = await importFromExcel(file);
+      // Sipariş no'ya göre grupla
+      const ordersByNumber = {};
+      rows.forEach((r) => {
+        const no = String(r["Sipariş No"] || "").trim();
+        if (!no) return;
+        const customerName = String(r["Müşteri"] || "").trim();
+        const customer = customers.find((c) => c.name === customerName);
+        if (!ordersByNumber[no]) {
+          ordersByNumber[no] = {
+            orderNumber: no,
+            customerId: customer?.id || customers[0]?.id || "",
+            orderDate: r["Sipariş Tarihi"] || todayISO(),
+            shipmentDate: r["Sevk Tarihi"] || "",
+            status: "draft",
+            incoterms: r["Incoterms"] || "FOB",
+            currency: String(r["Para Birimi"] || "USD").toUpperCase(),
+            invoiceNumber: r["Fatura No"] || "",
+            billOfLading: r["Konşimento No"] || "",
+            notes: r["Notlar"] || "",
+            items: [],
+            paymentPlan: [],
+          };
+        }
+        ordersByNumber[no].items.push({
+          id: uid(),
+          productCode: String(r["Ürün Kodu"] || ""),
+          manufacturingCode: String(r["Mamul Kodu"] || ""),
+          nameTr: String(r["Türkçe İsim"] || ""),
+          nameEn: String(r["İngilizce İsim"] || ""),
+          unit: String(r["Birim"] || "adet"),
+          quantity: Number(r["Adet"]) || 0,
+          unitPrice: Number(r["Birim Fiyat"]) || 0,
+        });
+      });
+      const newOrders = Object.values(ordersByNumber).map((o) => ({ ...o, id: uid(), createdAt: todayISO() }));
+      setOrders((arr) => [...arr, ...newOrders]);
+      showToast(`${newOrders.length} sipariş içe aktarıldı`, "success");
+    } catch (e) { showToast("Hata: " + e.message, "error"); }
+  };
+
+  const downloadTemplate = () => {
+    exportToExcel([{
+      "Sipariş No": "SP-2026-0001",
+      "Müşteri": "Örnek Müşteri Adı",
+      "Ülke": "Almanya",
+      "Sipariş Tarihi": todayISO(),
+      "Sevk Tarihi": "",
+      "Durum": "Taslak",
+      "Incoterms": "FOB",
+      "Para Birimi": "USD",
+      "Ürün Kodu": "PRD-001",
+      "Mamul Kodu": "",
+      "Türkçe İsim": "Ürün Adı",
+      "İngilizce İsim": "Product Name",
+      "Adet": 100,
+      "Birim": "adet",
+      "Birim Fiyat": 25,
+      "Fatura No": "",
+      "Konşimento No": "",
+      "Notlar": "",
+    }], "siparis_sablonu.xlsx", "Şablon");
+  };
+
+
   const total = (o) => orderTotal(o);
 
   const columns = [
@@ -2184,6 +2319,9 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
   return (
     <div>
       <PageHeader title="Siparişler" subtitle={`${orders.length} sipariş · Sipariş içinde kalemler ve ödeme planı birlikte yönetilir`}>
+        <input id="order-import" type="file" accept=".xlsx,.xls" onChange={(e) => { handleImport(e.target.files[0]); e.target.value = ""; }} className="hidden" />
+        <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>Şablon</Btn>
+        <Btn variant="secondary" size="sm" icon={FileUp} onClick={() => document.getElementById("order-import").click()}>İçe Aktar</Btn>
         <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>Dışa Aktar</Btn>
         <Btn variant="primary" size="sm" icon={Plus} onClick={openNew} disabled={customers.length === 0}>Yeni Sipariş</Btn>
       </PageHeader>
@@ -2248,13 +2386,13 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
 // her kalem ayrı satır olarak takip edilir.
 function syncPaymentsFromPlan(order, currentPayments, setPayments) {
   const existingForOrder = currentPayments.filter((p) => p.orderId === order.id);
-  // Plan ID'si ile eşleşmiş ve henüz ödenmemiş olanları sil (yeniden oluşturulacaklar)
-  const toKeep = existingForOrder.filter((p) => p.status === "paid" || !p.planItemId);
+  const orderPlanIds = new Set((order.paymentPlan || []).map((p) => p.id));
 
+  // Bir plan kalemine ait HERHANGİ bir kayıt varsa (paid veya pending), yeni oluşturma
+  // Bu sayede kısmi tahsilat sonrası oluşturulan "kalan" pending kayıtlar korunur
   const newPayments = (order.paymentPlan || []).map((plan) => {
-    // Eğer bu plan kalemi için zaten ödenmiş kayıt varsa onu koru
-    const existing = existingForOrder.find((p) => p.planItemId === plan.id && p.status === "paid");
-    if (existing) return null;
+    const hasAny = existingForOrder.some((p) => p.planItemId === plan.id);
+    if (hasAny) return null;
     return {
       id: uid(),
       orderId: order.id,
@@ -2274,8 +2412,14 @@ function syncPaymentsFromPlan(order, currentPayments, setPayments) {
   }).filter(Boolean);
 
   setPayments((arr) => {
-    // Mevcut ödemelerden bu siparişe ait olanları (ödenmemiş plan kalemli olanları) çıkar
-    const filtered = arr.filter((p) => p.orderId !== order.id || (p.status === "paid") || !p.planItemId);
+    // Mevcutlardan: bu siparişe ait olmayanlar veya paid olanlar veya planı hâlâ var olanlar kalır
+    const filtered = arr.filter((p) => {
+      if (p.orderId !== order.id) return true;
+      if (!p.planItemId) return true; // Manuel kayıt, koru
+      if (p.status === "paid") return true; // Tahsil edilmiş, asla silme
+      // Pending: plan kalemi hâlâ var ise koru, yoksa sil
+      return orderPlanIds.has(p.planItemId);
+    });
     return [...filtered, ...newPayments];
   });
 }
@@ -2781,17 +2925,61 @@ function PaymentsView({ orders, customers, payments, setPayments, bankAccounts, 
   };
 
   const confirmMarkPaid = () => {
-    if (!marking.bankAccountId) return showToast("Banka hesabı seç", "error");
-    setPayments((arr) => arr.map((p) => p.id === marking.id ? {
-      ...p,
-      status: "paid",
-      paidDate: marking.paidDate,
-      bankAccountId: marking.bankAccountId,
-      referenceNumber: marking.referenceNumber,
-      amount: Number(marking.paidAmount) || p.amount,
-      exchangeRateAtPayment: rates[p.currency], // o günkü kuru kaydet
-    } : p));
-    showToast("Ödeme tahsil edildi", "success");
+    const paidAmt = Number(marking.paidAmount) || 0;
+    const originalAmt = Number(marking.amount) || 0;
+
+    if (paidAmt <= 0) {
+      return showToast("Tahsil edilen tutar 0'dan büyük olmalı", "error");
+    }
+    if (paidAmt > originalAmt + 0.01) {
+      return showToast("Tahsil edilen tutar plan tutarından fazla olamaz", "error");
+    }
+
+    const isFullPayment = paidAmt >= originalAmt - 0.01;
+    const remaining = +(originalAmt - paidAmt).toFixed(2);
+
+    if (isFullPayment) {
+      // Tam tahsilat
+      setPayments((arr) => arr.map((p) => p.id === marking.id ? {
+        ...p,
+        status: "paid",
+        paidDate: marking.paidDate,
+        bankAccountId: marking.bankAccountId || "",
+        referenceNumber: marking.referenceNumber || "",
+        amount: originalAmt,
+        exchangeRateAtPayment: rates[p.currency],
+      } : p));
+      showToast("Ödeme tam olarak tahsil edildi", "success");
+    } else {
+      // Kısmi tahsilat: mevcut kaydı paidAmt ile paid yap, kalanı yeni pending kayıt olarak ekle
+      const remainingPayment = {
+        id: uid(),
+        orderId: marking.orderId,
+        planItemId: marking.planItemId,
+        type: marking.type,
+        method: marking.method,
+        amount: remaining,
+        currency: marking.currency,
+        dueDate: marking.dueDate,
+        paidDate: "",
+        status: "pending",
+        bankAccountId: "",
+        referenceNumber: "",
+        notes: `(${fmtMoney(paidAmt, marking.currency)} kısmi tahsilat sonrası kalan)`,
+        createdAt: todayISO(),
+      };
+      setPayments((arr) => arr.map((p) => p.id === marking.id ? {
+        ...p,
+        status: "paid",
+        paidDate: marking.paidDate,
+        bankAccountId: marking.bankAccountId || "",
+        referenceNumber: marking.referenceNumber || "",
+        amount: paidAmt,
+        exchangeRateAtPayment: rates[p.currency],
+        notes: p.notes ? `${p.notes} · Kısmi tahsilat` : "Kısmi tahsilat",
+      } : p).concat(remainingPayment));
+      showToast(`Kısmi tahsilat: ${fmtMoney(paidAmt, marking.currency)} alındı, ${fmtMoney(remaining, marking.currency)} bekliyor`, "success");
+    }
     setMarking(null);
   };
 
@@ -2931,31 +3119,44 @@ function PaymentsView({ orders, customers, payments, setPayments, bankAccounts, 
       </div>
 
       {/* Tahsil etme modalı */}
-      <Modal open={!!marking} onClose={() => setMarking(null)} title="Tahsilatı Kaydet" subtitle="Ödeme alındığında banka hesabı ve referans bilgisini kaydet" size="sm"
+      <Modal open={!!marking} onClose={() => setMarking(null)} title="Tahsilatı Kaydet" subtitle="Tam veya kısmi tahsilat girebilirsiniz · Banka hesabı opsiyonel" size="sm"
         footer={<><Btn variant="ghost" onClick={() => setMarking(null)}>İptal</Btn><Btn variant="success" icon={Check} onClick={confirmMarkPaid}>Onayla</Btn></>}
       >
-        {marking && (
-          <div className="space-y-3">
-            <div className="rounded-md p-3 text-xs" style={{ background: TOKENS.cream }}>
-              <div><strong>{marking.order?.orderNumber}</strong> · {marking.customer?.name}</div>
-              <div style={{ color: TOKENS.muted }}>{PAYMENT_PLAN_TYPES.find((t) => t.key === marking.type)?.label} · {fmtMoney(marking.amount, marking.currency)}</div>
+        {marking && (() => {
+          const paidAmt = Number(marking.paidAmount) || 0;
+          const originalAmt = Number(marking.amount) || 0;
+          const remaining = +(originalAmt - paidAmt).toFixed(2);
+          const isPartial = paidAmt > 0 && paidAmt < originalAmt - 0.01;
+          return (
+            <div className="space-y-3">
+              <div className="rounded-md p-3 text-xs" style={{ background: TOKENS.cream }}>
+                <div><strong>{marking.order?.orderNumber}</strong> · {marking.customer?.name}</div>
+                <div style={{ color: TOKENS.muted }}>{PAYMENT_PLAN_TYPES.find((t) => t.key === marking.type)?.label} · Plan: <strong>{fmtMoney(marking.amount, marking.currency)}</strong></div>
+              </div>
+              <div><Label required>Tahsil Tarihi</Label><Input type="date" value={marking.paidDate} onChange={(e) => setMarking({ ...marking, paidDate: e.target.value })} /></div>
+              <div>
+                <Label hint="kısmi de olabilir">Tahsil Edilen Tutar ({marking.currency})</Label>
+                <Input type="number" step="0.01" value={marking.paidAmount} onChange={(e) => setMarking({ ...marking, paidAmount: e.target.value })} />
+                {isPartial && (
+                  <div className="mt-2 p-2 rounded text-[11px] font-semibold" style={{ background: TOKENS.terracotta + "15", color: TOKENS.terracotta, border: `1px solid ${TOKENS.terracotta}30` }}>
+                    ⚡ Kısmi tahsilat: <strong>{fmtMoney(paidAmt, marking.currency)}</strong> alınacak, <strong>{fmtMoney(remaining, marking.currency)}</strong> hâlâ bekleyen olarak kalacak (yeni satır olarak gözükecek).
+                  </div>
+                )}
+              </div>
+              <div><Label hint="opsiyonel">Banka Hesabı</Label>
+                <Select value={marking.bankAccountId} onChange={(e) => setMarking({ ...marking, bankAccountId: e.target.value })}>
+                  <option value="">— seçilmedi —</option>
+                  {bankAccounts.filter((b) => b.currency === marking.currency).map((b) => <option key={b.id} value={b.id}>{b.name} ({b.currency})</option>)}
+                  {bankAccounts.filter((b) => b.currency !== marking.currency).map((b) => <option key={b.id} value={b.id}>{b.name} ({b.currency})</option>)}
+                </Select>
+              </div>
+              <div><Label hint="dekont/swift no — opsiyonel">Referans No</Label><Input value={marking.referenceNumber} onChange={(e) => setMarking({ ...marking, referenceNumber: e.target.value })} className="font-mono" /></div>
+              <div className="text-[10px] p-2 rounded" style={{ background: TOKENS.gold + "15", color: TOKENS.goldDark }}>
+                💡 Onayladığında, ödeme tarihindeki USD kuru ({rates[marking.currency]?.toFixed(4) || "1"}) kaydedilir — kur farkı için.
+              </div>
             </div>
-            <div><Label required>Tahsil Tarihi</Label><Input type="date" value={marking.paidDate} onChange={(e) => setMarking({ ...marking, paidDate: e.target.value })} /></div>
-            <div><Label hint="kısmi ödenebilir">Tahsil Edilen Tutar</Label><Input type="number" step="0.01" value={marking.paidAmount} onChange={(e) => setMarking({ ...marking, paidAmount: e.target.value })} /></div>
-            <div><Label required>Banka Hesabı</Label>
-              <Select value={marking.bankAccountId} onChange={(e) => setMarking({ ...marking, bankAccountId: e.target.value })}>
-                <option value="">— seç —</option>
-                {bankAccounts.filter((b) => b.currency === marking.currency).map((b) => <option key={b.id} value={b.id}>{b.name} ({b.currency})</option>)}
-                {bankAccounts.filter((b) => b.currency !== marking.currency).map((b) => <option key={b.id} value={b.id}>{b.name} ({b.currency})</option>)}
-              </Select>
-              {bankAccounts.length === 0 && <p className="text-[10px] mt-1" style={{ color: TOKENS.oxblood }}>Önce Banka Hesapları modülünden hesap ekle</p>}
-            </div>
-            <div><Label hint="dekont/swift no">Referans No</Label><Input value={marking.referenceNumber} onChange={(e) => setMarking({ ...marking, referenceNumber: e.target.value })} className="font-mono" /></div>
-            <div className="text-[10px] p-2 rounded" style={{ background: TOKENS.gold + "15", color: TOKENS.goldDark }}>
-              💡 Onayladığında, ödeme tarihindeki USD kuru ({rates[marking.currency]?.toFixed(4) || "1"}) sistem tarafından kaydedilir — kur farkı kâr/zararını ileride hesaplamak için.
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </Modal>
     </div>
   );
@@ -3343,15 +3544,17 @@ function CashFlowView({ orders, customers, payments, rates, setView }) {
 // ============================================================================
 
 function ReportsView({ orders, customers, products, payments, rates }) {
-  const [tab, setTab] = useState("customer");
+  const [tab, setTab] = useState("summary");
 
   return (
     <div>
-      <PageHeader title="Raporlar" subtitle="Müşteri, ürün, ülke ve ödeme yöntemi bazlı analizler · Tümü USD'ye çevrilir" />
+      <PageHeader title="Raporlar" subtitle="Tarih aralığı seçilebilir özet · Sevkiyat cirosu · Müşteri, ürün, ülke, yöntem analizleri" />
 
       <div className="p-8 space-y-4">
         <div className="flex gap-1 rounded-lg p-1" style={{ background: TOKENS.cream, border: `1px solid ${TOKENS.border}` }}>
           {[
+            { key: "summary", label: "Özet", icon: BarChart3 },
+            { key: "shipment", label: "Sevkiyat Cirosu", icon: Ship },
             { key: "customer", label: "Müşteri", icon: Users },
             { key: "product", label: "Ürün", icon: Package },
             { key: "country", label: "Ülke", icon: Globe },
@@ -3361,7 +3564,7 @@ function ReportsView({ orders, customers, products, payments, rates }) {
             const Icon = t.icon;
             const active = tab === t.key;
             return (
-              <button key={t.key} onClick={() => setTab(t.key)} className="flex-1 px-3 py-2 text-xs font-semibold rounded-md transition inline-flex items-center justify-center gap-1.5"
+              <button key={t.key} onClick={() => setTab(t.key)} className="flex-1 px-3 py-2 text-xs font-bold rounded-md transition inline-flex items-center justify-center gap-1.5"
                 style={{ background: active ? "white" : "transparent", color: active ? TOKENS.ink : TOKENS.muted, boxShadow: active ? "0 1px 2px rgba(0,0,0,0.05)" : "none" }}>
                 <Icon size={13} /> {t.label}
               </button>
@@ -3369,12 +3572,354 @@ function ReportsView({ orders, customers, products, payments, rates }) {
           })}
         </div>
 
+        {tab === "summary" && <SummaryReport orders={orders} customers={customers} products={products} payments={payments} rates={rates} />}
+        {tab === "shipment" && <ShipmentReport orders={orders} customers={customers} rates={rates} />}
         {tab === "customer" && <CustomerReport orders={orders} customers={customers} payments={payments} rates={rates} />}
         {tab === "product" && <ProductReport orders={orders} products={products} rates={rates} />}
         {tab === "country" && <CountryReport orders={orders} customers={customers} rates={rates} />}
         {tab === "method" && <MethodReport payments={payments} rates={rates} />}
         {tab === "status" && <StatusReport orders={orders} rates={rates} />}
       </div>
+    </div>
+  );
+}
+
+// ÖZET RAPOR — tarih aralığına göre tüm veriyi gösterir, Excel'e aktarılabilir
+function SummaryReport({ orders, customers, products, payments, rates }) {
+  const [dateRange, setDateRange] = useState({
+    from: addDays(todayISO(), -90),
+    to: todayISO(),
+  });
+  const [dateBasis, setDateBasis] = useState("orderDate"); // orderDate, shipmentDate, paidDate
+
+  // Tarih aralığında filtrele
+  const filteredOrders = useMemo(() => {
+    return orders.filter((o) => {
+      const d = dateBasis === "shipmentDate" ? (o.actualShipmentDate || o.shipmentDate) : o.orderDate;
+      if (!d) return false;
+      if (dateRange.from && d < dateRange.from) return false;
+      if (dateRange.to && d > dateRange.to) return false;
+      return true;
+    });
+  }, [orders, dateRange, dateBasis]);
+
+  const filteredPayments = useMemo(() => {
+    return payments.filter((p) => {
+      if (p.status !== "paid") return false;
+      const d = p.paidDate;
+      if (!d) return false;
+      if (dateRange.from && d < dateRange.from) return false;
+      if (dateRange.to && d > dateRange.to) return false;
+      return true;
+    });
+  }, [payments, dateRange]);
+
+  // Özet metrikler
+  const stats = useMemo(() => {
+    const orderCount = filteredOrders.length;
+    const orderTotalUSD = filteredOrders.reduce((s, o) => s + toUSD(orderTotal(o), o.currency, rates), 0);
+    const shippedCount = filteredOrders.filter((o) => o.actualShipmentDate || ["shipped", "delivered", "completed"].includes(o.status)).length;
+    const shippedTotalUSD = filteredOrders.filter((o) => o.actualShipmentDate || ["shipped", "delivered", "completed"].includes(o.status)).reduce((s, o) => s + toUSD(orderTotal(o), o.currency, rates), 0);
+    const paidCount = filteredPayments.length;
+    const paidTotalUSD = filteredPayments.reduce((s, p) => s + toUSD(p.amount, p.currency, rates), 0);
+    const customerCount = new Set(filteredOrders.map((o) => o.customerId)).size;
+    return { orderCount, orderTotalUSD, shippedCount, shippedTotalUSD, paidCount, paidTotalUSD, customerCount };
+  }, [filteredOrders, filteredPayments, rates]);
+
+  // Excel'e aktarma — her şey
+  const exportFullReport = () => {
+    const wb = XLSX.utils.book_new();
+
+    // Sheet 1: Özet
+    const summaryRows = [
+      { "Metrik": "Tarih Aralığı", "Değer": `${dateRange.from} → ${dateRange.to}` },
+      { "Metrik": "Sipariş Sayısı", "Değer": stats.orderCount },
+      { "Metrik": "Sipariş Cirosu (USD)", "Değer": stats.orderTotalUSD.toFixed(2) },
+      { "Metrik": "Sevk Edilen Sipariş", "Değer": stats.shippedCount },
+      { "Metrik": "Sevkiyat Cirosu (USD)", "Değer": stats.shippedTotalUSD.toFixed(2) },
+      { "Metrik": "Tahsil Edilen Ödeme Sayısı", "Değer": stats.paidCount },
+      { "Metrik": "Tahsil Edilen Toplam (USD)", "Değer": stats.paidTotalUSD.toFixed(2) },
+      { "Metrik": "Aktif Müşteri Sayısı", "Değer": stats.customerCount },
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), "Özet");
+
+    // Sheet 2: Siparişler
+    const orderRows = filteredOrders.map((o) => {
+      const c = customers.find((x) => x.id === o.customerId);
+      return {
+        "Sipariş No": o.orderNumber,
+        "Müşteri": c?.name || "—",
+        "Ülke": c?.country || "",
+        "Sipariş Tarihi": o.orderDate || "",
+        "Sevk Tarihi (Plan)": o.shipmentDate || "",
+        "Fiili Sevk": o.actualShipmentDate || "",
+        "Durum": ORDER_STATUSES.find((s) => s.key === o.status)?.label || o.status,
+        "Para Birimi": o.currency,
+        "Tutar": orderTotal(o),
+        "Tutar (USD)": toUSD(orderTotal(o), o.currency, rates).toFixed(2),
+        "Incoterms": o.incoterms || "",
+        "Fatura No": o.invoiceNumber || "",
+        "Konşimento": o.billOfLading || "",
+      };
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(orderRows), "Siparişler");
+
+    // Sheet 3: Tahsilatlar
+    const payRows = filteredPayments.map((p) => {
+      const o = orders.find((x) => x.id === p.orderId);
+      const c = customers.find((x) => x.id === o?.customerId);
+      return {
+        "Sipariş No": o?.orderNumber || "—",
+        "Müşteri": c?.name || "—",
+        "Tip": PAYMENT_PLAN_TYPES.find((t) => t.key === p.type)?.label || "",
+        "Yöntem": PAYMENT_METHODS.find((m) => m.key === p.method)?.label || "",
+        "Tahsil Tarihi": p.paidDate,
+        "Vade": p.dueDate || "",
+        "Tutar": p.amount,
+        "Para Birimi": p.currency,
+        "Tutar (USD)": toUSD(p.amount, p.currency, rates).toFixed(2),
+        "Kur": p.exchangeRateAtPayment?.toFixed(4) || "",
+        "Referans": p.referenceNumber || "",
+      };
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(payRows), "Tahsilatlar");
+
+    // Sheet 4: Müşteri Özeti
+    const customerSummary = {};
+    filteredOrders.forEach((o) => {
+      const c = customers.find((x) => x.id === o.customerId);
+      const key = c?.name || "—";
+      if (!customerSummary[key]) customerSummary[key] = { name: key, country: c?.country || "", count: 0, total: 0 };
+      customerSummary[key].count++;
+      customerSummary[key].total += toUSD(orderTotal(o), o.currency, rates);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+      Object.values(customerSummary).sort((a, b) => b.total - a.total).map((c) => ({
+        "Müşteri": c.name, "Ülke": c.country, "Sipariş": c.count, "Toplam (USD)": c.total.toFixed(2),
+      }))
+    ), "Müşteri Özeti");
+
+    const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    downloadBlob(out, `ozet_rapor_${dateRange.from}_${dateRange.to}.xlsx`, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="flex items-end gap-3 flex-wrap">
+          <div className="w-32">
+            <Label>Bazda</Label>
+            <Select value={dateBasis} onChange={(e) => setDateBasis(e.target.value)}>
+              <option value="orderDate">Sipariş Tarihi</option>
+              <option value="shipmentDate">Sevk Tarihi</option>
+            </Select>
+          </div>
+          <DateRange from={dateRange.from} to={dateRange.to} onChange={setDateRange} />
+          <div className="flex gap-2 ml-auto">
+            <Btn variant="ghost" size="sm" onClick={() => setDateRange({ from: addDays(todayISO(), -30), to: todayISO() })}>Son 30 gün</Btn>
+            <Btn variant="ghost" size="sm" onClick={() => setDateRange({ from: addDays(todayISO(), -90), to: todayISO() })}>Son 90 gün</Btn>
+            <Btn variant="ghost" size="sm" onClick={() => setDateRange({ from: addDays(todayISO(), -365), to: todayISO() })}>Son 1 yıl</Btn>
+            <Btn variant="ghost" size="sm" onClick={() => {
+              const d = new Date();
+              setDateRange({ from: `${d.getFullYear()}-01-01`, to: todayISO() });
+            }}>Bu yıl</Btn>
+            <Btn variant="primary" size="sm" icon={FileDown} onClick={exportFullReport}>Excel'e Tüm Rapor</Btn>
+          </div>
+        </div>
+      </Card>
+
+      {/* Özet KPI'lar */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard icon={FileText} label="Sipariş Sayısı" value={stats.orderCount} sub={`${stats.customerCount} müşteri`} accent={TOKENS.navy} />
+        <KPICard icon={DollarSign} label="Toplam Sipariş Cirosu" value={fmtMoney(stats.orderTotalUSD, "USD", { compact: true })} sub="USD bazında" accent={TOKENS.gold} />
+        <KPICard icon={Ship} label="Sevkiyat Cirosu" value={fmtMoney(stats.shippedTotalUSD, "USD", { compact: true })} sub={`${stats.shippedCount} sevk edildi`} accent={TOKENS.copper} />
+        <KPICard icon={CheckCircle2} label="Tahsil Edilen" value={fmtMoney(stats.paidTotalUSD, "USD", { compact: true })} sub={`${stats.paidCount} ödeme`} accent={TOKENS.forest} />
+      </div>
+
+      {/* En aktif müşteriler tablosu */}
+      <Card title="Dönemin En Aktif Müşterileri" subtitle={`${dateRange.from} → ${dateRange.to}`} noPadding>
+        {filteredOrders.length === 0 ? (
+          <div className="p-8 text-center text-sm" style={{ color: TOKENS.muted }}>Bu tarih aralığında sipariş yok</div>
+        ) : (
+          <DataTable
+            columns={[
+              { key: "name", label: "Müşteri", render: (r) => <span className="font-bold">{r.name}</span> },
+              { key: "country", label: "Ülke" },
+              { key: "count", label: "Sipariş", align: "right" },
+              { key: "shipped", label: "Sevk Edilmiş", align: "right" },
+              { key: "total", label: "Toplam Ciro (USD)", align: "right", render: (r) => fmtMoney(r.total, "USD", { compact: true }) },
+              { key: "paid", label: "Tahsil Edilen (USD)", align: "right", render: (r) => fmtMoney(r.paid, "USD", { compact: true }) },
+            ]}
+            rows={(() => {
+              const map = {};
+              filteredOrders.forEach((o) => {
+                const c = customers.find((x) => x.id === o.customerId);
+                const key = c?.id || "—";
+                if (!map[key]) map[key] = { id: key, name: c?.name || "—", country: c?.country || "—", count: 0, total: 0, shipped: 0, paid: 0 };
+                map[key].count++;
+                map[key].total += toUSD(orderTotal(o), o.currency, rates);
+                if (o.actualShipmentDate || ["shipped", "delivered", "completed"].includes(o.status)) {
+                  map[key].shipped++;
+                }
+              });
+              filteredPayments.forEach((p) => {
+                const o = orders.find((x) => x.id === p.orderId);
+                if (!o) return;
+                const c = customers.find((x) => x.id === o.customerId);
+                const key = c?.id || "—";
+                if (map[key]) map[key].paid += toUSD(p.amount, p.currency, rates);
+              });
+              return Object.values(map).sort((a, b) => b.total - a.total);
+            })()}
+            emptyText="Veri yok"
+          />
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// SEVKİYAT RAPORU — sevk edilen tarihe göre ciro
+function ShipmentReport({ orders, customers, rates }) {
+  const [dateRange, setDateRange] = useState({
+    from: addDays(todayISO(), -90),
+    to: todayISO(),
+  });
+
+  // Sadece sevk edilmiş siparişler (actualShipmentDate var olan)
+  const shippedOrders = useMemo(() => {
+    return orders.filter((o) => {
+      const shipDate = o.actualShipmentDate;
+      if (!shipDate) return false;
+      if (dateRange.from && shipDate < dateRange.from) return false;
+      if (dateRange.to && shipDate > dateRange.to) return false;
+      return true;
+    });
+  }, [orders, dateRange]);
+
+  // Aylık sevkiyat dağılımı
+  const monthlyShipment = useMemo(() => {
+    const buckets = {};
+    shippedOrders.forEach((o) => {
+      const d = new Date(o.actualShipmentDate);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!buckets[key]) buckets[key] = { month: key, label: d.toLocaleDateString("tr-TR", { month: "short", year: "2-digit" }), value: 0, count: 0 };
+      buckets[key].value += toUSD(orderTotal(o), o.currency, rates);
+      buckets[key].count++;
+    });
+    return Object.values(buckets).sort((a, b) => a.month.localeCompare(b.month));
+  }, [shippedOrders, rates]);
+
+  const stats = useMemo(() => ({
+    count: shippedOrders.length,
+    totalUSD: shippedOrders.reduce((s, o) => s + toUSD(orderTotal(o), o.currency, rates), 0),
+    customers: new Set(shippedOrders.map((o) => o.customerId)).size,
+    avgUSD: shippedOrders.length > 0 ? shippedOrders.reduce((s, o) => s + toUSD(orderTotal(o), o.currency, rates), 0) / shippedOrders.length : 0,
+  }), [shippedOrders, rates]);
+
+  const exportShipment = () => {
+    if (!shippedOrders.length) return;
+    const rows = shippedOrders.map((o) => {
+      const c = customers.find((x) => x.id === o.customerId);
+      return {
+        "Sevk Tarihi": o.actualShipmentDate,
+        "Sipariş No": o.orderNumber,
+        "Müşteri": c?.name || "—",
+        "Ülke": c?.country || "",
+        "Sipariş Tarihi": o.orderDate || "",
+        "Para Birimi": o.currency,
+        "Tutar": orderTotal(o),
+        "Tutar (USD)": toUSD(orderTotal(o), o.currency, rates).toFixed(2),
+        "Incoterms": o.incoterms || "",
+        "Konşimento": o.billOfLading || "",
+        "Fatura No": o.invoiceNumber || "",
+      };
+    });
+    exportToExcel(rows, `sevkiyat_cirosu_${dateRange.from}_${dateRange.to}.xlsx`, "Sevkiyat");
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="flex items-end gap-3 flex-wrap">
+          <div className="text-sm font-bold flex-shrink-0" style={{ color: TOKENS.ink }}>Fiili Sevk Tarihi:</div>
+          <DateRange from={dateRange.from} to={dateRange.to} onChange={setDateRange} />
+          <div className="flex gap-2 ml-auto">
+            <Btn variant="ghost" size="sm" onClick={() => setDateRange({ from: addDays(todayISO(), -30), to: todayISO() })}>Son 30 gün</Btn>
+            <Btn variant="ghost" size="sm" onClick={() => setDateRange({ from: addDays(todayISO(), -90), to: todayISO() })}>Son 90 gün</Btn>
+            <Btn variant="ghost" size="sm" onClick={() => setDateRange({ from: addDays(todayISO(), -365), to: todayISO() })}>Son 1 yıl</Btn>
+            <Btn variant="ghost" size="sm" onClick={() => {
+              const d = new Date();
+              setDateRange({ from: `${d.getFullYear()}-01-01`, to: todayISO() });
+            }}>Bu yıl</Btn>
+            <Btn variant="primary" size="sm" icon={FileDown} onClick={exportShipment}>Excel</Btn>
+          </div>
+        </div>
+        <p className="text-[11px] mt-3" style={{ color: TOKENS.muted }}>
+          ℹ️ Bu rapor <strong>fiili sevkiyat tarihi</strong> girilmiş siparişleri gösterir. Sipariş kaydında "Fiili Sevk" alanını dolduran kayıtlar listelenir.
+        </p>
+      </Card>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard icon={Ship} label="Sevk Edilen Sipariş" value={stats.count} sub={`${stats.customers} müşteri`} accent={TOKENS.copper} />
+        <KPICard icon={DollarSign} label="Toplam Sevkiyat Cirosu" value={fmtMoney(stats.totalUSD, "USD", { compact: true })} sub="USD bazında" accent={TOKENS.gold} />
+        <KPICard icon={TrendingUp} label="Ortalama Sipariş" value={fmtMoney(stats.avgUSD, "USD", { compact: true })} sub="USD bazında" accent={TOKENS.navy} />
+        <KPICard icon={Calendar} label="Dönem Uzunluğu" value={`${daysBetween(dateRange.from, dateRange.to)} gün`} sub={`${dateRange.from} → ${dateRange.to}`} accent={TOKENS.forest} />
+      </div>
+
+      {monthlyShipment.length > 0 && (
+        <Card title="Aylık Sevkiyat Cirosu" subtitle="Fiili sevk tarihine göre · USD">
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={monthlyShipment} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="shipGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={TOKENS.copper} stopOpacity={0.95} />
+                  <stop offset="100%" stopColor={TOKENS.gold} stopOpacity={0.7} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 6" stroke={TOKENS.border} vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 12, fill: TOKENS.ink, fontWeight: 600 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: TOKENS.muted, fontWeight: 500 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} axisLine={false} tickLine={false} />
+              <Tooltip formatter={(v) => fmtMoney(v)} contentStyle={{ fontSize: 13, borderRadius: 8, fontWeight: 600 }} />
+              <Bar dataKey="value" fill="url(#shipGrad)" radius={[6, 6, 0, 0]} name="Ciro" />
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
+
+      <Card title="Sevk Edilen Siparişler" subtitle={`${shippedOrders.length} kayıt`} noPadding>
+        {shippedOrders.length === 0 ? (
+          <div className="p-12 text-center text-sm" style={{ color: TOKENS.muted }}>
+            Bu tarih aralığında fiili sevkiyatı girilmiş sipariş yok.<br/>
+            <span className="text-xs">Sipariş kaydında "Fiili Sevk" alanını doldurarak sevk tarihi atayabilirsin.</span>
+          </div>
+        ) : (
+          <DataTable
+            columns={[
+              { key: "actualShipmentDate", label: "Sevk Tarihi", render: (r) => <span className="font-bold">{fmtDate(r.actualShipmentDate)}</span> },
+              { key: "orderNumber", label: "Sipariş No", render: (r) => <span className="font-mono font-bold" style={{ color: TOKENS.navy }}>{r.orderNumber}</span> },
+              { key: "customer", label: "Müşteri", sortValue: (r) => customers.find((c) => c.id === r.customerId)?.name || "", render: (r) => {
+                const c = customers.find((x) => x.id === r.customerId);
+                return (
+                  <div>
+                    <div className="font-medium">{c?.name || "—"}</div>
+                    <div className="text-[11px]" style={{ color: TOKENS.muted }}>{c?.country || ""}</div>
+                  </div>
+                );
+              }},
+              { key: "incoterms", label: "Incoterms", render: (r) => r.incoterms ? <Badge color="navy">{r.incoterms}</Badge> : "—" },
+              { key: "currency", label: "Pb." },
+              { key: "total", label: "Tutar", align: "right", sortValue: (r) => orderTotal(r), render: (r) => <span className="font-bold tabular-nums">{fmtMoney(orderTotal(r), r.currency)}</span> },
+              { key: "totalUSD", label: "USD", align: "right", sortValue: (r) => toUSD(orderTotal(r), r.currency, rates), render: (r) => <span className="tabular-nums" style={{ color: TOKENS.muted }}>{fmtMoney(toUSD(orderTotal(r), r.currency, rates), "USD", { compact: true })}</span> },
+              { key: "billOfLading", label: "Konşimento", render: (r) => r.billOfLading ? <span className="font-mono text-xs">{r.billOfLading}</span> : "—" },
+            ]}
+            rows={shippedOrders}
+            keyField="id"
+            defaultSort={{ key: "actualShipmentDate", dir: "desc" }}
+            emptyText="Veri yok"
+          />
+        )}
+      </Card>
     </div>
   );
 }

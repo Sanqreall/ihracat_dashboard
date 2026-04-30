@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: Calibri, "Carlito", "Segoe UI", -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-weight: 500; /* Calibri için biraz kalın */
+  font-size: 15px; /* Default'tan biraz büyük */
+  letter-spacing: 0;
+}
+
+/* Başlıkları daha kalın yap */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 700;
+}
+
+/* Tablo metinleri daha kalın */
+table td, table th {
+  font-weight: 500;
+}
+
+/* Input metinleri kalın */
+input, select, textarea {
+  font-weight: 500;
+}
+
+/* Sayısal değerler */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}

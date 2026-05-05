@@ -10,7 +10,7 @@
  *   bankAccounts  → Banka hesapları (ödemenin geldiği yeri bilmek için)
  *   orders        → Siparişler (müşteriye bağlı, kalemler ve ödeme planı içerir)
  *   payments      → Ödeme kayıtları (sipariş + plan kalemine bağlı)
- *   rates         → Manuel döviz kurları (USD baazında, raporlar için)
+ *   rates         → Manuel döviz kurları (USD bazında, raporlar için)
  *
  * STORAGE: İki mod destekler:
  *   1. Yerel mod (localStorage): tek kullanıcı, tarayıcı yerel
@@ -2574,10 +2574,11 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
           <div className="grid grid-cols-4 gap-3">
             <div><Label required>Sipariş No</Label><Input value={editing.orderNumber} onChange={(e) => setEditing({ ...editing, orderNumber: e.target.value })} className="font-mono" /></div>
             <div className="col-span-2"><Label required>Müşteri</Label>
-              <Select value={editing.customerId} onChange={(e) => onCustomerChange(e.target.value)}>
-                <option value="">— seç —</option>
-                {customers.map((c) => <option key={c.id} value={c.id}>{c.code} — {c.name} ({c.country})</option>)}
-              </Select>
+              <CustomerPicker
+                customers={customers}
+                value={editing.customerId}
+                onChange={onCustomerChange}
+              />
             </div>
             <div><Label>Durum</Label>
               <Select value={editing.status} onChange={(e) => setEditing({ ...editing, status: e.target.value })}>
@@ -2610,53 +2611,16 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
         </div>
 
         {/* KALEMLER */}
-        <div>
-          <div className="flex items-center justify-between mb-3 pb-2" style={{ borderBottom: `1px solid ${TOKENS.border}` }}>
-            <div className="text-[11px] uppercase tracking-widest font-semibold" style={{ color: TOKENS.gold }}>
-              Kalemler ({editing.items?.length || 0}) · Toplam: <span style={{ color: TOKENS.ink }}>{fmtMoney(itemsTotal, editing.currency)}</span>
-            </div>
-            <Btn variant="secondary" size="xs" icon={Plus} onClick={addItem}>Kalem Ekle</Btn>
-          </div>
-          {(editing.items || []).length === 0 ? (
-            <div className="text-center py-8 text-xs rounded-md" style={{ color: TOKENS.muted, background: TOKENS.cream, border: `1px dashed ${TOKENS.border}` }}>
-              En az bir kalem ekle. Ürünler listesinden seçebilir veya manuel girebilirsin.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {editing.items.map((item, idx) => {
-                const lineTotal = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
-                return (
-                  <div key={item.id} className="rounded-md p-3" style={{ background: TOKENS.cream + "60", border: `1px solid ${TOKENS.border}` }}>
-                    <div className="flex items-start gap-2">
-                      <div className="text-xs font-mono pt-2 w-6 flex-shrink-0" style={{ color: TOKENS.muted }}>{idx + 1}</div>
-                      <div className="flex-1 grid grid-cols-12 gap-2">
-                        <div className="col-span-3">
-                          <Label hint="katalogtan">Ürün</Label>
-                          <Select value={item.productId || ""} onChange={(e) => pickProduct(idx, e.target.value)}>
-                            <option value="">— manuel giriş —</option>
-                            {products.map((p) => <option key={p.id} value={p.id}>{p.productCode} · {p.nameTr}</option>)}
-                          </Select>
-                        </div>
-                        <div className="col-span-2"><Label>Ürün Kodu</Label><Input value={item.productCode} onChange={(e) => updateItem(idx, { productCode: e.target.value })} className="font-mono text-xs" /></div>
-                        <div className="col-span-3"><Label>İsim (TR)</Label><Input value={item.nameTr} onChange={(e) => updateItem(idx, { nameTr: e.target.value })} /></div>
-                        <div className="col-span-2"><Label>Adet</Label><Input type="number" step="0.01" value={item.quantity} onChange={(e) => updateItem(idx, { quantity: e.target.value })} /></div>
-                        <div className="col-span-2"><Label>Birim Fiyat ({editing.currency})</Label><Input type="number" step="0.01" value={item.unitPrice} onChange={(e) => updateItem(idx, { unitPrice: e.target.value })} /></div>
-                        <div className="col-span-1"><Label>Birim</Label><Select value={item.unit || "adet"} onChange={(e) => updateItem(idx, { unit: e.target.value })}><option>adet</option><option>kg</option><option>ton</option><option>m²</option><option>m³</option><option>litre</option></Select></div>
-                        <div className="col-span-12 flex items-center justify-between text-xs pt-1">
-                          <div style={{ color: TOKENS.muted }}>{item.manufacturingCode && <>Mamul: <span className="font-mono">{item.manufacturingCode}</span> · </>}{item.nameEn && <>EN: {item.nameEn}</>}</div>
-                          <div className="font-semibold tabular-nums" style={{ color: TOKENS.ink }}>{fmtMoney(lineTotal, editing.currency)}</div>
-                        </div>
-                      </div>
-                      <button onClick={() => removeItem(idx)} className="p-1.5 rounded mt-5 transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}>
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <OrderItemsSection
+          editing={editing}
+          setEditing={setEditing}
+          products={products}
+          itemsTotal={itemsTotal}
+          addItem={addItem}
+          removeItem={removeItem}
+          updateItem={updateItem}
+          pickProduct={pickProduct}
+        />
 
         {/* ÖDEME PLANI */}
         <div>
@@ -2751,6 +2715,535 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
         </div>
       </div>
     </Modal>
+  );
+}
+
+// ============================================================================
+// SİPARİŞ KALEMLERİ — hızlı arama, bulk yapıştırma, tablo düzenleme
+// ============================================================================
+
+// Müşteri seçimi — yazarak arama, seçilince kapanır
+function CustomerPicker({ customers, value, onChange }) {
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  const selected = customers.find((c) => c.id === value);
+
+  // Arama sonuçları
+  const results = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return customers.slice(0, 8);
+    return customers.filter((c) =>
+      [c.code, c.name, c.country, c.contactPerson, c.email].filter(Boolean)
+        .some((v) => v.toLowerCase().includes(q))
+    ).slice(0, 8);
+  }, [search, customers]);
+
+  // Dış tıklamada kapansın
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  const selectCustomer = (c) => {
+    onChange(c.id);
+    setOpen(false);
+    setSearch("");
+  };
+
+  const highlight = (text, q) => {
+    if (!q || !text) return text;
+    const idx = text.toLowerCase().indexOf(q.toLowerCase());
+    if (idx === -1) return text;
+    return (
+      <>
+        {text.slice(0, idx)}
+        <strong style={{ color: TOKENS.copper, background: TOKENS.gold + "30" }}>
+          {text.slice(idx, idx + q.length)}
+        </strong>
+        {text.slice(idx + q.length)}
+      </>
+    );
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      {/* Trigger */}
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full px-3 py-2 text-sm bg-white rounded-md text-left flex items-center justify-between gap-2 transition"
+        style={{ border: `1px solid ${open ? TOKENS.navy : TOKENS.border}`, fontFamily: FONT_BODY, fontWeight: 500 }}
+      >
+        {selected ? (
+          <span className="flex items-center gap-2 min-w-0">
+            <span className="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded flex-shrink-0" style={{ color: TOKENS.navy, background: "#E6F1FB" }}>{selected.code}</span>
+            <span className="font-bold truncate" style={{ color: TOKENS.ink }}>{selected.name}</span>
+            {selected.country && <span className="text-[11px] font-semibold flex-shrink-0" style={{ color: TOKENS.muted }}>· {selected.country}</span>}
+          </span>
+        ) : (
+          <span style={{ color: TOKENS.muted }}>— müşteri seç —</span>
+        )}
+        <ChevronDown size={14} style={{ color: TOKENS.muted, transform: open ? "rotate(180deg)" : "" }} />
+      </button>
+
+      {/* Açılır panel */}
+      {open && (
+        <div className="absolute z-50 left-0 right-0 mt-1 rounded-md overflow-hidden shadow-xl"
+          style={{ background: "white", border: `1px solid ${TOKENS.border}` }}
+        >
+          {/* Arama */}
+          <div className="p-2" style={{ borderBottom: `1px solid ${TOKENS.border}`, background: TOKENS.cream + "60" }}>
+            <div className="relative">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: TOKENS.muted }} />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                autoFocus
+                placeholder="Kod, isim, ülke, yetkili..."
+                className="w-full pl-7 pr-2 py-1.5 text-xs rounded font-semibold focus:outline-none"
+                style={{ border: `1px solid ${TOKENS.border}`, background: "white", fontFamily: FONT_BODY }}
+              />
+            </div>
+          </div>
+
+          {/* Sonuçlar */}
+          <div style={{ maxHeight: "260px", overflowY: "auto" }}>
+            {results.length === 0 ? (
+              <div className="p-3 text-center text-xs" style={{ color: TOKENS.muted }}>Eşleşen müşteri yok</div>
+            ) : (
+              results.map((c, i) => (
+                <div
+                  key={c.id}
+                  onClick={() => selectCustomer(c)}
+                  className="px-3 py-2 cursor-pointer transition"
+                  style={{ borderBottom: i < results.length - 1 ? `1px solid ${TOKENS.border}` : "none", background: c.id === value ? TOKENS.gold + "15" : "white" }}
+                  onMouseEnter={(e) => { if (c.id !== value) e.currentTarget.style.background = TOKENS.cream; }}
+                  onMouseLeave={(e) => { if (c.id !== value) e.currentTarget.style.background = "white"; }}
+                >
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ color: TOKENS.navy, background: "#E6F1FB" }}>
+                      {highlight(c.code || "—", search)}
+                    </span>
+                    <span className="text-sm font-bold" style={{ color: TOKENS.ink }}>{highlight(c.name, search)}</span>
+                  </div>
+                  <div className="text-[10px] font-semibold" style={{ color: TOKENS.muted }}>
+                    📍 {highlight(c.country || "—", search)}
+                    {c.contactPerson && <> · {highlight(c.contactPerson, search)}</>}
+                    {c.defaultCurrency && <> · {c.defaultCurrency}</>}
+                    {c.defaultPaymentTerms ? <> · Vade: {c.defaultPaymentTerms} gün</> : null}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OrderItemsSection({ editing, setEditing, products, itemsTotal, addItem, removeItem, updateItem, pickProduct }) {
+  const [search, setSearch] = useState("");
+  const [showBulk, setShowBulk] = useState(false);
+  const [bulkText, setBulkText] = useState("");
+  const [bulkMode, setBulkMode] = useState("codes"); // codes | code-qty-price | full
+  const searchRef = useRef(null);
+
+  // Arama sonuçları — kod, mamul kodu, isim üzerinden filtrele
+  const searchResults = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return [];
+    return products.filter((p) =>
+      [p.productCode, p.manufacturingCode, p.nameTr, p.nameEn].filter(Boolean)
+        .some((v) => v.toLowerCase().includes(q))
+    ).slice(0, 8);
+  }, [search, products]);
+
+  // Aramayı vurgulayan basit fonksiyon
+  const highlight = (text, q) => {
+    if (!q || !text) return text;
+    const idx = text.toLowerCase().indexOf(q.toLowerCase());
+    if (idx === -1) return text;
+    return (
+      <>
+        {text.slice(0, idx)}
+        <strong style={{ color: TOKENS.copper, background: TOKENS.gold + "30", padding: "0 2px" }}>
+          {text.slice(idx, idx + q.length)}
+        </strong>
+        {text.slice(idx + q.length)}
+      </>
+    );
+  };
+
+  // Hızlı eklenme: bir ürünü tek tıkla kalemlere ekle
+  const addProduct = (p) => {
+    const newItem = {
+      id: uid(),
+      productId: p.id,
+      productCode: p.productCode,
+      manufacturingCode: p.manufacturingCode || "",
+      nameTr: p.nameTr || "",
+      nameEn: p.nameEn || "",
+      unit: p.unit || "adet",
+      quantity: 1,
+      unitPrice: p.defaultPrice || 0,
+    };
+    setEditing({
+      ...editing,
+      items: [...(editing.items || []), newItem],
+    });
+    setSearch("");
+    // arama kutusuna geri odaklan
+    setTimeout(() => searchRef.current?.focus(), 50);
+  };
+
+  // Enter tuşu ilk eşleşeni ekler
+  const onSearchKeyDown = (e) => {
+    if (e.key === "Enter" && searchResults.length > 0) {
+      e.preventDefault();
+      addProduct(searchResults[0]);
+    } else if (e.key === "Escape") {
+      setSearch("");
+    }
+  };
+
+  // BULK PASTE: Excel'den yapıştırılan veriyi parse et
+  const processBulkPaste = () => {
+    if (!bulkText.trim()) return;
+    const lines = bulkText.split(/[\r\n]+/).map((l) => l.trim()).filter(Boolean);
+    const newItems = lines.map((line) => {
+      // Tab veya virgül veya birden fazla boşluk ile ayrıldıysa böl
+      const parts = line.split(/\t+|;\s*|,\s*|\s{2,}/).map((p) => p.trim());
+      const code = parts[0] || "";
+      let qty = 1, price = 0;
+      if (bulkMode === "code-qty-price") {
+        qty = parseFloat((parts[1] || "1").replace(",", ".")) || 1;
+        price = parseFloat((parts[2] || "0").replace(",", ".")) || 0;
+      } else if (bulkMode === "full") {
+        qty = parseFloat((parts[3] || "1").replace(",", ".")) || 1;
+        price = parseFloat((parts[5] || "0").replace(",", ".")) || 0;
+      }
+      // Katalogdan eşleştir (kod ya da mamul kodu)
+      const product = products.find((p) =>
+        p.productCode?.toLowerCase() === code.toLowerCase() ||
+        p.manufacturingCode?.toLowerCase() === code.toLowerCase()
+      );
+      if (product) {
+        return {
+          id: uid(),
+          productId: product.id,
+          productCode: product.productCode,
+          manufacturingCode: product.manufacturingCode || "",
+          nameTr: product.nameTr || "",
+          nameEn: product.nameEn || "",
+          unit: product.unit || "adet",
+          quantity: qty,
+          unitPrice: price > 0 ? price : (product.defaultPrice || 0),
+        };
+      } else {
+        return {
+          id: uid(),
+          productId: "",
+          productCode: code,
+          manufacturingCode: "",
+          nameTr: bulkMode === "full" ? (parts[2] || "") : "",
+          nameEn: "",
+          unit: "adet",
+          quantity: qty,
+          unitPrice: price,
+        };
+      }
+    });
+    setEditing({
+      ...editing,
+      items: [...(editing.items || []), ...newItems],
+    });
+    setBulkText("");
+    setShowBulk(false);
+  };
+
+  // BULK PASTE bir hücre türüne (adet/fiyat) yapıştırma — alt alta değerleri günceller
+  const onColumnPaste = (startIdx, field) => (e) => {
+    const text = e.clipboardData?.getData("text");
+    if (!text || !text.includes("\n")) return; // tek değer normal yapışsın
+    e.preventDefault();
+    const values = text.split(/[\r\n]+/).map((v) => v.trim()).filter(Boolean);
+    const items = [...(editing.items || [])];
+    values.forEach((v, i) => {
+      const idx = startIdx + i;
+      if (idx >= items.length) return;
+      const num = parseFloat(v.replace(",", ".")) || 0;
+      items[idx] = { ...items[idx], [field]: num };
+    });
+    setEditing({ ...editing, items });
+  };
+
+  return (
+    <div>
+      {/* Başlık */}
+      <div className="flex items-center justify-between mb-3 pb-2" style={{ borderBottom: `1px solid ${TOKENS.border}` }}>
+        <div className="text-[11px] uppercase tracking-widest font-bold" style={{ color: TOKENS.gold }}>
+          Kalemler ({editing.items?.length || 0}) · Toplam: <span style={{ color: TOKENS.ink }}>{fmtMoney(itemsTotal, editing.currency)}</span>
+        </div>
+        <div className="flex gap-2">
+          <Btn variant="secondary" size="xs" icon={Receipt} onClick={() => setShowBulk(!showBulk)}>
+            {showBulk ? "Toplu Gizle" : "Excel'den Yapıştır"}
+          </Btn>
+          <Btn variant="secondary" size="xs" icon={Plus} onClick={addItem}>Boş Satır</Btn>
+        </div>
+      </div>
+
+      {/* HIZLI ARAMA */}
+      {products.length > 0 && (
+        <div className="mb-3 rounded-md p-3" style={{ background: TOKENS.cream + "80", border: `1px solid ${TOKENS.border}` }}>
+          <div className="text-[11px] font-bold uppercase tracking-wider mb-2" style={{ color: TOKENS.muted }}>
+            Hızlı Ürün Ekleme
+          </div>
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: TOKENS.muted }} />
+            <input
+              ref={searchRef}
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={onSearchKeyDown}
+              placeholder="Ürün kodu, mamul kodu veya isim... (Enter ile ekle)"
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-md focus:outline-none transition font-semibold"
+              style={{ border: `2px solid ${search ? TOKENS.gold : TOKENS.border}`, background: "white", fontFamily: FONT_BODY }}
+            />
+            {search && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold" style={{ color: TOKENS.muted }}>
+                {searchResults.length} sonuç
+              </span>
+            )}
+          </div>
+
+          {/* Sonuç listesi */}
+          {search && (
+            <div className="mt-2 rounded-md overflow-hidden" style={{ border: `1px solid ${TOKENS.border}`, background: "white" }}>
+              {searchResults.length === 0 ? (
+                <div className="p-3 text-center text-xs" style={{ color: TOKENS.muted }}>
+                  "<strong>{search}</strong>" ile eşleşen ürün yok. <button className="underline font-semibold ml-1" style={{ color: TOKENS.copper }} onClick={() => { addItem(); setSearch(""); }}>Manuel boş satır ekle</button>
+                </div>
+              ) : (
+                searchResults.map((p, i) => (
+                  <div
+                    key={p.id}
+                    onClick={() => addProduct(p)}
+                    className="px-3 py-2 flex items-center gap-3 cursor-pointer transition"
+                    style={{ borderBottom: i < searchResults.length - 1 ? `1px solid ${TOKENS.border}` : "none" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = TOKENS.cream)}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "white")}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-xs font-bold px-1.5 py-0.5 rounded" style={{ color: TOKENS.navy, background: "#E6F1FB" }}>
+                          {highlight(p.productCode, search)}
+                        </span>
+                        <span className="text-sm font-bold" style={{ color: TOKENS.ink }}>
+                          {highlight(p.nameTr || p.nameEn || "—", search)}
+                        </span>
+                      </div>
+                      <div className="text-[10px] mt-0.5 font-semibold" style={{ color: TOKENS.muted }}>
+                        {p.manufacturingCode && <>Mamul: {highlight(p.manufacturingCode, search)} · </>}
+                        {p.unit || "adet"} · Varsayılan: {fmtMoney(p.defaultPrice || 0, p.defaultCurrency || editing.currency)}
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); addProduct(p); }}
+                      className="px-3 py-1 text-[11px] font-bold rounded flex items-center gap-1 flex-shrink-0"
+                      style={{ background: TOKENS.navy, color: "white", border: "none" }}
+                    >
+                      <Plus size={11} /> Ekle
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {!search && (
+            <div className="text-[10px] mt-1.5 font-semibold" style={{ color: TOKENS.muted }}>
+              💡 Enter tuşu ilk eşleşeni otomatik ekler — klavye ile hızlı kalem girişi
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TOPLU YAPIŞTIRMA */}
+      {showBulk && (
+        <div className="mb-3 rounded-md p-3" style={{ background: TOKENS.cream + "80", border: `1px solid ${TOKENS.gold}` }}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: TOKENS.copper }}>
+              Excel'den Toplu Yapıştır
+            </div>
+            <div className="flex gap-1">
+              {[
+                { key: "codes", label: "Sadece Kodlar" },
+                { key: "code-qty-price", label: "Kod + Adet + Fiyat" },
+                { key: "full", label: "Tam Format" },
+              ].map((m) => (
+                <button
+                  key={m.key}
+                  onClick={() => setBulkMode(m.key)}
+                  className="px-2 py-1 text-[10px] font-bold rounded"
+                  style={{
+                    background: bulkMode === m.key ? "white" : "transparent",
+                    color: bulkMode === m.key ? TOKENS.ink : TOKENS.muted,
+                    border: `1px solid ${bulkMode === m.key ? TOKENS.gold : "transparent"}`,
+                  }}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <textarea
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+            placeholder={
+              bulkMode === "codes"
+                ? "Her satıra bir kod yapıştır:\nMRM-001\nMRM-002\nTKS-001"
+                : bulkMode === "code-qty-price"
+                ? "Tab veya virgül ile ayır:\nMRM-001\t350\t42\nMRM-002\t200\t30"
+                : "Kod / Mamul / İsim / Adet / Birim / Fiyat (tab ile ayır)"
+            }
+            className="w-full p-2 text-xs rounded-md font-mono focus:outline-none"
+            style={{ border: `2px dashed ${TOKENS.gold}`, background: "white", minHeight: "100px", color: TOKENS.ink }}
+          />
+          <div className="mt-2 flex items-center gap-2">
+            <Btn variant="primary" size="sm" icon={Check} onClick={processBulkPaste}>
+              Yapıştırılanları Ekle ({bulkText.split(/[\r\n]+/).filter(Boolean).length} satır)
+            </Btn>
+            <Btn variant="ghost" size="sm" onClick={() => { setBulkText(""); setShowBulk(false); }}>İptal</Btn>
+            <span className="text-[10px] ml-auto font-semibold" style={{ color: TOKENS.muted }}>
+              💡 Bilinmeyen kodlar boş satır olarak eklenir, sonra düzenlersin
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* KALEM TABLOSU */}
+      {(editing.items || []).length === 0 ? (
+        <div className="text-center py-8 text-xs rounded-md font-semibold" style={{ color: TOKENS.muted, background: TOKENS.cream, border: `1px dashed ${TOKENS.border}` }}>
+          {products.length > 0 ? "Yukarıdaki arama kutusunu kullan veya Excel'den yapıştır" : "Önce ürün katalogu oluştur veya Boş Satır butonuyla manuel ekle"}
+        </div>
+      ) : (
+        <div className="rounded-md overflow-hidden" style={{ border: `1px solid ${TOKENS.border}`, background: "white" }}>
+          <table className="w-full text-xs">
+            <thead style={{ background: TOKENS.cream }}>
+              <tr>
+                <th className="w-8 py-2 text-center text-[10px] font-bold" style={{ color: TOKENS.muted }}>#</th>
+                <th className="text-left px-2 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: TOKENS.muted, width: "110px" }}>Kod</th>
+                <th className="text-left px-2 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: TOKENS.muted }}>İsim</th>
+                <th className="text-right px-2 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: TOKENS.muted, width: "85px" }}>Adet</th>
+                <th className="text-center px-2 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: TOKENS.muted, width: "70px" }}>Birim</th>
+                <th className="text-right px-2 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: TOKENS.muted, width: "100px" }}>Birim Fiyat</th>
+                <th className="text-right px-2 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: TOKENS.muted, width: "110px" }}>Toplam</th>
+                <th className="w-8"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {editing.items.map((item, idx) => {
+                const lineTotal = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
+                const hasProduct = !!item.productId;
+                return (
+                  <tr key={item.id} style={{ borderTop: `1px solid ${TOKENS.border}`, background: idx % 2 === 1 ? TOKENS.cream + "40" : "white" }}>
+                    <td className="text-center text-[11px] font-mono py-2" style={{ color: TOKENS.muted }}>{idx + 1}</td>
+                    <td className="px-1 py-1">
+                      <input
+                        value={item.productCode}
+                        onChange={(e) => updateItem(idx, { productCode: e.target.value })}
+                        className="w-full px-2 py-1 text-xs font-mono font-bold rounded"
+                        style={{ color: TOKENS.navy, border: hasProduct ? "1px solid transparent" : `1px solid ${TOKENS.terracotta}40`, background: hasProduct ? "transparent" : "#FFF8F0" }}
+                      />
+                    </td>
+                    <td className="px-1 py-1">
+                      <input
+                        value={item.nameTr || item.nameEn || ""}
+                        onChange={(e) => updateItem(idx, { nameTr: e.target.value })}
+                        className="w-full px-2 py-1 text-xs font-semibold rounded"
+                        style={{ color: TOKENS.ink, border: "1px solid transparent", background: "transparent" }}
+                      />
+                      {item.manufacturingCode && (
+                        <div className="text-[9px] px-2 font-mono font-semibold" style={{ color: TOKENS.muted }}>Mamul: {item.manufacturingCode}</div>
+                      )}
+                    </td>
+                    <td className="px-1 py-1">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={item.quantity}
+                        onChange={(e) => updateItem(idx, { quantity: e.target.value })}
+                        onPaste={onColumnPaste(idx, "quantity")}
+                        className="w-full px-2 py-1.5 text-xs text-right font-bold tabular-nums rounded"
+                        style={{ border: `1px solid ${TOKENS.border}`, background: "white" }}
+                      />
+                    </td>
+                    <td className="px-1 py-1 text-center">
+                      <select
+                        value={item.unit || "adet"}
+                        onChange={(e) => updateItem(idx, { unit: e.target.value })}
+                        className="text-[11px] font-semibold rounded px-1 py-1"
+                        style={{ border: `1px solid ${TOKENS.border}`, background: "white", color: TOKENS.muted, width: "100%" }}
+                      >
+                        <option>adet</option><option>kg</option><option>ton</option>
+                        <option>m²</option><option>m³</option><option>litre</option>
+                        <option>paket</option><option>palet</option>
+                      </select>
+                    </td>
+                    <td className="px-1 py-1">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={item.unitPrice}
+                        onChange={(e) => updateItem(idx, { unitPrice: e.target.value })}
+                        onPaste={onColumnPaste(idx, "unitPrice")}
+                        className="w-full px-2 py-1.5 text-xs text-right font-bold tabular-nums rounded"
+                        style={{ border: `1px solid ${TOKENS.border}`, background: "white" }}
+                      />
+                    </td>
+                    <td className="px-2 py-2 text-right text-xs font-bold tabular-nums" style={{ color: TOKENS.ink }}>
+                      {fmtMoney(lineTotal, editing.currency)}
+                    </td>
+                    <td className="text-center">
+                      <button
+                        onClick={() => removeItem(idx)}
+                        className="p-1 rounded transition"
+                        style={{ color: TOKENS.muted, background: "transparent", border: "none" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              <tr style={{ borderTop: `2px solid ${TOKENS.gold}`, background: TOKENS.gold + "08" }}>
+                <td colSpan="6" className="px-3 py-2 text-right text-[11px] font-bold" style={{ color: TOKENS.muted }}>
+                  TOPLAM ({editing.items.length} kalem)
+                </td>
+                <td className="px-2 py-2 text-right text-sm font-bold tabular-nums" style={{ color: TOKENS.ink }}>
+                  {fmtMoney(itemsTotal, editing.currency)}
+                </td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+          <div className="px-3 py-2 text-[10px] font-semibold" style={{ background: TOKENS.cream + "60", color: TOKENS.muted, borderTop: `1px solid ${TOKENS.border}` }}>
+            ⌨ Adet veya Birim Fiyat sütununa Excel'den çoklu satır yapıştırabilirsin — alt alta otomatik dağıtılır
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

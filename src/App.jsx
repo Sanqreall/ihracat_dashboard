@@ -350,7 +350,66 @@ const downloadBlob = (data, filename, type = "application/octet-stream") => {
   URL.revokeObjectURL(url);
 };
 
-const orderTotal = (o) => (o?.items || []).reduce((t, i) => t + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0), 0);
+// Akıllı sayı parser — Excel'den yapıştırma için TR/EN formatını otomatik tanır
+// "1.234,56" → 1234.56 (TR), "1,234.56" → 1234.56 (EN), "1234,56" → 1234.56, "1234.56" → 1234.56
+const parseNumber = (str) => {
+  if (typeof str === "number") return str;
+  if (str === null || str === undefined || str === "") return 0;
+  let s = String(str).trim();
+  // Para birimi simgelerini ve harfleri at
+  s = s.replace(/[^\d,.\-]/g, "");
+  if (!s) return 0;
+  const hasComma = s.includes(",");
+  const hasPeriod = s.includes(".");
+  if (hasComma && hasPeriod) {
+    // İkisi de var: SONUNCU olan ondalık ayraçtır, diğeri binlik
+    const lastComma = s.lastIndexOf(",");
+    const lastPeriod = s.lastIndexOf(".");
+    if (lastComma > lastPeriod) {
+      s = s.replace(/\./g, "").replace(",", ".");
+    } else {
+      s = s.replace(/,/g, "");
+    }
+  } else if (hasComma) {
+    // Sadece virgül → ondalık say
+    s = s.replace(",", ".");
+  }
+  // Sadece nokta veya hiçbiri → parseFloat zaten düzgün okur
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+};
+
+// Sipariş toplam hesaplaması — KDV ve iskonto destekli
+// Geri uyumlu: vatRate, discountType, discountValue, item.discount eski siparişlerde
+// olmadığında 0 sayılır (varsayılan davranış değişmez).
+function calcOrderTotals(order) {
+  const items = order?.items || [];
+  // Her kalem için indirim sonrası satır toplamı
+  const itemSubs = items.map((i) => {
+    const base = (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0);
+    const lineDisc = Number(i.discount) || 0; // %
+    return base * (1 - lineDisc / 100);
+  });
+  const subtotal = itemSubs.reduce((s, x) => s + x, 0);
+
+  // Sipariş seviyesi iskonto
+  let discount = 0;
+  if (order?.discountType === "percentage") {
+    discount = subtotal * (Number(order.discountValue) || 0) / 100;
+  } else if (order?.discountType === "amount") {
+    discount = Number(order.discountValue) || 0;
+  }
+  const afterDiscount = Math.max(0, subtotal - discount);
+
+  // KDV
+  const vatRate = Number(order?.vatRate) || 0;
+  const vatAmount = afterDiscount * vatRate / 100;
+  const total = afterDiscount + vatAmount;
+
+  return { subtotal, discount, afterDiscount, vatRate, vatAmount, total };
+}
+
+const orderTotal = (o) => calcOrderTotals(o).total;
 
 const planTotal = (o) => (o?.paymentPlan || []).reduce((t, p) => t + (Number(p.amount) || 0), 0);
 
@@ -1313,6 +1372,7 @@ function CustomersView({ customers, setCustomers, orders, payments, rates, showT
   const [viewing, setViewing] = useState(null);
 
   // Her müşteriye otomatik metrikler ekle (ciro, açık bakiye, risk durumu)
+  // Hem USD bazlı toplamlar (tüm para birimleri çevrilmiş) hem de orijinal para birimi bazlı kırılım
   const enrichedCustomers = useMemo(() => customers.map((c) => {
     const custOrders = orders.filter((o) => o.customerId === c.id);
     const totalUSD = custOrders.reduce((s, o) => s + toUSD(orderTotal(o), o.currency, rates), 0);
@@ -1324,9 +1384,34 @@ function CustomersView({ customers, setCustomers, orders, payments, rates, showT
       const o = orders.find((x) => x.id === p.orderId);
       return o?.customerId === c.id && p.status === "overdue";
     }).reduce((s, p) => s + toUSD(p.amount, p.currency, rates), 0);
-    const limitUSD = (Number(c.creditLimit) || 0); // varsayılan USD
+
+    // Para birimi bazlı kırılım — orijinal döviz cinsinde
+    const totalsByCurrency = {};
+    custOrders.forEach((o) => {
+      const cur = o.currency;
+      if (!totalsByCurrency[cur]) totalsByCurrency[cur] = 0;
+      totalsByCurrency[cur] += orderTotal(o);
+    });
+    const openByCurrency = {};
+    payments.filter((p) => {
+      const o = orders.find((x) => x.id === p.orderId);
+      return o?.customerId === c.id && p.status !== "paid" && p.status !== "cancelled";
+    }).forEach((p) => {
+      if (!openByCurrency[p.currency]) openByCurrency[p.currency] = 0;
+      openByCurrency[p.currency] += Number(p.amount) || 0;
+    });
+    const paidByCurrency = {};
+    payments.filter((p) => {
+      const o = orders.find((x) => x.id === p.orderId);
+      return o?.customerId === c.id && p.status === "paid";
+    }).forEach((p) => {
+      if (!paidByCurrency[p.currency]) paidByCurrency[p.currency] = 0;
+      paidByCurrency[p.currency] += Number(p.amount) || 0;
+    });
+
+    const limitUSD = (Number(c.creditLimit) || 0);
     const utilization = limitUSD > 0 ? Math.round((openBalance / limitUSD) * 100) : null;
-    return { ...c, totalUSD, openBalance, overdueBalance, limitUSD, utilization, orderCount: custOrders.length };
+    return { ...c, totalUSD, openBalance, overdueBalance, limitUSD, utilization, orderCount: custOrders.length, totalsByCurrency, openByCurrency, paidByCurrency };
   }), [customers, orders, payments, rates]);
 
   const countries = useMemo(() => [...new Set(customers.map((c) => c.country).filter(Boolean))].sort(), [customers]);
@@ -1651,6 +1736,44 @@ function CustomerDetailModal({ customer, onClose, orders, payments, rates }) {
           <MetricBox label="Açık Bakiye" value={fmtMoney(customer.openBalance, "USD", { compact: true })} accent={customer.openBalance > 0 ? TOKENS.copper : TOKENS.muted} />
           <MetricBox label="Kredi Kullanımı" value={customer.utilization !== null ? `${customer.utilization}%` : "—"} accent={customer.utilization >= 75 ? TOKENS.oxblood : TOKENS.forest} />
         </div>
+
+        {/* Para Birimi Bazlı */}
+        {customer.totalsByCurrency && Object.keys(customer.totalsByCurrency).length > 0 && (
+          <Card title="Para Birimi Bazında Toplam" subtitle="Müşterinin gerçek döviz cinsinden bakiyesi" noPadding>
+            <div className="grid" style={{ gridTemplateColumns: `repeat(${Math.min(4, Object.keys(customer.totalsByCurrency).length)}, 1fr)` }}>
+              {Object.keys(customer.totalsByCurrency).map((cur, i, arr) => {
+                const total = customer.totalsByCurrency[cur] || 0;
+                const open = customer.openByCurrency?.[cur] || 0;
+                const paid = customer.paidByCurrency?.[cur] || 0;
+                return (
+                  <div key={cur} className="px-5 py-4" style={{ borderRight: i < arr.length - 1 ? `1px solid ${TOKENS.border}` : "none" }}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Pill color="gold">{cur}</Pill>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider font-bold" style={{ color: TOKENS.muted }}>Toplam Ciro</div>
+                        <div className="text-base font-bold tabular-nums" style={{ color: TOKENS.ink }}>{fmtMoney(total, cur)}</div>
+                      </div>
+                      {paid > 0 && (
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wider font-bold" style={{ color: TOKENS.muted }}>Tahsil Edilen</div>
+                          <div className="text-sm font-bold tabular-nums" style={{ color: TOKENS.forest }}>{fmtMoney(paid, cur)}</div>
+                        </div>
+                      )}
+                      {open > 0 && (
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wider font-bold" style={{ color: TOKENS.muted }}>Açık Bakiye</div>
+                          <div className="text-sm font-bold tabular-nums" style={{ color: TOKENS.copper }}>{fmtMoney(open, cur)}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
 
         {/* İletişim */}
         <Card title="İletişim Bilgileri" noPadding>
@@ -2156,19 +2279,44 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
 
     const cleaned = {
       ...editing,
-      items: editing.items.map((i) => ({ ...i, quantity: Number(i.quantity) || 0, unitPrice: Number(i.unitPrice) || 0 })),
+      items: editing.items.map((i) => ({ ...i, quantity: Number(i.quantity) || 0, unitPrice: Number(i.unitPrice) || 0, discount: Number(i.discount) || 0 })),
       paymentPlan: (editing.paymentPlan || []).map((p) => ({ ...p, percentage: Number(p.percentage) || 0, amount: Number(p.amount) || 0 })),
+      vatRate: Number(editing.vatRate) || 0,
+      discountValue: Number(editing.discountValue) || 0,
     };
 
     if (editing.id) {
+      // Mevcut sipariş — plan değişmiş mi ve tahsilatlar var mı kontrol et
+      const oldOrder = orders.find((o) => o.id === editing.id);
+      const oldPlanIds = new Set((oldOrder?.paymentPlan || []).map((p) => p.id));
+      const newPlanIds = new Set((cleaned.paymentPlan || []).map((p) => p.id));
+      // Plan değişti mi: kaleme göre ID veya tutar farkı
+      const planChanged =
+        oldOrder?.paymentPlan?.length !== cleaned.paymentPlan?.length ||
+        (oldOrder?.paymentPlan || []).some((op) => {
+          const np = cleaned.paymentPlan.find((x) => x.id === op.id);
+          return !np || Math.abs((Number(np.amount) || 0) - (Number(op.amount) || 0)) > 0.01 || np.dueDate !== op.dueDate || np.type !== op.type;
+        });
+      // Bu siparişe ait tahsil edilmiş ödemeler
+      const paidPayments = payments.filter((p) => p.orderId === editing.id && p.status === "paid");
+
+      if (planChanged && paidPayments.length > 0) {
+        const ok = confirm(
+          `Bu sipariş için zaten ${paidPayments.length} tahsil edilmiş ödeme kaydı var.\n\nÖdeme planı değişikliği bu tahsilatları SİLECEK ve plan baştan oluşturulacak.\n\nDevam edilsin mi?`
+        );
+        if (!ok) return;
+        // Tahsilatları temizle
+        setPayments((arr) => arr.filter((p) => p.orderId !== editing.id));
+        // Sonra yeniden oluştur
+        setTimeout(() => syncPaymentsFromPlan(cleaned, [], setPayments), 0);
+      } else {
+        syncPaymentsFromPlan(cleaned, payments, setPayments);
+      }
       setOrders((arr) => arr.map((x) => x.id === editing.id ? cleaned : x));
-      // Eski plan kalemlerinden ödeme kaydı yapılmamış olanları sil, yenilerini ekle
-      syncPaymentsFromPlan(cleaned, payments, setPayments);
       showToast("Sipariş güncellendi", "success");
     } else {
       const newOrder = { ...cleaned, id: uid(), createdAt: todayISO() };
       setOrders((arr) => [...arr, newOrder]);
-      // Plan kalemlerini ödeme kayıtlarına dönüştür
       syncPaymentsFromPlan(newOrder, payments, setPayments);
       showToast("Sipariş eklendi · Ödeme planı kalemleri Ödemeler modülünde", "success");
     }
@@ -2446,7 +2594,7 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
   const addItem = () => {
     setEditing({
       ...editing,
-      items: [...(editing.items || []), { id: uid(), productId: "", productCode: "", manufacturingCode: "", nameTr: "", nameEn: "", unit: "adet", quantity: 1, unitPrice: 0 }],
+      items: [...(editing.items || []), { id: uid(), productId: "", productCode: "", manufacturingCode: "", nameTr: "", nameEn: "", unit: "adet", quantity: 1, unitPrice: 0, discount: 0 }],
     });
   };
 
@@ -2473,7 +2621,7 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
     });
   };
 
-  const itemsTotal = (editing.items || []).reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0), 0);
+  const itemsTotal = calcOrderTotals(editing).total;
 
   // ÖDEME PLANI yönetimi
   const addPlanItem = (preset) => {
@@ -2607,6 +2755,44 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
             <div><Label hint="opsiyonel">Boşaltma Limanı</Label><Input value={editing.portOfDischarge} onChange={(e) => setEditing({ ...editing, portOfDischarge: e.target.value })} placeholder="Hamburg..." /></div>
             <div><Label>Fatura No</Label><Input value={editing.invoiceNumber} onChange={(e) => setEditing({ ...editing, invoiceNumber: e.target.value })} className="font-mono" /></div>
             <div><Label hint="B/L">Konşimento No</Label><Input value={editing.billOfLading} onChange={(e) => setEditing({ ...editing, billOfLading: e.target.value })} className="font-mono" /></div>
+          </div>
+
+          {/* KDV ve Sipariş İskontosu */}
+          <div className="mt-4 pt-3 grid grid-cols-4 gap-3" style={{ borderTop: `1px dashed ${TOKENS.border}` }}>
+            <div>
+              <Label hint="örn 18 / 20 — 0=KDV yok">KDV Oranı (%)</Label>
+              <Input
+                type="number"
+                step="0.5"
+                min="0"
+                value={editing.vatRate ?? 0}
+                onChange={(e) => setEditing({ ...editing, vatRate: parseNumber(e.target.value) })}
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <Label hint="genel toplama uygulanır">Sipariş İskonto Tipi</Label>
+              <Select value={editing.discountType || "none"} onChange={(e) => setEditing({ ...editing, discountType: e.target.value })}>
+                <option value="none">Yok</option>
+                <option value="percentage">Yüzde (%)</option>
+                <option value="amount">Tutar ({editing.currency})</option>
+              </Select>
+            </div>
+            {editing.discountType && editing.discountType !== "none" && (
+              <div>
+                <Label hint={editing.discountType === "percentage" ? "0-100" : `${editing.currency}`}>İskonto Değeri</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={editing.discountValue ?? 0}
+                  onChange={(e) => setEditing({ ...editing, discountValue: parseNumber(e.target.value) })}
+                />
+              </div>
+            )}
+            <div className="col-span-2 text-[11px] flex items-end pb-1.5" style={{ color: TOKENS.muted }}>
+              💡 Kalem bazlı iskonto için kalemler tablosundaki <strong>"İsk %"</strong> sütununu kullan
+            </div>
           </div>
         </div>
 
@@ -2894,13 +3080,13 @@ function OrderItemsSection({ editing, setEditing, products, itemsTotal, addItem,
       unit: p.unit || "adet",
       quantity: 1,
       unitPrice: p.defaultPrice || 0,
+      discount: 0,
     };
     setEditing({
       ...editing,
       items: [...(editing.items || []), newItem],
     });
     setSearch("");
-    // arama kutusuna geri odaklan
     setTimeout(() => searchRef.current?.focus(), 50);
   };
 
@@ -2919,18 +3105,18 @@ function OrderItemsSection({ editing, setEditing, products, itemsTotal, addItem,
     if (!bulkText.trim()) return;
     const lines = bulkText.split(/[\r\n]+/).map((l) => l.trim()).filter(Boolean);
     const newItems = lines.map((line) => {
-      // Tab veya virgül veya birden fazla boşluk ile ayrıldıysa böl
-      const parts = line.split(/\t+|;\s*|,\s*|\s{2,}/).map((p) => p.trim());
-      const code = parts[0] || "";
+      const parts = line.split(/\t+|;\s*/).map((p) => p.trim());
+      // Tab/semicolon yoksa virgülle de bölmeyi dene ama dikkatli — sayılarda olabilir
+      const useParts = parts.length > 1 ? parts : line.split(/\s{2,}/).map((p) => p.trim());
+      const code = useParts[0] || "";
       let qty = 1, price = 0;
       if (bulkMode === "code-qty-price") {
-        qty = parseFloat((parts[1] || "1").replace(",", ".")) || 1;
-        price = parseFloat((parts[2] || "0").replace(",", ".")) || 0;
+        qty = parseNumber(useParts[1]) || 1;
+        price = parseNumber(useParts[2]) || 0;
       } else if (bulkMode === "full") {
-        qty = parseFloat((parts[3] || "1").replace(",", ".")) || 1;
-        price = parseFloat((parts[5] || "0").replace(",", ".")) || 0;
+        qty = parseNumber(useParts[3]) || 1;
+        price = parseNumber(useParts[5]) || 0;
       }
-      // Katalogdan eşleştir (kod ya da mamul kodu)
       const product = products.find((p) =>
         p.productCode?.toLowerCase() === code.toLowerCase() ||
         p.manufacturingCode?.toLowerCase() === code.toLowerCase()
@@ -2946,6 +3132,7 @@ function OrderItemsSection({ editing, setEditing, products, itemsTotal, addItem,
           unit: product.unit || "adet",
           quantity: qty,
           unitPrice: price > 0 ? price : (product.defaultPrice || 0),
+          discount: 0,
         };
       } else {
         return {
@@ -2953,11 +3140,12 @@ function OrderItemsSection({ editing, setEditing, products, itemsTotal, addItem,
           productId: "",
           productCode: code,
           manufacturingCode: "",
-          nameTr: bulkMode === "full" ? (parts[2] || "") : "",
+          nameTr: bulkMode === "full" ? (useParts[2] || "") : "",
           nameEn: "",
           unit: "adet",
           quantity: qty,
           unitPrice: price,
+          discount: 0,
         };
       }
     });
@@ -2969,7 +3157,7 @@ function OrderItemsSection({ editing, setEditing, products, itemsTotal, addItem,
     setShowBulk(false);
   };
 
-  // BULK PASTE bir hücre türüne (adet/fiyat) yapıştırma — alt alta değerleri günceller
+  // Sütun yapıştırması — alt alta değerleri günceller
   const onColumnPaste = (startIdx, field) => (e) => {
     const text = e.clipboardData?.getData("text");
     if (!text || !text.includes("\n")) return; // tek değer normal yapışsın
@@ -2979,8 +3167,7 @@ function OrderItemsSection({ editing, setEditing, products, itemsTotal, addItem,
     values.forEach((v, i) => {
       const idx = startIdx + i;
       if (idx >= items.length) return;
-      const num = parseFloat(v.replace(",", ".")) || 0;
-      items[idx] = { ...items[idx], [field]: num };
+      items[idx] = { ...items[idx], [field]: parseNumber(v) };
     });
     setEditing({ ...editing, items });
   };
@@ -2990,7 +3177,7 @@ function OrderItemsSection({ editing, setEditing, products, itemsTotal, addItem,
       {/* Başlık */}
       <div className="flex items-center justify-between mb-3 pb-2" style={{ borderBottom: `1px solid ${TOKENS.border}` }}>
         <div className="text-[11px] uppercase tracking-widest font-bold" style={{ color: TOKENS.gold }}>
-          Kalemler ({editing.items?.length || 0}) · Toplam: <span style={{ color: TOKENS.ink }}>{fmtMoney(itemsTotal, editing.currency)}</span>
+          Kalemler ({editing.items?.length || 0}) · Genel Toplam: <span style={{ color: TOKENS.ink }}>{fmtMoney(calcOrderTotals(editing).total, editing.currency)}</span>
         </div>
         <div className="flex gap-2">
           <Btn variant="secondary" size="xs" icon={Receipt} onClick={() => setShowBulk(!showBulk)}>
@@ -3143,16 +3330,19 @@ function OrderItemsSection({ editing, setEditing, products, itemsTotal, addItem,
                 <th className="w-8 py-2 text-center text-[10px] font-bold" style={{ color: TOKENS.muted }}>#</th>
                 <th className="text-left px-2 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: TOKENS.muted, width: "110px" }}>Kod</th>
                 <th className="text-left px-2 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: TOKENS.muted }}>İsim</th>
-                <th className="text-right px-2 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: TOKENS.muted, width: "85px" }}>Adet</th>
-                <th className="text-center px-2 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: TOKENS.muted, width: "70px" }}>Birim</th>
-                <th className="text-right px-2 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: TOKENS.muted, width: "100px" }}>Birim Fiyat</th>
-                <th className="text-right px-2 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: TOKENS.muted, width: "110px" }}>Toplam</th>
+                <th className="text-right px-2 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: TOKENS.muted, width: "75px" }}>Adet</th>
+                <th className="text-center px-2 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: TOKENS.muted, width: "65px" }}>Birim</th>
+                <th className="text-right px-2 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: TOKENS.muted, width: "90px" }}>Birim Fiyat</th>
+                <th className="text-right px-2 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: TOKENS.muted, width: "60px" }} title="Satıra özel iskonto yüzdesi">İsk %</th>
+                <th className="text-right px-2 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: TOKENS.muted, width: "100px" }}>Toplam</th>
                 <th className="w-8"></th>
               </tr>
             </thead>
             <tbody>
               {editing.items.map((item, idx) => {
-                const lineTotal = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
+                const baseTotal = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
+                const lineDisc = Number(item.discount) || 0;
+                const lineTotal = baseTotal * (1 - lineDisc / 100);
                 const hasProduct = !!item.productId;
                 return (
                   <tr key={item.id} style={{ borderTop: `1px solid ${TOKENS.border}`, background: idx % 2 === 1 ? TOKENS.cream + "40" : "white" }}>
@@ -3210,7 +3400,24 @@ function OrderItemsSection({ editing, setEditing, products, itemsTotal, addItem,
                         style={{ border: `1px solid ${TOKENS.border}`, background: "white" }}
                       />
                     </td>
+                    <td className="px-1 py-1">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="100"
+                        value={item.discount || 0}
+                        onChange={(e) => updateItem(idx, { discount: parseNumber(e.target.value) })}
+                        onPaste={onColumnPaste(idx, "discount")}
+                        placeholder="0"
+                        className="w-full px-1.5 py-1.5 text-xs text-right font-bold tabular-nums rounded"
+                        style={{ border: `1px solid ${TOKENS.border}`, background: lineDisc > 0 ? TOKENS.gold + "15" : "white", color: lineDisc > 0 ? TOKENS.copper : TOKENS.ink }}
+                      />
+                    </td>
                     <td className="px-2 py-2 text-right text-xs font-bold tabular-nums" style={{ color: TOKENS.ink }}>
+                      {lineDisc > 0 && (
+                        <div className="text-[9px] line-through font-normal mb-0.5" style={{ color: TOKENS.muted }}>{fmtMoney(baseTotal, editing.currency)}</div>
+                      )}
                       {fmtMoney(lineTotal, editing.currency)}
                     </td>
                     <td className="text-center">
@@ -3227,15 +3434,55 @@ function OrderItemsSection({ editing, setEditing, products, itemsTotal, addItem,
                   </tr>
                 );
               })}
-              <tr style={{ borderTop: `2px solid ${TOKENS.gold}`, background: TOKENS.gold + "08" }}>
-                <td colSpan="6" className="px-3 py-2 text-right text-[11px] font-bold" style={{ color: TOKENS.muted }}>
-                  TOPLAM ({editing.items.length} kalem)
-                </td>
-                <td className="px-2 py-2 text-right text-sm font-bold tabular-nums" style={{ color: TOKENS.ink }}>
-                  {fmtMoney(itemsTotal, editing.currency)}
-                </td>
-                <td></td>
-              </tr>
+              {(() => {
+                const totals = calcOrderTotals(editing);
+                return (
+                  <>
+                    {(totals.discount > 0 || totals.vatRate > 0 || (Number(editing.vatRate) > 0)) && (
+                      <tr style={{ borderTop: `1px solid ${TOKENS.border}`, background: TOKENS.cream + "30" }}>
+                        <td colSpan="7" className="px-3 py-1.5 text-right text-[11px] font-semibold" style={{ color: TOKENS.muted }}>
+                          Ara Toplam ({editing.items.length} kalem)
+                        </td>
+                        <td className="px-2 py-1.5 text-right text-[12px] font-bold tabular-nums" style={{ color: TOKENS.ink }}>
+                          {fmtMoney(totals.subtotal, editing.currency)}
+                        </td>
+                        <td></td>
+                      </tr>
+                    )}
+                    {totals.discount > 0 && (
+                      <tr style={{ background: TOKENS.cream + "30" }}>
+                        <td colSpan="7" className="px-3 py-1.5 text-right text-[11px] font-semibold" style={{ color: TOKENS.copper }}>
+                          Sipariş İskontosu ({editing.discountType === "percentage" ? `%${editing.discountValue}` : "tutar"})
+                        </td>
+                        <td className="px-2 py-1.5 text-right text-[12px] font-bold tabular-nums" style={{ color: TOKENS.copper }}>
+                          − {fmtMoney(totals.discount, editing.currency)}
+                        </td>
+                        <td></td>
+                      </tr>
+                    )}
+                    {totals.vatRate > 0 && (
+                      <tr style={{ background: TOKENS.cream + "30" }}>
+                        <td colSpan="7" className="px-3 py-1.5 text-right text-[11px] font-semibold" style={{ color: TOKENS.muted }}>
+                          KDV (%{totals.vatRate})
+                        </td>
+                        <td className="px-2 py-1.5 text-right text-[12px] font-bold tabular-nums" style={{ color: TOKENS.ink }}>
+                          + {fmtMoney(totals.vatAmount, editing.currency)}
+                        </td>
+                        <td></td>
+                      </tr>
+                    )}
+                    <tr style={{ borderTop: `2px solid ${TOKENS.gold}`, background: TOKENS.gold + "10" }}>
+                      <td colSpan="7" className="px-3 py-2 text-right text-[12px] font-bold uppercase tracking-wider" style={{ color: TOKENS.ink }}>
+                        Genel Toplam
+                      </td>
+                      <td className="px-2 py-2 text-right text-base font-bold tabular-nums" style={{ color: TOKENS.ink }}>
+                        {fmtMoney(totals.total, editing.currency)}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </>
+                );
+              })()}
             </tbody>
           </table>
           <div className="px-3 py-2 text-[10px] font-semibold" style={{ background: TOKENS.cream + "60", color: TOKENS.muted, borderTop: `1px solid ${TOKENS.border}` }}>
@@ -3424,12 +3671,10 @@ function PaymentsView({ orders, customers, payments, setPayments, bankAccounts, 
     if (paidAmt <= 0) {
       return showToast("Tahsil edilen tutar 0'dan büyük olmalı", "error");
     }
-    if (paidAmt > originalAmt + 0.01) {
-      return showToast("Tahsil edilen tutar plan tutarından fazla olamaz", "error");
-    }
 
-    const isFullPayment = paidAmt >= originalAmt - 0.01;
-    const remaining = +(originalAmt - paidAmt).toFixed(2);
+    const isFullPayment = Math.abs(paidAmt - originalAmt) < 0.01;
+    const isOverpayment = paidAmt > originalAmt + 0.01;
+    const isPartial = paidAmt < originalAmt - 0.01;
 
     if (isFullPayment) {
       // Tam tahsilat
@@ -3443,8 +3688,55 @@ function PaymentsView({ orders, customers, payments, setPayments, bankAccounts, 
         exchangeRateAtPayment: rates[p.currency],
       } : p));
       showToast("Ödeme tam olarak tahsil edildi", "success");
-    } else {
-      // Kısmi tahsilat: mevcut kaydı paidAmt ile paid yap, kalanı yeni pending kayıt olarak ekle
+    } else if (isOverpayment) {
+      // Fazla ödeme — fazlalık bir sonraki bekleyen ödemeden düşülür
+      const excess = +(paidAmt - originalAmt).toFixed(2);
+      // Aynı sipariş için bir sonraki bekleyen ödemeyi bul (vadeye göre erken olan)
+      const nextPending = payments
+        .filter((p) => p.orderId === marking.orderId && p.status === "pending" && p.id !== marking.id)
+        .sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""))[0];
+
+      let confirmMsg;
+      if (nextPending) {
+        confirmMsg = `Plan tutarı ${fmtMoney(originalAmt, marking.currency)}, ödenen ${fmtMoney(paidAmt, marking.currency)}.\n\nFazla ${fmtMoney(excess, marking.currency)} bir sonraki bekleyen ödemeden düşülecek (vade ${fmtDate(nextPending.dueDate)}, plan ${fmtMoney(nextPending.amount, nextPending.currency)} → yeni ${fmtMoney(Math.max(0, nextPending.amount - excess), nextPending.currency)}).\n\nOnay?`;
+      } else {
+        confirmMsg = `Plan tutarı ${fmtMoney(originalAmt, marking.currency)}, ödenen ${fmtMoney(paidAmt, marking.currency)}.\n\nFazla ${fmtMoney(excess, marking.currency)} bir alacak (kredi notu) olarak kaydedilecek — bu siparişin bir sonraki ödemesi yok.\n\nOnay?`;
+      }
+      if (!confirm(confirmMsg)) return;
+
+      setPayments((arr) => {
+        // Mevcut kaydı paid olarak işaretle (paidAmt ile)
+        let updated = arr.map((p) => p.id === marking.id ? {
+          ...p,
+          status: "paid",
+          paidDate: marking.paidDate,
+          bankAccountId: marking.bankAccountId || "",
+          referenceNumber: marking.referenceNumber || "",
+          amount: paidAmt,
+          exchangeRateAtPayment: rates[p.currency],
+          notes: p.notes ? `${p.notes} · Fazla ödeme: ${fmtMoney(excess, p.currency)}` : `Fazla ödeme: ${fmtMoney(excess, p.currency)}`,
+        } : p);
+
+        // Bir sonraki bekleyen ödemeyi azalt
+        if (nextPending) {
+          let remainingExcess = excess;
+          updated = updated.map((p) => {
+            if (p.id !== nextPending.id) return p;
+            const newAmount = Math.max(0, p.amount - remainingExcess);
+            const newPct = originalAmt > 0 ? (newAmount / (p.amount || 1)) * (Number(p.percentage) || 0) : p.percentage;
+            return {
+              ...p,
+              amount: +newAmount.toFixed(2),
+              notes: p.notes ? `${p.notes} · Önceki fazla ödemeden düşüldü` : "Önceki fazla ödemeden düşüldü",
+            };
+          });
+        }
+        return updated;
+      });
+      showToast(`Fazla ödeme kaydedildi (${fmtMoney(excess, marking.currency)} fazla)`, "success");
+    } else if (isPartial) {
+      // Kısmi tahsilat
+      const remaining = +(originalAmt - paidAmt).toFixed(2);
       const remainingPayment = {
         id: uid(),
         orderId: marking.orderId,
@@ -3619,7 +3911,9 @@ function PaymentsView({ orders, customers, payments, setPayments, bankAccounts, 
           const paidAmt = Number(marking.paidAmount) || 0;
           const originalAmt = Number(marking.amount) || 0;
           const remaining = +(originalAmt - paidAmt).toFixed(2);
+          const excess = +(paidAmt - originalAmt).toFixed(2);
           const isPartial = paidAmt > 0 && paidAmt < originalAmt - 0.01;
+          const isOverpayment = paidAmt > originalAmt + 0.01;
           return (
             <div className="space-y-3">
               <div className="rounded-md p-3 text-xs" style={{ background: TOKENS.cream }}>
@@ -3628,11 +3922,16 @@ function PaymentsView({ orders, customers, payments, setPayments, bankAccounts, 
               </div>
               <div><Label required>Tahsil Tarihi</Label><Input type="date" value={marking.paidDate} onChange={(e) => setMarking({ ...marking, paidDate: e.target.value })} /></div>
               <div>
-                <Label hint="kısmi de olabilir">Tahsil Edilen Tutar ({marking.currency})</Label>
+                <Label hint="az veya çok girebilirsin">Tahsil Edilen Tutar ({marking.currency})</Label>
                 <Input type="number" step="0.01" value={marking.paidAmount} onChange={(e) => setMarking({ ...marking, paidAmount: e.target.value })} />
                 {isPartial && (
                   <div className="mt-2 p-2 rounded text-[11px] font-semibold" style={{ background: TOKENS.terracotta + "15", color: TOKENS.terracotta, border: `1px solid ${TOKENS.terracotta}30` }}>
                     ⚡ Kısmi tahsilat: <strong>{fmtMoney(paidAmt, marking.currency)}</strong> alınacak, <strong>{fmtMoney(remaining, marking.currency)}</strong> hâlâ bekleyen olarak kalacak (yeni satır olarak gözükecek).
+                  </div>
+                )}
+                {isOverpayment && (
+                  <div className="mt-2 p-2 rounded text-[11px] font-semibold" style={{ background: TOKENS.gold + "20", color: TOKENS.copper, border: `1px solid ${TOKENS.gold}` }}>
+                    💰 Fazla ödeme: <strong>{fmtMoney(excess, marking.currency)}</strong> fazla ödendi. Bir sonraki bekleyen ödemeden otomatik düşülecek (varsa). Onay sırasında detayını görürsün.
                   </div>
                 )}
               </div>

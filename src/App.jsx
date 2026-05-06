@@ -282,6 +282,7 @@ const PAYMENT_PLAN_TYPES = [
   { key: "prepayment",  label: "Ön Ödeme",      desc: "Sipariş onayında alınan", color: "gold" },
   { key: "preShipment", label: "Sevk Öncesi",   desc: "Sevkiyattan önce alınan", color: "copper" },
   { key: "deferred",    label: "Vadeli",        desc: "Sevkten sonra X gün",     color: "navy" },
+  { key: "vat",         label: "KDV",           desc: "Mal bedeli üzerine ayrı KDV ödemesi", color: "navy" },
 ];
 
 // Ödeme durumu — sistem tarafından otomatik güncellenir (vade geçince "overdue")
@@ -350,6 +351,60 @@ const downloadBlob = (data, filename, type = "application/octet-stream") => {
   URL.revokeObjectURL(url);
 };
 
+// ============================================================================
+// AUTH — Şifre hash, oturum yönetimi
+// ============================================================================
+// Web Crypto API kullanarak SHA-256 + salt. Production'da bcrypt/argon2 daha
+// güçlüdür ama harici paket eklemeden bu yeterli (3-5 kişilik ekip için OK).
+
+async function hashPassword(password, salt) {
+  const enc = new TextEncoder();
+  const data = enc.encode(String(password) + ":" + String(salt));
+  const buf = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function generateSalt() {
+  const arr = new Uint8Array(16);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+const SESSION_KEY = "exportflow_session";
+const SESSION_DAYS = 30;
+
+function getSession() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+    if (!s) return null;
+    if (s.expiresAt && s.expiresAt < Date.now()) {
+      localStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+    return s;
+  } catch { return null; }
+}
+
+function saveSession(user) {
+  const session = {
+    user: { id: user.id, name: user.name, email: user.email, role: user.role },
+    expiresAt: Date.now() + SESSION_DAYS * 86400 * 1000,
+  };
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  return session;
+}
+
+function clearSession() {
+  localStorage.removeItem(SESSION_KEY);
+}
+
+const USER_ROLES = [
+  { key: "admin",  label: "Yönetici", desc: "Tam erişim · kullanıcı yönetebilir" },
+  { key: "editor", label: "Editör",    desc: "Tüm kayıtları düzenler" },
+  { key: "viewer", label: "Görüntüleyici", desc: "Sadece okur, düzenleyemez" },
+];
+
+
 // Akıllı sayı parser — Excel'den yapıştırma için TR/EN formatını otomatik tanır
 // "1.234,56" → 1234.56 (TR), "1,234.56" → 1234.56 (EN), "1234,56" → 1234.56, "1234.56" → 1234.56
 const parseNumber = (str) => {
@@ -410,6 +465,21 @@ function calcOrderTotals(order) {
 }
 
 const orderTotal = (o) => calcOrderTotals(o).total;
+
+// Sipariş USD karşılığı — eğer fiili sevk tarihinde kur kilitlenmişse onu kullan,
+// değilse mevcut kur. Bu sayede sevk edilmiş siparişlerin USD ciro değeri,
+// TCMB güncellemesinden sonra değişmez.
+function orderTotalUSD(order, rates) {
+  const total = orderTotal(order);
+  if (!total) return 0;
+  // Sipariş kuru zaten USD'yse direkt
+  if (order.currency === "USD") return total;
+  // Kilitli kur var mı?
+  const lockedRate = order.lockedRateAtShipment;
+  if (lockedRate && lockedRate > 0) return total * lockedRate;
+  // Aksi halde mevcut kur
+  return toUSD(total, order.currency, rates);
+}
 
 const planTotal = (o) => (o?.paymentPlan || []).reduce((t, p) => t + (Number(p.amount) || 0), 0);
 
@@ -600,30 +670,24 @@ function Card({ title, subtitle, children, action, className = "", noPadding }) 
 
 // Modal — sayfayı kaydırmadan açılır
 function Modal({ open, onClose, title, subtitle, children, size = "md", footer }) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
+  // ESC tuşu kapatmaz — yanlışlıkla kapanmayı önler. Sadece X butonu veya
+  // İptal/Kaydet butonları ile kapatılabilir.
   if (!open) return null;
 
   const sizes = { sm: "max-w-md", md: "max-w-2xl", lg: "max-w-4xl", xl: "max-w-6xl", "2xl": "max-w-7xl" };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" style={{ background: "rgba(15, 26, 46, 0.5)", backdropFilter: "blur(4px)" }} onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" style={{ background: "rgba(15, 26, 46, 0.5)", backdropFilter: "blur(4px)" }}>
       <div
         className={`w-full ${sizes[size]} my-8 rounded-lg overflow-hidden shadow-2xl`}
         style={{ background: "white", border: `1px solid ${TOKENS.border}` }}
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="px-6 py-4 flex items-center justify-between border-b" style={{ borderColor: TOKENS.border, background: TOKENS.cream }}>
           <div>
             <h3 className="text-base font-semibold" style={{ color: TOKENS.ink, fontFamily: FONT_DISPLAY }}>{title}</h3>
             {subtitle && <p className="text-[11px] mt-0.5" style={{ color: TOKENS.muted }}>{subtitle}</p>}
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-white/50 transition" style={{ color: TOKENS.muted }}>
+          <button onClick={onClose} className="p-1 rounded hover:bg-white/50 transition" style={{ color: TOKENS.muted }} title="Kapat">
             <X size={18} />
           </button>
         </div>
@@ -813,6 +877,10 @@ export default function App() {
   const [orders, setOrders] = useState([]);
   const [payments, setPayments] = useState([]);
   const [rates, setRates] = useState(DEFAULT_RATES);
+  const [users, setUsers] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
 
   const [toast, setToast] = useState(null);
   const showToast = useCallback((msg, type = "info") => {
@@ -825,9 +893,10 @@ export default function App() {
     ensureFonts();
     (async () => {
       try {
-        const [c, p, ba, o, pm, r] = await Promise.all([
+        const [c, p, ba, o, pm, r, u] = await Promise.all([
           storage.get("customers"), storage.get("products"), storage.get("bankAccounts"),
           storage.get("orders"), storage.get("payments"), storage.get("rates"),
+          storage.get("users"),
         ]);
         if (c) setCustomers(c);
         if (p) setProducts(p);
@@ -835,6 +904,20 @@ export default function App() {
         if (o) setOrders(o);
         if (pm) setPayments(pm);
         if (r) setRates(r);
+        if (u) setUsers(u);
+
+        // Oturum kontrolü
+        const session = getSession();
+        if (session && u) {
+          // Kullanıcı hâlâ users listesinde var mı?
+          const userExists = u.find((x) => x.id === session.user.id);
+          if (userExists) {
+            setCurrentUser(session.user);
+          } else {
+            clearSession();
+          }
+        }
+        setAuthReady(true);
 
         // TCMB kurlarını günde bir kez otomatik güncelle
         const lastUpdate = r?._lastUpdate;
@@ -869,6 +952,7 @@ export default function App() {
   useEffect(() => { if (loaded) storage.set("orders", orders); }, [orders, loaded]);
   useEffect(() => { if (loaded) storage.set("payments", payments); }, [payments, loaded]);
   useEffect(() => { if (loaded) storage.set("rates", rates); }, [rates, loaded]);
+  useEffect(() => { if (loaded) storage.set("users", users); }, [users, loaded]);
 
   // ----- Vade geçmiş ödemeleri otomatik "gecikmiş" işaretle -----
   // Not: Bu, raporlama içindir; ödeme kaydının statusunu kalıcı değiştirmez.
@@ -884,6 +968,10 @@ export default function App() {
   }, [payments]);
 
   // ----- Tüm modüllere geçilen context -----
+  // ----- Auth durumu — düzenleme yetkisi -----
+  const canEdit = !!(currentUser && (currentUser.role === "admin" || currentUser.role === "editor"));
+  const isAdmin = currentUser?.role === "admin";
+
   const ctx = {
     customers, setCustomers,
     products, setProducts,
@@ -891,6 +979,9 @@ export default function App() {
     orders, setOrders,
     payments: enrichedPayments, setPayments,
     rates, setRates,
+    users, setUsers,
+    currentUser, setCurrentUser,
+    canEdit, isAdmin,
     showToast,
     setView,
   };
@@ -909,7 +1000,16 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex" style={{ background: TOKENS.bg, fontFamily: FONT_BODY, color: TOKENS.ink }}>
-      <Sidebar view={view} setView={setView} storageMode={storage.mode} storageLabel={storage.label} />
+      <Sidebar
+        view={view}
+        setView={setView}
+        storageMode={storage.mode}
+        storageLabel={storage.label}
+        currentUser={currentUser}
+        onLoginClick={() => setShowLogin(true)}
+        onLogout={() => { clearSession(); setCurrentUser(null); showToast("Çıkış yapıldı", "info"); }}
+        usersCount={users.length}
+      />
       <main className="flex-1 overflow-x-hidden min-w-0">
         {view === "dashboard"     && <DashboardView {...ctx} />}
         {view === "customers"     && <CustomersView {...ctx} />}
@@ -922,6 +1022,14 @@ export default function App() {
         {view === "settings"      && <SettingsView {...ctx} />}
       </main>
       <Toast toast={toast} onDismiss={() => setToast(null)} />
+      <LoginModal
+        open={showLogin || (authReady && users.length === 0)}
+        onClose={() => setShowLogin(false)}
+        users={users}
+        setUsers={setUsers}
+        setCurrentUser={setCurrentUser}
+        showToast={showToast}
+      />
     </div>
   );
 }
@@ -930,7 +1038,7 @@ export default function App() {
 // SIDEBAR — sol menü
 // ============================================================================
 
-function Sidebar({ view, setView, storageMode, storageLabel }) {
+function Sidebar({ view, setView, storageMode, storageLabel, currentUser, onLoginClick, onLogout, usersCount }) {
   const sections = [
     {
       title: "Genel",
@@ -951,7 +1059,6 @@ function Sidebar({ view, setView, storageMode, storageLabel }) {
       items: [
         { key: "customers",    label: "Müşteriler",       icon: Users },
         { key: "products",     label: "Ürünler",          icon: Package },
-        { key: "bankAccounts", label: "Banka Hesapları",  icon: Landmark },
       ],
     },
     {
@@ -1025,11 +1132,54 @@ function Sidebar({ view, setView, storageMode, storageLabel }) {
         ))}
       </nav>
 
+      {/* KULLANICI KARTI */}
+      <div className="p-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+        {currentUser ? (
+          <div className="rounded-md p-2.5" style={{ background: "rgba(201, 169, 97, 0.08)" }}>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                style={{ background: TOKENS.gold, color: TOKENS.ink }}>
+                {currentUser.name?.charAt(0).toUpperCase() || "?"}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-bold text-white truncate">{currentUser.name}</div>
+                <div className="text-[9px] uppercase tracking-wider" style={{ color: TOKENS.gold }}>
+                  {USER_ROLES.find((r) => r.key === currentUser.role)?.label || currentUser.role}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={onLogout}
+              className="w-full text-[10px] font-bold py-1.5 rounded transition flex items-center justify-center gap-1"
+              style={{ background: "rgba(255,255,255,0.06)", color: "#cbd5e1", border: "none" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.12)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
+            >
+              ÇIKIŞ YAP
+            </button>
+          </div>
+        ) : (
+          <div>
+            <div className="rounded-md p-2.5 mb-2" style={{ background: "rgba(166, 56, 61, 0.12)", border: "1px solid rgba(166, 56, 61, 0.3)" }}>
+              <div className="text-[10px] font-bold mb-1" style={{ color: "#fca5a5" }}>👁 MİSAFİR — SADECE OKUMA</div>
+              <div className="text-[10px]" style={{ color: "#94a3b8" }}>Düzenleme için giriş yap</div>
+            </div>
+            <button
+              onClick={onLoginClick}
+              className="w-full text-[11px] font-bold py-2 rounded transition flex items-center justify-center gap-1.5"
+              style={{ background: TOKENS.gold, color: TOKENS.ink, border: "none" }}
+            >
+              <Lock size={11} /> GİRİŞ YAP
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* DEPOLAMA DURUMU */}
-      <div className="p-4" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-        <div className="flex items-center gap-2 mb-1.5">
+      <div className="p-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+        <div className="flex items-center gap-2 mb-1">
           <SBIcon size={11} style={{ color: storageBadge.color }} />
-          <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: storageBadge.color }}>
+          <span className="text-[10px] uppercase tracking-wider font-bold" style={{ color: storageBadge.color }}>
             {storageBadge.text}
           </span>
         </div>
@@ -1040,6 +1190,144 @@ function Sidebar({ view, setView, storageMode, storageLabel }) {
         </div>
       </div>
     </aside>
+  );
+}
+
+// ============================================================================
+// LOGIN MODAL — ilk kullanıcı kurulumu + normal giriş
+// ============================================================================
+
+function LoginModal({ open, onClose, users, setUsers, setCurrentUser, showToast }) {
+  const isFirstSetup = users.length === 0;
+  const [mode, setMode] = useState(isFirstSetup ? "setup" : "login");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [password2, setPassword2] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setMode(users.length === 0 ? "setup" : "login");
+      setName(""); setEmail(""); setPassword(""); setPassword2("");
+    }
+  }, [open, users.length]);
+
+  if (!open) return null;
+
+  const handleSetup = async () => {
+    if (!name.trim() || !email.trim() || !password) return showToast("Tüm alanları doldur", "error");
+    if (password.length < 6) return showToast("Şifre en az 6 karakter olmalı", "error");
+    if (password !== password2) return showToast("Şifreler eşleşmiyor", "error");
+    setBusy(true);
+    try {
+      const salt = generateSalt();
+      const passwordHash = await hashPassword(password, salt);
+      const user = {
+        id: uid(),
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        salt, passwordHash,
+        role: "admin",
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
+      };
+      setUsers([user]);
+      saveSession(user);
+      setCurrentUser({ id: user.id, name: user.name, email: user.email, role: user.role });
+      showToast("Yönetici hesabı oluşturuldu — giriş yapıldı", "success");
+      onClose();
+    } catch (e) { showToast("Hata: " + e.message, "error"); }
+    setBusy(false);
+  };
+
+  const handleLogin = async () => {
+    if (!email.trim() || !password) return showToast("Email ve şifre gerekli", "error");
+    setBusy(true);
+    try {
+      const user = users.find((u) => u.email?.toLowerCase() === email.trim().toLowerCase());
+      if (!user) { setBusy(false); return showToast("Kullanıcı bulunamadı", "error"); }
+      const hash = await hashPassword(password, user.salt);
+      if (hash !== user.passwordHash) { setBusy(false); return showToast("Şifre yanlış", "error"); }
+      saveSession(user);
+      setCurrentUser({ id: user.id, name: user.name, email: user.email, role: user.role });
+      // Last login güncelle
+      setUsers((arr) => arr.map((u) => u.id === user.id ? { ...u, lastLogin: new Date().toISOString() } : u));
+      showToast(`Hoş geldin ${user.name}`, "success");
+      onClose();
+    } catch (e) { showToast("Hata: " + e.message, "error"); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(15, 26, 46, 0.7)", backdropFilter: "blur(6px)" }}>
+      <div className="w-full max-w-md rounded-lg overflow-hidden shadow-2xl" style={{ background: "white", border: `1px solid ${TOKENS.border}` }}>
+        <div className="px-6 py-5" style={{ background: TOKENS.ink, borderBottom: `2px solid ${TOKENS.gold}` }}>
+          <div className="flex items-center gap-3 mb-1">
+            <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: TOKENS.gold }}>
+              <Lock size={15} style={{ color: TOKENS.ink }} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white tracking-wide">{isFirstSetup ? "İLK KURULUM" : "GİRİŞ"}</h3>
+              <div className="text-[10px]" style={{ color: TOKENS.gold }}>İhracat Operasyonları</div>
+            </div>
+          </div>
+          <p className="text-[11px]" style={{ color: "#94a3b8" }}>
+            {isFirstSetup
+              ? "Sisteme henüz kullanıcı yok. İlk yönetici hesabını oluştur."
+              : "Düzenleme yapmak için giriş yap. Misafirler sadece görüntüleyebilir."}
+          </p>
+        </div>
+
+        <div className="p-6 space-y-3">
+          {mode === "setup" ? (
+            <>
+              <div>
+                <Label required>Adınız</Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Adınız Soyadınız" autoFocus />
+              </div>
+              <div>
+                <Label required>Email</Label>
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ornek@firma.com" />
+              </div>
+              <div>
+                <Label required hint="en az 6 karakter">Şifre</Label>
+                <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              </div>
+              <div>
+                <Label required>Şifre Tekrar</Label>
+                <Input type="password" value={password2} onChange={(e) => setPassword2(e.target.value)} />
+              </div>
+              <div className="text-[11px] p-2 rounded" style={{ background: TOKENS.gold + "15", color: TOKENS.ink, border: `1px solid ${TOKENS.gold}40` }}>
+                💡 Bu hesap "Yönetici" rolünde oluşturulur. Sonra Ayarlar → Kullanıcılar bölümünden ekibinin diğer üyelerini ekleyebilirsin.
+              </div>
+              <Btn variant="accent" size="lg" onClick={handleSetup} disabled={busy} className="w-full">
+                {busy ? "Oluşturuluyor..." : "Yöneticiyi Oluştur"}
+              </Btn>
+            </>
+          ) : (
+            <>
+              <div>
+                <Label required>Email</Label>
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} autoFocus placeholder="email@firma.com" />
+              </div>
+              <div>
+                <Label required>Şifre</Label>
+                <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} />
+              </div>
+              <Btn variant="accent" size="lg" onClick={handleLogin} disabled={busy} className="w-full">
+                {busy ? "Giriş yapılıyor..." : "Giriş Yap"}
+              </Btn>
+              <div className="text-center pt-2">
+                <button onClick={onClose} className="text-[11px] underline font-semibold" style={{ color: TOKENS.muted, background: "transparent", border: "none", cursor: "pointer" }}>
+                  Misafir olarak devam et (sadece görüntüleme)
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1074,7 +1362,7 @@ function Toast({ toast, onDismiss }) {
 function DashboardView({ customers, products, orders, payments, rates, setView }) {
   // Tüm hesaplamalar burada yapılır, alt bileşenlere geçilir
   const stats = useMemo(() => {
-    const totalOrdersUSD = orders.reduce((s, o) => s + toUSD(orderTotal(o), o.currency, rates), 0);
+    const totalOrdersUSD = orders.reduce((s, o) => s + orderTotalUSD(o, rates), 0);
     const paidUSD    = payments.filter((p) => p.status === "paid").reduce((s, p) => s + toUSD(p.amount, p.currency, rates), 0);
     const pendingUSD = payments.filter((p) => p.status === "pending").reduce((s, p) => s + toUSD(p.amount, p.currency, rates), 0);
     const overdueUSD = payments.filter((p) => p.status === "overdue").reduce((s, p) => s + toUSD(p.amount, p.currency, rates), 0);
@@ -1096,7 +1384,7 @@ function DashboardView({ customers, products, orders, payments, rates, setView }
       const k = o.orderDate.slice(0, 7);
       const b = buckets.find((b) => b.key === k);
       if (b) {
-        b.value += toUSD(orderTotal(o), o.currency, rates);
+        b.value += orderTotalUSD(o, rates);
         b.count++;
       }
     });
@@ -1110,7 +1398,7 @@ function DashboardView({ customers, products, orders, payments, rates, setView }
       const c = customers.find((x) => x.id === o.customerId);
       const name = c?.name || o.customerName || "—";
       if (!map[name]) map[name] = { name, country: c?.country, total: 0, count: 0 };
-      map[name].total += toUSD(orderTotal(o), o.currency, rates);
+      map[name].total += orderTotalUSD(o, rates);
       map[name].count++;
     });
     return Object.values(map).sort((a, b) => b.total - a.total).slice(0, 5);
@@ -1130,7 +1418,7 @@ function DashboardView({ customers, products, orders, payments, rates, setView }
   const currencyDist = useMemo(() => {
     const m = {};
     orders.forEach((o) => {
-      m[o.currency] = (m[o.currency] || 0) + toUSD(orderTotal(o), o.currency, rates);
+      m[o.currency] = (m[o.currency] || 0) + orderTotalUSD(o, rates);
     });
     return Object.entries(m).map(([name, value]) => ({ name, value })).filter((x) => x.value > 0);
   }, [orders, rates]);
@@ -1364,7 +1652,7 @@ function QuickStartCard({ icon: Icon, title, desc, cta, onClick }) {
 // hesap riskimiz var bilmek hayati. Bekleyen + gecikmiş ödemeleri toplayıp
 // kredi limitiyle karşılaştırırız.
 
-function CustomersView({ customers, setCustomers, orders, payments, rates, showToast }) {
+function CustomersView({ customers, setCustomers, orders, payments, bankAccounts, rates, canEdit, showToast, setView }) {
   const [search, setSearch] = useState("");
   const [countryFilter, setCountryFilter] = useState("");
   const [open, setOpen] = useState(false);
@@ -1375,7 +1663,7 @@ function CustomersView({ customers, setCustomers, orders, payments, rates, showT
   // Hem USD bazlı toplamlar (tüm para birimleri çevrilmiş) hem de orijinal para birimi bazlı kırılım
   const enrichedCustomers = useMemo(() => customers.map((c) => {
     const custOrders = orders.filter((o) => o.customerId === c.id);
-    const totalUSD = custOrders.reduce((s, o) => s + toUSD(orderTotal(o), o.currency, rates), 0);
+    const totalUSD = custOrders.reduce((s, o) => s + orderTotalUSD(o, rates), 0);
     const openBalance = payments.filter((p) => {
       const o = orders.find((x) => x.id === p.orderId);
       return o?.customerId === c.id && p.status !== "paid" && p.status !== "cancelled";
@@ -1574,10 +1862,12 @@ function CustomersView({ customers, setCustomers, orders, payments, rates, showT
     <div>
       <PageHeader title="Müşteriler" subtitle={`${customers.length} müşteri kaydı · Açık bakiye ve kredi kullanımı otomatik hesaplanır`}>
         <input id="cust-import" type="file" accept=".xlsx,.xls" onChange={(e) => handleImport(e.target.files[0])} className="hidden" />
-        <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>Şablon</Btn>
-        <Btn variant="secondary" size="sm" icon={FileUp} onClick={() => document.getElementById("cust-import").click()}>İçe Aktar</Btn>
         <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>Dışa Aktar</Btn>
-        <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>Yeni Müşteri</Btn>
+        {canEdit && <>
+          <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>Şablon</Btn>
+          <Btn variant="secondary" size="sm" icon={FileUp} onClick={() => document.getElementById("cust-import").click()}>İçe Aktar</Btn>
+          <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>Yeni Müşteri</Btn>
+        </>}
       </PageHeader>
 
       <div className="p-8 space-y-4">
@@ -1716,12 +2006,13 @@ function CustomersView({ customers, setCustomers, orders, payments, rates, showT
       </Modal>
 
       {/* Detay görünüm */}
-      <CustomerDetailModal customer={viewing} onClose={() => setViewing(null)} orders={orders} payments={payments} rates={rates} />
+      <CustomerDetailModal customer={viewing} onClose={() => setViewing(null)} orders={orders} payments={payments} bankAccounts={bankAccounts} rates={rates} setView={setView} />
     </div>
   );
 }
 
-function CustomerDetailModal({ customer, onClose, orders, payments, rates }) {
+function CustomerDetailModal({ customer, onClose, orders, payments, bankAccounts, rates, setView }) {
+  const [orderViewing, setOrderViewing] = useState(null);
   if (!customer) return null;
   const custOrders = orders.filter((o) => o.customerId === customer.id).sort((a, b) => (b.orderDate || "").localeCompare(a.orderDate || ""));
   const custPayments = payments.filter((p) => custOrders.some((o) => o.id === p.orderId));
@@ -1807,11 +2098,16 @@ function CustomerDetailModal({ customer, onClose, orders, payments, rates }) {
                   const st = ORDER_STATUSES.find((s) => s.key === o.status);
                   const total = orderTotal(o);
                   return (
-                    <tr key={o.id} style={{ borderTop: `1px solid ${TOKENS.border}` }}>
-                      <td className="px-3 py-2 font-mono font-medium">{o.orderNumber}</td>
+                    <tr key={o.id} className="cursor-pointer transition" style={{ borderTop: `1px solid ${TOKENS.border}` }}
+                      onClick={() => setOrderViewing(o)}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = TOKENS.cream)}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      title="Detay için tıkla"
+                    >
+                      <td className="px-3 py-2 font-mono font-bold" style={{ color: TOKENS.navy }}>{o.orderNumber}</td>
                       <td className="px-3 py-2">{fmtDate(o.orderDate)}</td>
                       <td className="px-3 py-2"><Badge color={st?.color}>{st?.label}</Badge></td>
-                      <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(total, o.currency)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-bold">{fmtMoney(total, o.currency)}</td>
                       <td className="px-3 py-2 text-right tabular-nums" style={{ color: TOKENS.muted }}>{fmtMoney(toUSD(total, o.currency, rates))}</td>
                     </tr>
                   );
@@ -1828,6 +2124,19 @@ function CustomerDetailModal({ customer, onClose, orders, payments, rates }) {
           </div>
         )}
       </div>
+
+      {/* Müşteri içindeki sipariş detayı (içiçe modal) */}
+      {orderViewing && (
+        <OrderDetailModal
+          order={orderViewing}
+          onClose={() => setOrderViewing(null)}
+          customers={[customer]}
+          payments={payments}
+          bankAccounts={bankAccounts || []}
+          rates={rates}
+          setView={setView}
+        />
+      )}
     </Modal>
   );
 }
@@ -1865,7 +2174,7 @@ function SectionTitle({ children }) {
 // ÜRÜNLER
 // ============================================================================
 
-function ProductsView({ products, setProducts, orders, rates, showToast }) {
+function ProductsView({ products, setProducts, orders, rates, canEdit, showToast }) {
   const [search, setSearch] = useState("");
   const [curFilter, setCurFilter] = useState("");
   const [open, setOpen] = useState(false);
@@ -1983,10 +2292,12 @@ function ProductsView({ products, setProducts, orders, rates, showToast }) {
     <div>
       <PageHeader title="Ürünler" subtitle={`${products.length} ürün · Sipariş kalemlerinde otomatik tamamlama yapar`}>
         <input id="prod-import" type="file" accept=".xlsx,.xls" onChange={(e) => handleImport(e.target.files[0])} className="hidden" />
-        <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>Şablon</Btn>
-        <Btn variant="secondary" size="sm" icon={FileUp} onClick={() => document.getElementById("prod-import").click()}>İçe Aktar</Btn>
         <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>Dışa Aktar</Btn>
-        <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>Yeni Ürün</Btn>
+        {canEdit && <>
+          <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>Şablon</Btn>
+          <Btn variant="secondary" size="sm" icon={FileUp} onClick={() => document.getElementById("prod-import").click()}>İçe Aktar</Btn>
+          <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>Yeni Ürün</Btn>
+        </>}
       </PageHeader>
 
       <div className="p-8 space-y-4">
@@ -2043,7 +2354,7 @@ function ProductsView({ products, setProducts, orders, rates, showToast }) {
 // - Akreditif geliyorsa hangi banka olduğunu kayıt edebiliriz
 // - Hesap bazlı tahsilat raporu çıkar
 
-function BankAccountsView({ bankAccounts, setBankAccounts, payments, rates, showToast }) {
+function BankAccountsView({ bankAccounts, setBankAccounts, payments, rates, canEdit, showToast }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
 
@@ -2123,10 +2434,12 @@ function BankAccountsView({ bankAccounts, setBankAccounts, payments, rates, show
     <div>
       <PageHeader title="Banka Hesapları" subtitle="Tahsilatların geleceği hesapları kaydet — akreditif ve havale takibi için kritik">
         <input id="bank-import" type="file" accept=".xlsx,.xls" onChange={(e) => { handleImport(e.target.files[0]); e.target.value = ""; }} className="hidden" />
-        <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>Şablon</Btn>
-        <Btn variant="secondary" size="sm" icon={FileUp} onClick={() => document.getElementById("bank-import").click()}>İçe Aktar</Btn>
         <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>Dışa Aktar</Btn>
-        <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>Yeni Hesap</Btn>
+        {canEdit && <>
+          <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>Şablon</Btn>
+          <Btn variant="secondary" size="sm" icon={FileUp} onClick={() => document.getElementById("bank-import").click()}>İçe Aktar</Btn>
+          <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>Yeni Hesap</Btn>
+        </>}
       </PageHeader>
 
       <div className="p-8 space-y-4">
@@ -2207,7 +2520,7 @@ function BankAccountsView({ bankAccounts, setBankAccounts, payments, rates, show
 // "Ödeme Planı" sipariş kaydında oluşturulur ve "Ödemeler" modülünde her
 // taksitin tahsilatı ayrı ayrı kaydedilir.
 
-function OrdersView({ customers, products, orders, setOrders, payments, setPayments, bankAccounts, rates, showToast, setView }) {
+function OrdersView({ customers, products, orders, setOrders, payments, setPayments, bankAccounts, rates, canEdit, showToast, setView }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [customerFilter, setCustomerFilter] = useState("");
@@ -2284,6 +2597,28 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
       vatRate: Number(editing.vatRate) || 0,
       discountValue: Number(editing.discountValue) || 0,
     };
+
+    // Fiili sevk tarihi ilk kez girildiyse o günkü kuru kilitle
+    // Böylece TCMB güncellemesi ile sevk edilmiş siparişin USD değeri değişmez
+    const oldOrderForRate = editing.id ? orders.find((o) => o.id === editing.id) : null;
+    const wasShipped = !!(oldOrderForRate?.actualShipmentDate);
+    const isShipped = !!cleaned.actualShipmentDate;
+    if (isShipped && !wasShipped && cleaned.currency !== "USD") {
+      // İlk kez sevk işaretlendi → kuru kaydet
+      const currentRate = rates[cleaned.currency];
+      if (currentRate && currentRate > 0) {
+        cleaned.lockedRateAtShipment = currentRate;
+        cleaned.lockedAt = todayISO();
+      }
+    } else if (!isShipped && oldOrderForRate?.lockedRateAtShipment) {
+      // Sevk geri alındı → kilidi de geri al
+      delete cleaned.lockedRateAtShipment;
+      delete cleaned.lockedAt;
+    } else if (oldOrderForRate?.lockedRateAtShipment) {
+      // Sevk durumu değişmedi, kilidi koru
+      cleaned.lockedRateAtShipment = oldOrderForRate.lockedRateAtShipment;
+      cleaned.lockedAt = oldOrderForRate.lockedAt;
+    }
 
     if (editing.id) {
       // Mevcut sipariş — plan değişmiş mi ve tahsilatlar var mı kontrol et
@@ -2468,10 +2803,12 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
     <div>
       <PageHeader title="Siparişler" subtitle={`${orders.length} sipariş · Sipariş içinde kalemler ve ödeme planı birlikte yönetilir`}>
         <input id="order-import" type="file" accept=".xlsx,.xls" onChange={(e) => { handleImport(e.target.files[0]); e.target.value = ""; }} className="hidden" />
-        <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>Şablon</Btn>
-        <Btn variant="secondary" size="sm" icon={FileUp} onClick={() => document.getElementById("order-import").click()}>İçe Aktar</Btn>
         <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>Dışa Aktar</Btn>
-        <Btn variant="primary" size="sm" icon={Plus} onClick={openNew} disabled={customers.length === 0}>Yeni Sipariş</Btn>
+        {canEdit && <>
+          <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>Şablon</Btn>
+          <Btn variant="secondary" size="sm" icon={FileUp} onClick={() => document.getElementById("order-import").click()}>İçe Aktar</Btn>
+          <Btn variant="primary" size="sm" icon={Plus} onClick={openNew} disabled={customers.length === 0}>Yeni Sipariş</Btn>
+        </>}
       </PageHeader>
 
       <div className="p-8 space-y-4">
@@ -2647,59 +2984,84 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
   const updatePlanItem = (idx, patch) => {
     const p = [...editing.paymentPlan];
     p[idx] = { ...p[idx], ...patch };
+    const totals = calcOrderTotals(editing);
+    // VAT kalemleri yüzdesi vatAmount üzerinden, diğerleri afterDiscount üzerinden hesaplanır
+    const baseForCalc = p[idx].type === "vat" ? totals.vatAmount : totals.afterDiscount;
     // Yüzde değişirse tutarı otomatik hesapla
-    if (patch.percentage !== undefined && itemsTotal > 0) {
-      p[idx].amount = +(itemsTotal * (Number(patch.percentage) || 0) / 100).toFixed(2);
+    if (patch.percentage !== undefined && baseForCalc > 0) {
+      p[idx].amount = +(baseForCalc * (Number(patch.percentage) || 0) / 100).toFixed(2);
     }
     // Tutar değişirse yüzdeyi otomatik hesapla
-    if (patch.amount !== undefined && itemsTotal > 0) {
-      p[idx].percentage = +((Number(patch.amount) || 0) / itemsTotal * 100).toFixed(2);
+    if (patch.amount !== undefined && baseForCalc > 0) {
+      p[idx].percentage = +((Number(patch.amount) || 0) / baseForCalc * 100).toFixed(2);
     }
     setEditing({ ...editing, paymentPlan: p });
   };
 
   // Hızlı şablonlar — sevk tarihinden itibaren vade hesaplanır
+  // ÖNEMLİ: Plan kalemleri KDV'siz mal bedeli (afterDiscount) üzerinden hesaplanır.
+  // KDV varsa otomatik olarak ayrı bir "KDV" plan kalemi eklenir (genelde sevk tarihinde ödenir).
   const applyPreset = (key) => {
+    const totals = calcOrderTotals(editing);
+    const baseAmount = totals.afterDiscount; // KDV'siz mal bedeli (iskonto sonrası)
+    const vatAmount = totals.vatAmount;
     const today = todayISO();
     const customer = customers.find((c) => c.id === editing.customerId);
     const vade = Number(customer?.defaultPaymentTerms) || 30;
     const method = customer?.defaultPaymentMethod || "bank_transfer";
-    // Sevk tarihi: önce sipariş içindeki, yoksa bugün+30
     const shipDate = editing.shipmentDate || addDays(today, 30);
-    let plan;
+    let plan = [];
+
     if (key === "customer-default") {
-      // Müşterinin kendi varsayılan yüzdelerini kullan
       const pre = Number(customer?.defaultPrepaymentPct) || 0;
       const preShip = Number(customer?.defaultPreShipmentPct) || 0;
       const def = Number(customer?.defaultDeferredPct) || 0;
-      plan = [];
-      if (pre > 0) plan.push({ id: uid(), type: "prepayment",  percentage: pre, amount: +(itemsTotal * pre / 100).toFixed(2), method, dueDate: today, notes: "Sipariş onayı" });
-      if (preShip > 0) plan.push({ id: uid(), type: "preShipment", percentage: preShip, amount: +(itemsTotal * preShip / 100).toFixed(2), method, dueDate: shipDate, notes: "Sevk öncesi" });
-      if (def > 0) plan.push({ id: uid(), type: "deferred", percentage: def, amount: +(itemsTotal * def / 100).toFixed(2), method, dueDate: addDays(shipDate, vade), notes: `Sevkten ${vade} gün sonra` });
+      if (pre > 0) plan.push({ id: uid(), type: "prepayment",  percentage: pre, amount: +(baseAmount * pre / 100).toFixed(2), method, dueDate: today, notes: "Sipariş onayı" });
+      if (preShip > 0) plan.push({ id: uid(), type: "preShipment", percentage: preShip, amount: +(baseAmount * preShip / 100).toFixed(2), method, dueDate: shipDate, notes: "Sevk öncesi" });
+      if (def > 0) plan.push({ id: uid(), type: "deferred", percentage: def, amount: +(baseAmount * def / 100).toFixed(2), method, dueDate: addDays(shipDate, vade), notes: `Sevkten ${vade} gün sonra` });
     } else if (key === "30-40-30") {
-      plan = [
-        { id: uid(), type: "prepayment",  percentage: 30, amount: +(itemsTotal * 0.3).toFixed(2),  method, dueDate: today, notes: "Sipariş onayı" },
-        { id: uid(), type: "preShipment", percentage: 40, amount: +(itemsTotal * 0.4).toFixed(2),  method, dueDate: shipDate, notes: "Sevkiyat öncesi" },
-        { id: uid(), type: "deferred",    percentage: 30, amount: +(itemsTotal * 0.3).toFixed(2),  method, dueDate: addDays(shipDate, vade), notes: `Sevkten ${vade} gün sonra` },
-      ];
+      plan.push({ id: uid(), type: "prepayment",  percentage: 30, amount: +(baseAmount * 0.3).toFixed(2), method, dueDate: today, notes: "Sipariş onayı" });
+      plan.push({ id: uid(), type: "preShipment", percentage: 40, amount: +(baseAmount * 0.4).toFixed(2), method, dueDate: shipDate, notes: "Sevkiyat öncesi" });
+      plan.push({ id: uid(), type: "deferred",    percentage: 30, amount: +(baseAmount * 0.3).toFixed(2), method, dueDate: addDays(shipDate, vade), notes: `Sevkten ${vade} gün sonra` });
     } else if (key === "50-50") {
-      plan = [
-        { id: uid(), type: "prepayment",  percentage: 50, amount: +(itemsTotal * 0.5).toFixed(2),  method, dueDate: today, notes: "Ön ödeme" },
-        { id: uid(), type: "preShipment", percentage: 50, amount: +(itemsTotal * 0.5).toFixed(2),  method, dueDate: shipDate, notes: "Sevkiyat öncesi bakiye" },
-      ];
+      plan.push({ id: uid(), type: "prepayment",  percentage: 50, amount: +(baseAmount * 0.5).toFixed(2), method, dueDate: today, notes: "Ön ödeme" });
+      plan.push({ id: uid(), type: "preShipment", percentage: 50, amount: +(baseAmount * 0.5).toFixed(2), method, dueDate: shipDate, notes: "Sevkiyat öncesi bakiye" });
     } else if (key === "100-cash") {
-      plan = [{ id: uid(), type: "prepayment", percentage: 100, amount: itemsTotal, method: "cash", dueDate: today, notes: "Peşin" }];
+      plan.push({ id: uid(), type: "prepayment", percentage: 100, amount: baseAmount, method: "cash", dueDate: today, notes: "Peşin" });
     } else if (key === "100-lc") {
-      plan = [{ id: uid(), type: "preShipment", percentage: 100, amount: itemsTotal, method: "letter_of_credit", dueDate: shipDate, notes: "L/C ile" }];
+      plan.push({ id: uid(), type: "preShipment", percentage: 100, amount: baseAmount, method: "letter_of_credit", dueDate: shipDate, notes: "L/C ile" });
     } else if (key === "100-deferred") {
-      plan = [{ id: uid(), type: "deferred", percentage: 100, amount: itemsTotal, method, dueDate: addDays(shipDate, vade), notes: `Sevkten ${vade} gün sonra` }];
+      plan.push({ id: uid(), type: "deferred", percentage: 100, amount: baseAmount, method, dueDate: addDays(shipDate, vade), notes: `Sevkten ${vade} gün sonra` });
     }
+
+    // KDV varsa otomatik kalem ekle — genelde sevkiyat sırasında ödenir
+    if (vatAmount > 0) {
+      plan.push({
+        id: uid(),
+        type: "vat",
+        percentage: 100, // KDV kalemleri için %100 = vatAmount'un tamamı
+        amount: +vatAmount.toFixed(2),
+        method,
+        dueDate: shipDate,
+        notes: "KDV tutarı — mal bedelinden ayrı"
+      });
+    }
+
     setEditing({ ...editing, paymentPlan: plan });
   };
 
   const planTotalCalc = (editing.paymentPlan || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  // Mal bedeli kalemleri (KDV hariç) ve KDV kalemleri ayrı hesap
+  const planNonVat = (editing.paymentPlan || []).filter((p) => p.type !== "vat").reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const planVat = (editing.paymentPlan || []).filter((p) => p.type === "vat").reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const orderTotalsForPlan = calcOrderTotals(editing);
   const planDiff = +(itemsTotal - planTotalCalc).toFixed(2);
   const planMatch = Math.abs(planDiff) < 0.01;
+  // Mal bedeli için ayrı kontrol
+  const malDiff = +(orderTotalsForPlan.afterDiscount - planNonVat).toFixed(2);
+  const malMatch = Math.abs(malDiff) < 0.01;
+  const vatDiff = +(orderTotalsForPlan.vatAmount - planVat).toFixed(2);
+  const vatMatch = Math.abs(vatDiff) < 0.01;
 
   return (
     <Modal
@@ -2736,6 +3098,19 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
             <div><Label required>Sipariş Tarihi</Label><Input type="date" value={editing.orderDate} onChange={(e) => setEditing({ ...editing, orderDate: e.target.value })} /></div>
             <div><Label hint="planlanan">Sevk Tarihi</Label><Input type="date" value={editing.shipmentDate} onChange={(e) => setEditing({ ...editing, shipmentDate: e.target.value })} /></div>
             <div><Label hint="gerçekleşen">Fiili Sevk</Label><Input type="date" value={editing.actualShipmentDate} onChange={(e) => setEditing({ ...editing, actualShipmentDate: e.target.value })} /></div>
+            {editing.lockedRateAtShipment && editing.currency !== "USD" && (
+              <div className="col-span-3 mt-1 p-2 rounded text-[11px] flex items-center gap-2" style={{ background: TOKENS.gold + "12", color: TOKENS.ink, border: `1px solid ${TOKENS.gold}40` }}>
+                <Lock size={11} style={{ color: TOKENS.copper }} />
+                <span><strong>Sevk Kuru Kilitli:</strong> 1 {editing.currency} = {editing.lockedRateAtShipment.toFixed(4)} USD ({editing.lockedAt && fmtDate(editing.lockedAt)}). Bu siparişin USD karşılığı bu kura göre hesaplanır.</span>
+                <button type="button" onClick={() => {
+                  if (!confirm("Sevk kurunu mevcut güncel kurla yenilemek ister misin? Bu siparişin USD değeri değişecek.")) return;
+                  setEditing({ ...editing, lockedRateAtShipment: undefined, lockedAt: undefined });
+                  showToast("Kur kilidi kaldırıldı — sonraki kayıtta yeni kur kilitlenir", "info");
+                }} className="ml-auto text-[10px] underline font-bold" style={{ color: TOKENS.copper, background: "transparent", border: "none", cursor: "pointer" }}>
+                  Kuru Yenile
+                </button>
+              </div>
+            )}
             <div><Label>Para Birimi</Label>
               <Select value={editing.currency} onChange={(e) => setEditing({ ...editing, currency: e.target.value })}>
                 {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
@@ -2811,9 +3186,14 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
         {/* ÖDEME PLANI */}
         <div>
           <div className="flex items-center justify-between mb-3 pb-2" style={{ borderBottom: `1px solid ${TOKENS.border}` }}>
-            <div className="text-[11px] uppercase tracking-widest font-semibold" style={{ color: TOKENS.gold }}>
-              Ödeme Planı · Plan Toplamı: <span style={{ color: planMatch ? TOKENS.forest : TOKENS.oxblood }}>{fmtMoney(planTotalCalc, editing.currency)}</span>
-              {!planMatch && itemsTotal > 0 && <span className="ml-2" style={{ color: TOKENS.oxblood }}>(fark: {fmtMoney(planDiff, editing.currency)})</span>}
+            <div className="text-[11px] uppercase tracking-widest font-bold" style={{ color: TOKENS.gold }}>
+              Ödeme Planı · Toplam: <span style={{ color: planMatch ? TOKENS.forest : TOKENS.oxblood }}>{fmtMoney(planTotalCalc, editing.currency)}</span>
+              {orderTotalsForPlan.vatAmount > 0 && (
+                <span className="ml-3 normal-case font-normal text-[10px]" style={{ color: TOKENS.muted }}>
+                  Mal: <strong style={{ color: malMatch ? TOKENS.forest : TOKENS.oxblood }}>{fmtMoney(planNonVat, editing.currency)}</strong> / {fmtMoney(orderTotalsForPlan.afterDiscount, editing.currency)}
+                  · KDV: <strong style={{ color: vatMatch ? TOKENS.forest : TOKENS.oxblood }}>{fmtMoney(planVat, editing.currency)}</strong> / {fmtMoney(orderTotalsForPlan.vatAmount, editing.currency)}
+                </span>
+              )}
             </div>
             <Btn variant="secondary" size="xs" icon={Plus} onClick={() => addPlanItem()}>Plan Kalemi Ekle</Btn>
           </div>
@@ -3533,6 +3913,9 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
             <DetailRow icon={Calendar} label="Sipariş Tarihi" value={fmtDate(order.orderDate)} />
             <DetailRow icon={Calendar} label="Planlanan Sevk" value={fmtDate(order.shipmentDate)} />
             <DetailRow icon={Calendar} label="Fiili Sevk" value={fmtDate(order.actualShipmentDate)} />
+            {order.lockedRateAtShipment && order.currency !== "USD" && (
+              <DetailRow icon={Lock} label="Sevk Tarihi Kuru" value={`1 ${order.currency} = ${order.lockedRateAtShipment.toFixed(4)} USD${order.lockedAt ? ` (${fmtDate(order.lockedAt)})` : ""}`} />
+            )}
             <DetailRow icon={DollarSign} label="Para Birimi" value={order.currency} />
             <DetailRow icon={ShieldCheck} label="Incoterms" value={incoterm?.key + (incoterm ? ` — ${incoterm.label.split("—")[1].trim()}` : "")} />
             <DetailRow icon={ShipIcon} label="Sevk Yöntemi" value={ship?.label || "—"} />
@@ -3547,30 +3930,64 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
           <table className="w-full text-xs">
             <thead style={{ background: TOKENS.cream }}>
               <tr>
-                <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-semibold">Ürün</th>
-                <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-semibold">İsim</th>
-                <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider font-semibold">Adet</th>
-                <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider font-semibold">Birim Fiyat</th>
-                <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider font-semibold">Toplam</th>
+                <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-bold">Ürün</th>
+                <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-bold">İsim</th>
+                <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider font-bold">Adet</th>
+                <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider font-bold">Birim Fiyat</th>
+                <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider font-bold">İsk %</th>
+                <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider font-bold">Toplam</th>
               </tr>
             </thead>
             <tbody>
               {(order.items || []).map((i) => {
-                const lineTotal = (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0);
+                const baseTotal = (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0);
+                const lineDisc = Number(i.discount) || 0;
+                const lineTotal = baseTotal * (1 - lineDisc / 100);
                 return (
                   <tr key={i.id} style={{ borderTop: `1px solid ${TOKENS.border}` }}>
-                    <td className="px-3 py-2"><div className="font-mono font-semibold" style={{ color: TOKENS.navy }}>{i.productCode}</div>{i.manufacturingCode && <div className="font-mono text-[10px]" style={{ color: TOKENS.muted }}>{i.manufacturingCode}</div>}</td>
-                    <td className="px-3 py-2"><div>{i.nameTr}</div>{i.nameEn && <div className="italic text-[10px]" style={{ color: TOKENS.muted }}>{i.nameEn}</div>}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmtNum(i.quantity)} {i.unit}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(i.unitPrice, order.currency)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmtMoney(lineTotal, order.currency)}</td>
+                    <td className="px-3 py-2"><div className="font-mono font-bold" style={{ color: TOKENS.navy }}>{i.productCode}</div>{i.manufacturingCode && <div className="font-mono text-[10px]" style={{ color: TOKENS.muted }}>{i.manufacturingCode}</div>}</td>
+                    <td className="px-3 py-2"><div className="font-semibold">{i.nameTr}</div>{i.nameEn && <div className="italic text-[10px]" style={{ color: TOKENS.muted }}>{i.nameEn}</div>}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmtNum(i.quantity)} {i.unit}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmtMoney(i.unitPrice, order.currency)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums" style={{ color: lineDisc > 0 ? TOKENS.copper : TOKENS.muted }}>{lineDisc > 0 ? `%${lineDisc}` : "—"}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-bold" style={{ color: TOKENS.ink }}>
+                      {lineDisc > 0 && (<div className="text-[9px] line-through font-normal" style={{ color: TOKENS.muted }}>{fmtMoney(baseTotal, order.currency)}</div>)}
+                      {fmtMoney(lineTotal, order.currency)}
+                    </td>
                   </tr>
                 );
               })}
-              <tr style={{ background: TOKENS.cream }}>
-                <td colSpan="4" className="px-3 py-2 text-right font-semibold uppercase text-[10px] tracking-wider">Toplam</td>
-                <td className="px-3 py-2 text-right tabular-nums font-bold" style={{ color: TOKENS.ink }}>{fmtMoney(total, order.currency)}</td>
-              </tr>
+              {(() => {
+                const totals = calcOrderTotals(order);
+                return (
+                  <>
+                    {(totals.discount > 0 || totals.vatRate > 0) && (
+                      <tr style={{ borderTop: `1px solid ${TOKENS.border}`, background: TOKENS.cream + "60" }}>
+                        <td colSpan="5" className="px-3 py-1.5 text-right text-[11px] font-semibold" style={{ color: TOKENS.muted }}>Ara Toplam</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums font-bold">{fmtMoney(totals.subtotal, order.currency)}</td>
+                      </tr>
+                    )}
+                    {totals.discount > 0 && (
+                      <tr style={{ background: TOKENS.cream + "60" }}>
+                        <td colSpan="5" className="px-3 py-1.5 text-right text-[11px] font-semibold" style={{ color: TOKENS.copper }}>
+                          Sipariş İskontosu ({order.discountType === "percentage" ? `%${order.discountValue}` : "tutar"})
+                        </td>
+                        <td className="px-3 py-1.5 text-right tabular-nums font-bold" style={{ color: TOKENS.copper }}>− {fmtMoney(totals.discount, order.currency)}</td>
+                      </tr>
+                    )}
+                    {totals.vatRate > 0 && (
+                      <tr style={{ background: TOKENS.cream + "60" }}>
+                        <td colSpan="5" className="px-3 py-1.5 text-right text-[11px] font-semibold" style={{ color: TOKENS.muted }}>KDV (%{totals.vatRate})</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums font-bold">+ {fmtMoney(totals.vatAmount, order.currency)}</td>
+                      </tr>
+                    )}
+                    <tr style={{ background: TOKENS.gold + "15", borderTop: `2px solid ${TOKENS.gold}` }}>
+                      <td colSpan="5" className="px-3 py-2 text-right font-bold uppercase text-[11px] tracking-wider" style={{ color: TOKENS.ink }}>Genel Toplam</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-bold text-base" style={{ color: TOKENS.ink }}>{fmtMoney(totals.total, order.currency)}</td>
+                    </tr>
+                  </>
+                );
+              })()}
             </tbody>
           </table>
         </Card>
@@ -3626,7 +4043,7 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
 // ÖDEMELER — tahsilat takibi
 // ============================================================================
 
-function PaymentsView({ orders, customers, payments, setPayments, bankAccounts, rates, showToast }) {
+function PaymentsView({ orders, setOrders, customers, payments, setPayments, bankAccounts, rates, canEdit, showToast }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [methodFilter, setMethodFilter] = useState("");
@@ -3773,6 +4190,34 @@ function PaymentsView({ orders, customers, payments, setPayments, bankAccounts, 
     setPayments((arr) => arr.map((p) => p.id === payment.id ? { ...p, status: "pending", paidDate: "", bankAccountId: "", referenceNumber: "" } : p));
   };
 
+  // Ödemeyi tamamen sil — çift onaylı
+  // Eğer bir plan kalemine bağlıysa, plan kaleminden de kaldırılır (sipariş.paymentPlan'dan).
+  // Böylece sipariş düzenlenince yeni bir pending kayıt oluşmaz.
+  const deletePayment = (payment) => {
+    const tp = PAYMENT_PLAN_TYPES.find((t) => t.key === payment.type)?.label || payment.type;
+    const isPaid = payment.status === "paid";
+    const linked = !!payment.planItemId;
+    const msg1 = `Bu ödeme kaydı silinecek:\n\n• Tip: ${tp}\n• Tutar: ${fmtMoney(payment.amount, payment.currency)}\n• Durum: ${PAYMENT_STATUSES.find((s) => s.key === payment.status)?.label || payment.status}\n${isPaid ? "• Tahsil tarihi: " + fmtDate(payment.paidDate) : ""}\n\nDevam edilsin mi?`;
+    if (!confirm(msg1)) return;
+    const msg2 = linked
+      ? "SON ONAY:\n\nBu ödeme bir plan kalemine bağlı.\n• Ödeme kaydı kalıcı olarak silinecek\n• Sipariş ödeme planından da bu kalem kaldırılacak\n\nBu işlem GERİ ALINAMAZ. Emin misin?"
+      : "SON ONAY:\n\nBu ödeme kaydı kalıcı olarak silinecek.\nBu işlem GERİ ALINAMAZ. Emin misin?";
+    if (!confirm(msg2)) return;
+
+    setPayments((arr) => arr.filter((p) => p.id !== payment.id));
+    if (linked) {
+      // Sipariş.paymentPlan'dan kaleme ait olanı çıkar
+      // setOrders App'ten ctx'le geliyor — burada doğrudan değişemez, ama setOrders props ile gelir
+      if (typeof setOrders === "function") {
+        setOrders((arr) => arr.map((o) => {
+          if (o.id !== payment.orderId) return o;
+          return { ...o, paymentPlan: (o.paymentPlan || []).filter((pp) => pp.id !== payment.planItemId) };
+        }));
+      }
+    }
+    showToast("Ödeme kaydı silindi", "success");
+  };
+
   const handleExport = () => {
     if (!payments.length) return showToast("Aktarılacak ödeme yok", "error");
     const rows = enriched.map((p) => ({
@@ -3855,7 +4300,7 @@ function PaymentsView({ orders, customers, payments, setPayments, bankAccounts, 
             <EmptyState icon={CreditCard} title="Henüz ödeme kaydı yok" hint="Ödeme kayıtları, sipariş içindeki ödeme planından otomatik oluşur. Önce bir sipariş oluştur ve ödeme planı ekle." />
           </Card>
         ) : viewMode === "by-order" ? (
-          <PaymentsByOrder filtered={filtered} orders={orders} customers={customers} bankAccounts={bankAccounts} rates={rates} onMarkPaid={markAsPaid} onRevert={revert} />
+          <PaymentsByOrder filtered={filtered} orders={orders} customers={customers} bankAccounts={bankAccounts} rates={rates} onMarkPaid={markAsPaid} onRevert={revert} onDelete={deletePayment} />
         ) : (
           <DataTable
             columns={[
@@ -3894,10 +4339,17 @@ function PaymentsView({ orders, customers, payments, setPayments, bankAccounts, 
             ]}
             rows={filtered}
             emptyText="Eşleşen ödeme yok"
-            actions={(r) => r.status === "paid" ? (
-              <Btn variant="ghost" size="xs" onClick={() => revert(r)}>Geri Al</Btn>
-            ) : (
-              <Btn variant="success" size="xs" icon={Check} onClick={() => markAsPaid(r)}>Tahsil</Btn>
+            actions={(r) => (
+              <div className="flex items-center justify-end gap-1">
+                {r.status === "paid" ? (
+                  <Btn variant="ghost" size="xs" onClick={() => revert(r)}>Geri Al</Btn>
+                ) : (
+                  <Btn variant="success" size="xs" icon={Check} onClick={() => markAsPaid(r)}>Tahsil</Btn>
+                )}
+                <button onClick={() => deletePayment(r)} className="p-1 rounded transition" style={{ color: TOKENS.muted, background: "transparent", border: "none" }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }} title="Ödemeyi sil">
+                  <Trash2 size={12} />
+                </button>
+              </div>
             )}
           />
         )}
@@ -3955,7 +4407,7 @@ function PaymentsView({ orders, customers, payments, setPayments, bankAccounts, 
 }
 
 // Sipariş bazlı ödeme görünümü — her sipariş bir kart, içinde plan kalemleri
-function PaymentsByOrder({ filtered, orders, customers, bankAccounts, rates, onMarkPaid, onRevert }) {
+function PaymentsByOrder({ filtered, orders, customers, bankAccounts, rates, onMarkPaid, onRevert, onDelete }) {
   // Filtreli ödemeleri sipariş bazlı grupla
   const grouped = useMemo(() => {
     const map = {};
@@ -4052,12 +4504,15 @@ function PaymentsByOrder({ filtered, orders, customers, bankAccounts, rates, onM
                       <div className="text-sm font-bold tabular-nums" style={{ color: TOKENS.ink }}>{fmtMoney(p.amount, p.currency)}</div>
                       <div className="text-[10px]" style={{ color: TOKENS.muted }}>≈ {fmtMoney(toUSD(p.amount, p.currency, rates), "USD", { compact: true })}</div>
                     </div>
-                    <div className="w-24 flex-shrink-0 text-right">
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       {p.status === "paid" ? (
                         <Btn variant="ghost" size="xs" onClick={() => onRevert(p)}>Geri Al</Btn>
                       ) : (
                         <Btn variant="success" size="xs" icon={Check} onClick={() => onMarkPaid(p)}>Tahsil</Btn>
                       )}
+                      <button onClick={() => onDelete(p)} className="p-1 rounded transition" style={{ color: TOKENS.muted, background: "transparent", border: "none" }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }} title="Ödemeyi sil">
+                        <Trash2 size={12} />
+                      </button>
                     </div>
                   </div>
                 );
@@ -4230,13 +4685,23 @@ function CashFlowView({ orders, customers, payments, rates, setView }) {
                 <XAxis dataKey="label" tick={{ fontSize: 13, fill: TOKENS.ink, fontWeight: 600 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 12, fill: TOKENS.muted, fontWeight: 500 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} axisLine={false} tickLine={false} />
                 <Tooltip
-                  formatter={(v, name) => [fmtMoney(v), name === "expected" ? "Beklenen" : "Gecikmiş"]}
-                  contentStyle={{ fontSize: 13, borderRadius: 6, fontWeight: 600 }}
-                  cursor={{ fill: TOKENS.gold + "20" }}
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    const expected = payload.find((p) => p.dataKey === "expected")?.value || 0;
+                    const overdue = payload.find((p) => p.dataKey === "overdue")?.value || 0;
+                    return (
+                      <div style={{ background: "white", border: `1px solid ${TOKENS.border}`, borderRadius: 6, padding: "8px 12px", fontSize: 13, fontWeight: 600 }}>
+                        <div style={{ color: TOKENS.ink, marginBottom: 4 }}>{label}</div>
+                        {expected > 0 && <div style={{ color: TOKENS.forest }}>● Beklenen: {fmtMoney(expected)}</div>}
+                        {overdue > 0 && <div style={{ color: TOKENS.oxblood }}>● Gecikmiş: {fmtMoney(overdue)}</div>}
+                      </div>
+                    );
+                  }}
+                  cursor={{ fill: TOKENS.gold + "15" }}
                 />
-                <Legend wrapperStyle={{ fontSize: 13, fontWeight: 600 }} iconSize={12} />
-                <Bar dataKey="expected" stackId="a" fill={TOKENS.gold} name="Beklenen" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="overdue" stackId="a" fill={TOKENS.oxblood} name="Gecikmiş" radius={[4, 4, 0, 0]} />
+                <Legend wrapperStyle={{ fontSize: 13, fontWeight: 700, paddingTop: 6 }} iconSize={12} iconType="circle" />
+                <Bar dataKey="expected" stackId="a" fill={TOKENS.forest} name="Beklenen (zamanında)" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="overdue"  stackId="a" fill={TOKENS.oxblood} name="Gecikmiş" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -4409,9 +4874,9 @@ function SummaryReport({ orders, customers, products, payments, rates }) {
   // Özet metrikler
   const stats = useMemo(() => {
     const orderCount = filteredOrders.length;
-    const orderTotalUSD = filteredOrders.reduce((s, o) => s + toUSD(orderTotal(o), o.currency, rates), 0);
+    const orderTotalUSD = filteredOrders.reduce((s, o) => s + orderTotalUSD(o, rates), 0);
     const shippedCount = filteredOrders.filter((o) => o.actualShipmentDate || ["shipped", "delivered", "completed"].includes(o.status)).length;
-    const shippedTotalUSD = filteredOrders.filter((o) => o.actualShipmentDate || ["shipped", "delivered", "completed"].includes(o.status)).reduce((s, o) => s + toUSD(orderTotal(o), o.currency, rates), 0);
+    const shippedTotalUSD = filteredOrders.filter((o) => o.actualShipmentDate || ["shipped", "delivered", "completed"].includes(o.status)).reduce((s, o) => s + orderTotalUSD(o, rates), 0);
     const paidCount = filteredPayments.length;
     const paidTotalUSD = filteredPayments.reduce((s, p) => s + toUSD(p.amount, p.currency, rates), 0);
     const customerCount = new Set(filteredOrders.map((o) => o.customerId)).size;
@@ -4448,7 +4913,7 @@ function SummaryReport({ orders, customers, products, payments, rates }) {
         "Durum": ORDER_STATUSES.find((s) => s.key === o.status)?.label || o.status,
         "Para Birimi": o.currency,
         "Tutar": orderTotal(o),
-        "Tutar (USD)": toUSD(orderTotal(o), o.currency, rates).toFixed(2),
+        "Tutar (USD)": orderTotalUSD(o, rates).toFixed(2),
         "Incoterms": o.incoterms || "",
         "Fatura No": o.invoiceNumber || "",
         "Konşimento": o.billOfLading || "",
@@ -4483,7 +4948,7 @@ function SummaryReport({ orders, customers, products, payments, rates }) {
       const key = c?.name || "—";
       if (!customerSummary[key]) customerSummary[key] = { name: key, country: c?.country || "", count: 0, total: 0 };
       customerSummary[key].count++;
-      customerSummary[key].total += toUSD(orderTotal(o), o.currency, rates);
+      customerSummary[key].total += orderTotalUSD(o, rates);
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
       Object.values(customerSummary).sort((a, b) => b.total - a.total).map((c) => ({
@@ -4549,7 +5014,7 @@ function SummaryReport({ orders, customers, products, payments, rates }) {
                 const key = c?.id || "—";
                 if (!map[key]) map[key] = { id: key, name: c?.name || "—", country: c?.country || "—", count: 0, total: 0, shipped: 0, paid: 0 };
                 map[key].count++;
-                map[key].total += toUSD(orderTotal(o), o.currency, rates);
+                map[key].total += orderTotalUSD(o, rates);
                 if (o.actualShipmentDate || ["shipped", "delivered", "completed"].includes(o.status)) {
                   map[key].shipped++;
                 }
@@ -4596,7 +5061,7 @@ function ShipmentReport({ orders, customers, rates }) {
       const d = new Date(o.actualShipmentDate);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       if (!buckets[key]) buckets[key] = { month: key, label: d.toLocaleDateString("tr-TR", { month: "short", year: "2-digit" }), value: 0, count: 0 };
-      buckets[key].value += toUSD(orderTotal(o), o.currency, rates);
+      buckets[key].value += orderTotalUSD(o, rates);
       buckets[key].count++;
     });
     return Object.values(buckets).sort((a, b) => a.month.localeCompare(b.month));
@@ -4604,9 +5069,9 @@ function ShipmentReport({ orders, customers, rates }) {
 
   const stats = useMemo(() => ({
     count: shippedOrders.length,
-    totalUSD: shippedOrders.reduce((s, o) => s + toUSD(orderTotal(o), o.currency, rates), 0),
+    totalUSD: shippedOrders.reduce((s, o) => s + orderTotalUSD(o, rates), 0),
     customers: new Set(shippedOrders.map((o) => o.customerId)).size,
-    avgUSD: shippedOrders.length > 0 ? shippedOrders.reduce((s, o) => s + toUSD(orderTotal(o), o.currency, rates), 0) / shippedOrders.length : 0,
+    avgUSD: shippedOrders.length > 0 ? shippedOrders.reduce((s, o) => s + orderTotalUSD(o, rates), 0) / shippedOrders.length : 0,
   }), [shippedOrders, rates]);
 
   const exportShipment = () => {
@@ -4621,7 +5086,7 @@ function ShipmentReport({ orders, customers, rates }) {
         "Sipariş Tarihi": o.orderDate || "",
         "Para Birimi": o.currency,
         "Tutar": orderTotal(o),
-        "Tutar (USD)": toUSD(orderTotal(o), o.currency, rates).toFixed(2),
+        "Tutar (USD)": orderTotalUSD(o, rates).toFixed(2),
         "Incoterms": o.incoterms || "",
         "Konşimento": o.billOfLading || "",
         "Fatura No": o.invoiceNumber || "",
@@ -4724,7 +5189,7 @@ function CustomerReport({ orders, customers, payments, rates }) {
       const key = c?.name || "—";
       if (!map[key]) map[key] = { name: key, country: c?.country, count: 0, total: 0, paid: 0 };
       map[key].count++;
-      map[key].total += toUSD(orderTotal(o), o.currency, rates);
+      map[key].total += orderTotalUSD(o, rates);
     });
     payments.filter((p) => p.status === "paid").forEach((p) => {
       const o = orders.find((x) => x.id === p.orderId);
@@ -4799,7 +5264,7 @@ function CountryReport({ orders, customers, rates }) {
       if (!map[key]) map[key] = { country: key, count: 0, customers: new Set(), total: 0 };
       map[key].count++;
       map[key].customers.add(o.customerId);
-      map[key].total += toUSD(orderTotal(o), o.currency, rates);
+      map[key].total += orderTotalUSD(o, rates);
     });
     return Object.values(map).map((r) => ({ ...r, customerCount: r.customers.size })).sort((a, b) => b.total - a.total);
   }, [orders, customers, rates]);
@@ -4860,7 +5325,7 @@ function StatusReport({ orders, rates }) {
       const key = o.status;
       if (!map[key]) map[key] = { status: key, label: ORDER_STATUSES.find((x) => x.key === key)?.label || key, count: 0, total: 0 };
       map[key].count++;
-      map[key].total += toUSD(orderTotal(o), o.currency, rates);
+      map[key].total += orderTotalUSD(o, rates);
     });
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [orders, rates]);
@@ -4885,7 +5350,7 @@ function StatusReport({ orders, rates }) {
 // AYARLAR — kur, demo, yedek, Supabase
 // ============================================================================
 
-function SettingsView({ customers, setCustomers, products, setProducts, bankAccounts, setBankAccounts, orders, setOrders, payments, setPayments, rates, setRates, showToast }) {
+function SettingsView({ customers, setCustomers, products, setProducts, bankAccounts, setBankAccounts, orders, setOrders, payments, setPayments, rates, setRates, users, setUsers, currentUser, isAdmin, canEdit, setView, showToast }) {
   const fileRef = useRef(null);
 
   // Demo veriler — tüm modüller dolu görünsün
@@ -5116,6 +5581,14 @@ function SettingsView({ customers, setCustomers, products, setProducts, bankAcco
           </div>
         </Card>
 
+        {/* Banka Hesapları erişim kartı */}
+        <Card title="Banka Hesapları" subtitle="Tahsilat yaparken seçilebilir · Opsiyonel"
+          action={<Btn variant="secondary" size="sm" icon={Landmark} onClick={() => setView("bankAccounts")}>Banka Hesaplarını Yönet</Btn>}>
+          <p className="text-xs" style={{ color: TOKENS.muted }}>
+            Sistemde {bankAccounts.length} banka hesabı var. Banka hesabı zorunlu değil — tahsilat girerken opsiyonel olarak seçebilirsin.
+          </p>
+        </Card>
+
         {/* Supabase rehber */}
         <Card title="Paylaşımlı Veritabanı (Supabase)" subtitle="3-5 kişiyle aynı veriyi gerçek zamanlı paylaşmak için">
           <div className="text-sm space-y-3" style={{ color: TOKENS.ink }}>
@@ -5164,6 +5637,11 @@ VITE_SUPABASE_ANON_KEY=eyJh...uzun-karakter-dizisi`}
           </div>
         </Card>
 
+        {/* Kullanıcılar (sadece adminlere görünür) */}
+        {isAdmin && (
+          <UsersSection users={users} setUsers={setUsers} currentUser={currentUser} showToast={showToast} />
+        )}
+
         {/* Veri özeti */}
         <Card title="Veri Özeti">
           <div className="grid grid-cols-3 md:grid-cols-6 gap-3 text-center">
@@ -5188,9 +5666,165 @@ VITE_SUPABASE_ANON_KEY=eyJh...uzun-karakter-dizisi`}
         </Card>
 
         <div className="text-center text-[11px] py-4" style={{ color: TOKENS.muted }}>
-          Export-Flow v2.0 · İhracat Yönetim Sistemi
+          İhracat Operasyonları · Yönetim Sistemi v2.1
         </div>
       </div>
     </div>
+  );
+}
+
+// ============================================================================
+// KULLANICI YÖNETİMİ — sadece adminler için
+// ============================================================================
+
+function UsersSection({ users, setUsers, currentUser, showToast }) {
+  const [adding, setAdding] = useState(null);
+  const [changingPwd, setChangingPwd] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const startAdd = () => setAdding({ name: "", email: "", password: "", password2: "", role: "editor" });
+
+  const saveNewUser = async () => {
+    if (!adding.name.trim() || !adding.email.trim() || !adding.password) return showToast("Tüm alanları doldur", "error");
+    if (adding.password.length < 6) return showToast("Şifre en az 6 karakter olmalı", "error");
+    if (adding.password !== adding.password2) return showToast("Şifreler eşleşmiyor", "error");
+    if (users.some((u) => u.email?.toLowerCase() === adding.email.trim().toLowerCase())) {
+      return showToast("Bu email zaten kayıtlı", "error");
+    }
+    setBusy(true);
+    try {
+      const salt = generateSalt();
+      const passwordHash = await hashPassword(adding.password, salt);
+      const newUser = {
+        id: uid(),
+        name: adding.name.trim(),
+        email: adding.email.trim().toLowerCase(),
+        salt, passwordHash,
+        role: adding.role,
+        createdAt: new Date().toISOString(),
+      };
+      setUsers((arr) => [...arr, newUser]);
+      showToast(`${newUser.name} eklendi`, "success");
+      setAdding(null);
+    } catch (e) { showToast("Hata: " + e.message, "error"); }
+    setBusy(false);
+  };
+
+  const deleteUser = (user) => {
+    if (user.id === currentUser?.id) return showToast("Kendi hesabını silemezsin", "error");
+    if (user.role === "admin" && users.filter((u) => u.role === "admin").length === 1) {
+      return showToast("Sistemdeki tek yöneticiyi silemezsin", "error");
+    }
+    if (!confirm(`${user.name} (${user.email}) silinsin mi? Geri alınamaz.`)) return;
+    setUsers((arr) => arr.filter((u) => u.id !== user.id));
+    showToast("Kullanıcı silindi", "success");
+  };
+
+  const changeRole = (user, newRole) => {
+    if (user.id === currentUser?.id && newRole !== "admin") {
+      if (!confirm("Kendi rolünü adminden başka bir şeye değiştiriyorsun. Bu sayfaya bir daha erişemezsin. Onaylıyor musun?")) return;
+    }
+    if (user.role === "admin" && newRole !== "admin" && users.filter((u) => u.role === "admin").length === 1) {
+      return showToast("Sistemde en az bir yönetici olmalı", "error");
+    }
+    setUsers((arr) => arr.map((u) => u.id === user.id ? { ...u, role: newRole } : u));
+    showToast("Rol değiştirildi", "success");
+  };
+
+  const startPwdChange = (user) => setChangingPwd({ userId: user.id, name: user.name, password: "", password2: "" });
+
+  const savePwdChange = async () => {
+    if (!changingPwd.password) return showToast("Yeni şifre gerekli", "error");
+    if (changingPwd.password.length < 6) return showToast("Şifre en az 6 karakter olmalı", "error");
+    if (changingPwd.password !== changingPwd.password2) return showToast("Şifreler eşleşmiyor", "error");
+    setBusy(true);
+    try {
+      const salt = generateSalt();
+      const passwordHash = await hashPassword(changingPwd.password, salt);
+      setUsers((arr) => arr.map((u) => u.id === changingPwd.userId ? { ...u, salt, passwordHash } : u));
+      showToast("Şifre değiştirildi", "success");
+      setChangingPwd(null);
+    } catch (e) { showToast("Hata: " + e.message, "error"); }
+    setBusy(false);
+  };
+
+  return (
+    <Card title="Kullanıcılar" subtitle={`${users.length} kullanıcı · Yöneticiler ekleyebilir, silebilir, şifre sıfırlayabilir`}
+      action={<Btn variant="primary" size="sm" icon={Plus} onClick={startAdd}>Yeni Kullanıcı</Btn>}>
+      {users.length === 0 ? (
+        <div className="text-center py-6 text-xs" style={{ color: TOKENS.muted }}>Kullanıcı yok</div>
+      ) : (
+        <div className="space-y-2">
+          {users.map((u) => (
+            <div key={u.id} className="rounded-md p-3 flex items-center gap-3" style={{ background: TOKENS.cream + "60", border: `1px solid ${TOKENS.border}` }}>
+              <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
+                style={{ background: u.role === "admin" ? TOKENS.gold : TOKENS.cream, color: TOKENS.ink, border: `2px solid ${u.role === "admin" ? TOKENS.goldDark : TOKENS.border}` }}>
+                {u.name?.charAt(0).toUpperCase() || "?"}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold" style={{ color: TOKENS.ink }}>{u.name}</span>
+                  {u.id === currentUser?.id && <span className="text-[9px] px-1.5 py-0.5 rounded font-bold" style={{ background: TOKENS.forest + "20", color: TOKENS.forest }}>SEN</span>}
+                </div>
+                <div className="text-xs" style={{ color: TOKENS.muted }}>
+                  {u.email}
+                  {u.lastLogin && <span className="ml-2">· Son giriş: {fmtDate(u.lastLogin)}</span>}
+                </div>
+              </div>
+              <Select value={u.role} onChange={(e) => changeRole(u, e.target.value)} className="w-32 text-xs">
+                {USER_ROLES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+              </Select>
+              <Btn variant="ghost" size="xs" onClick={() => startPwdChange(u)}>Şifre</Btn>
+              {u.id !== currentUser?.id && (
+                <button onClick={() => deleteUser(u)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted, background: "transparent", border: "none" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}>
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-4 p-3 rounded-md text-[11px]" style={{ background: TOKENS.cream, color: TOKENS.muted, border: `1px solid ${TOKENS.border}` }}>
+        <strong style={{ color: TOKENS.ink }}>Roller:</strong>
+        <ul className="mt-1 space-y-0.5 list-disc list-inside">
+          {USER_ROLES.map((r) => <li key={r.key}><strong>{r.label}:</strong> {r.desc}</li>)}
+        </ul>
+      </div>
+
+      {/* Yeni kullanıcı ekleme modali */}
+      <Modal open={!!adding} onClose={() => setAdding(null)} title="Yeni Kullanıcı" size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setAdding(null)}>İptal</Btn><Btn variant="primary" onClick={saveNewUser} disabled={busy}>{busy ? "Kaydediliyor..." : "Kullanıcı Oluştur"}</Btn></>}>
+        {adding && (
+          <div className="space-y-3">
+            <div><Label required>Ad Soyad</Label><Input value={adding.name} onChange={(e) => setAdding({ ...adding, name: e.target.value })} autoFocus /></div>
+            <div><Label required>Email</Label><Input type="email" value={adding.email} onChange={(e) => setAdding({ ...adding, email: e.target.value })} /></div>
+            <div><Label required hint="en az 6 karakter">Şifre</Label><Input type="password" value={adding.password} onChange={(e) => setAdding({ ...adding, password: e.target.value })} /></div>
+            <div><Label required>Şifre Tekrar</Label><Input type="password" value={adding.password2} onChange={(e) => setAdding({ ...adding, password2: e.target.value })} /></div>
+            <div><Label required>Rol</Label>
+              <Select value={adding.role} onChange={(e) => setAdding({ ...adding, role: e.target.value })}>
+                {USER_ROLES.map((r) => <option key={r.key} value={r.key}>{r.label} — {r.desc}</option>)}
+              </Select>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Şifre değiştirme modali */}
+      <Modal open={!!changingPwd} onClose={() => setChangingPwd(null)} title={`Şifre Değiştir · ${changingPwd?.name}`} size="sm"
+        footer={<><Btn variant="ghost" onClick={() => setChangingPwd(null)}>İptal</Btn><Btn variant="primary" onClick={savePwdChange} disabled={busy}>{busy ? "Kaydediliyor..." : "Yeni Şifreyi Kaydet"}</Btn></>}>
+        {changingPwd && (
+          <div className="space-y-3">
+            <div className="text-[11px] p-2 rounded" style={{ background: TOKENS.gold + "15", color: TOKENS.ink }}>
+              ⚠ Bu kullanıcı yeni şifresiyle giriş yapacak. Eski şifre artık geçerli olmayacak.
+            </div>
+            <div><Label required hint="en az 6 karakter">Yeni Şifre</Label><Input type="password" value={changingPwd.password} onChange={(e) => setChangingPwd({ ...changingPwd, password: e.target.value })} autoFocus /></div>
+            <div><Label required>Şifre Tekrar</Label><Input type="password" value={changingPwd.password2} onChange={(e) => setChangingPwd({ ...changingPwd, password2: e.target.value })} /></div>
+          </div>
+        )}
+      </Modal>
+    </Card>
   );
 }

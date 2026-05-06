@@ -1,49 +1,76 @@
 -- ============================================================================
--- Export-Flow · Supabase Kurulum SQL'i
--- ============================================================================
--- Bunu Supabase'de SQL Editor'a yapıştırıp "Run" butonuna bas.
--- Bir kez çalıştırman yeterli. Tekrar çalıştırırsan da sorun olmaz.
+-- İHRACAT OPERASYONLARI — Supabase Kurulum SQL (v2.2)
+-- Auth ile entegre — anon kullanıcı sadece okur, giriş yapan düzenler
 -- ============================================================================
 
--- 1. Veri tablosu
-create table if not exists public.data (
-  key text primary key,
+-- 1. data tablosu (varsa atla)
+CREATE TABLE IF NOT EXISTS data (
+  key text PRIMARY KEY,
   value jsonb,
-  updated_at timestamptz default now()
+  updated_at timestamptz DEFAULT now()
 );
 
--- 2. Güncelleme zaman damgası
-create or replace function public.set_updated_at()
-returns trigger as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$ language plpgsql;
+-- 2. RLS aktif
+ALTER TABLE data ENABLE ROW LEVEL SECURITY;
 
-drop trigger if exists data_updated_at on public.data;
-create trigger data_updated_at
-  before update on public.data
-  for each row execute function public.set_updated_at();
+-- 3. Eski politikaları kaldır (varsa)
+DROP POLICY IF EXISTS "Public read access" ON data;
+DROP POLICY IF EXISTS "Public write access" ON data;
+DROP POLICY IF EXISTS "Public update access" ON data;
+DROP POLICY IF EXISTS "Public delete access" ON data;
+DROP POLICY IF EXISTS "Anyone can read" ON data;
+DROP POLICY IF EXISTS "Authenticated can insert" ON data;
+DROP POLICY IF EXISTS "Authenticated can update" ON data;
+DROP POLICY IF EXISTS "Authenticated can delete" ON data;
 
--- 3. Anonim ve giriş yapmış rollere tablo erişimi (yeni projelerde gerekli)
-grant usage on schema public to anon, authenticated;
-grant all on public.data to anon, authenticated;
+-- 4. YENİ POLİTİKALAR
+-- Herkes (anon ve authenticated) okuyabilir → misafir görüntüleme için
+CREATE POLICY "Anyone can read" ON data
+  FOR SELECT USING (true);
 
--- 4. Row Level Security aç
-alter table public.data enable row level security;
+-- Sadece giriş yapmış kullanıcı yazabilir
+CREATE POLICY "Authenticated can insert" ON data
+  FOR INSERT TO authenticated
+  WITH CHECK (true);
 
--- 5. Erişim politikası
--- Bu, projenin URL'ini bilen herkesin erişebileceği anlamına gelir.
--- Yalnızca güvendiğin ekip üyelerine paylaş.
-drop policy if exists "public access" on public.data;
-create policy "public access" on public.data
-  for all
-  using (true)
-  with check (true);
+CREATE POLICY "Authenticated can update" ON data
+  FOR UPDATE TO authenticated
+  USING (true) WITH CHECK (true);
 
--- 6. Test
-insert into public.data (key, value) values ('_test', '{"ok": true}'::jsonb)
-on conflict (key) do update set value = excluded.value;
+CREATE POLICY "Authenticated can delete" ON data
+  FOR DELETE TO authenticated
+  USING (true);
 
-select 'Kurulum basarili!' as durum, value from public.data where key = '_test';
+-- 5. Anon ve authenticated rollerine GRANT'lar
+GRANT SELECT ON data TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON data TO authenticated;
+
+-- 6. updated_at otomatik güncellensin
+CREATE OR REPLACE FUNCTION update_data_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS data_update_timestamp ON data;
+CREATE TRIGGER data_update_timestamp
+  BEFORE UPDATE ON data
+  FOR EACH ROW EXECUTE FUNCTION update_data_timestamp();
+
+-- ============================================================================
+-- KULLANIMI:
+-- 1. Bu SQL'i Supabase --> SQL Editor'a yapistir --> Run
+-- 2. Authentication --> Users --> Add user (email + sifre + Auto Confirm)
+-- 3. Kullaniciya rol vermek icin:
+--    Authentication --> Users --> kullaniciya tikla --> Raw User Meta Data:
+--    {"role": "admin"}     - tum yetkiler
+--    {"role": "editor"}    - duzenleyebilir (varsayilan)
+--    {"role": "viewer"}    - sadece okur
+-- ============================================================================
+
+-- Test: data tablosuna bir test kayit at (bossa)
+INSERT INTO data (key, value)
+VALUES ('_init', '"Ihracat Operasyonlari kuruldu"'::jsonb)
+ON CONFLICT (key) DO NOTHING;

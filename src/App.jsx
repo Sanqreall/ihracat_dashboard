@@ -155,11 +155,22 @@ function createStorage() {
 
 // Supabase istemcisi — fetch tabanlı, harici paket gerektirmez.
 // ÖNEMLI: select() SENKRON dönmeli; aksi halde .eq() ve .maybeSingle() chain'i kırılır.
+// Auth token varsa onu kullanır (yazma işlemleri authenticated user gerektirir),
+// yoksa anon key (sadece okuma için).
 function createSupabaseClient(url, key) {
-  const headers = {
-    apikey: key,
-    Authorization: `Bearer ${key}`,
-    "Content-Type": "application/json",
+  // Header'ları her istekte tazele (token yenilenmiş olabilir)
+  const buildHeaders = async () => {
+    const headers = {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    };
+    // Eğer kullanıcı giriş yapmışsa token'ı kullan
+    try {
+      const token = await getValidAuthToken();
+      if (token) headers.Authorization = `Bearer ${token}`;
+    } catch {}
+    return headers;
   };
   return {
     from(table) {
@@ -177,6 +188,7 @@ function createSupabaseClient(url, key) {
           const filterStr = q._filters.join("&");
           const fullUrl = `${url}/rest/v1/${table}?select=${q._select}${filterStr ? "&" + filterStr : ""}&limit=1`;
           try {
+            const headers = await buildHeaders();
             const r = await fetch(fullUrl, { headers });
             if (!r.ok) {
               console.error("Supabase select hatası:", r.status, await r.text());
@@ -192,6 +204,7 @@ function createSupabaseClient(url, key) {
         async upsert(obj, opts) {
           const conflict = opts?.onConflict ? `?on_conflict=${opts.onConflict}` : "";
           try {
+            const headers = await buildHeaders();
             const r = await fetch(`${url}/rest/v1/${table}${conflict}`, {
               method: "POST",
               headers: {
@@ -352,56 +365,103 @@ const downloadBlob = (data, filename, type = "application/octet-stream") => {
 };
 
 // ============================================================================
-// AUTH — Şifre hash, oturum yönetimi
+// AUTH — Supabase Auth ile entegre
 // ============================================================================
-// Web Crypto API kullanarak SHA-256 + salt. Production'da bcrypt/argon2 daha
-// güçlüdür ama harici paket eklemeden bu yeterli (3-5 kişilik ekip için OK).
+// Kullanıcılar Supabase Dashboard üzerinden tanımlanır (Authentication → Users).
+// Misafir kullanıcı sadece görüntüler, giriş yapan düzenler.
+// Token otomatik yenilenir.
 
-async function hashPassword(password, salt) {
-  const enc = new TextEncoder();
-  const data = enc.encode(String(password) + ":" + String(salt));
-  const buf = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
+const SUPABASE_URL_AUTH = import.meta.env?.VITE_SUPABASE_URL || "";
+const SUPABASE_KEY_AUTH = import.meta.env?.VITE_SUPABASE_ANON_KEY || "";
+const SESSION_KEY = "exportflow_session_v2";
 
-function generateSalt() {
-  const arr = new Uint8Array(16);
-  crypto.getRandomValues(arr);
-  return Array.from(arr).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-const SESSION_KEY = "exportflow_session";
-const SESSION_DAYS = 30;
-
-function getSession() {
+async function supabaseLogin(email, password) {
+  if (!SUPABASE_URL_AUTH || !SUPABASE_KEY_AUTH) {
+    return { error: "Supabase yapılandırılmamış. Vercel'de VITE_SUPABASE_URL ve VITE_SUPABASE_ANON_KEY tanımlı mı?" };
+  }
   try {
-    const s = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
-    if (!s) return null;
-    if (s.expiresAt && s.expiresAt < Date.now()) {
+    const res = await fetch(`${SUPABASE_URL_AUTH}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: { "apikey": SUPABASE_KEY_AUTH, "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim(), password }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { error: data.error_description || data.msg || data.error || "Giriş başarısız" };
+    }
+    const session = {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_at: Date.now() + ((data.expires_in || 3600) * 1000),
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.user_metadata?.name || data.user.email?.split("@")[0] || "Kullanıcı",
+        role: data.user.user_metadata?.role || "editor", // varsayılan editor
+      },
+    };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    return { session };
+  } catch (e) {
+    return { error: "Bağlantı hatası: " + e.message };
+  }
+}
+
+async function supabaseRefreshToken() {
+  const s = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+  if (!s?.refresh_token) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL_AUTH}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: { "apikey": SUPABASE_KEY_AUTH, "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: s.refresh_token }),
+    });
+    if (!res.ok) {
       localStorage.removeItem(SESSION_KEY);
       return null;
     }
+    const data = await res.json();
+    const newSession = {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_at: Date.now() + ((data.expires_in || 3600) * 1000),
+      user: s.user,
+    };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(newSession));
+    return newSession;
+  } catch {
+    return null;
+  }
+}
+
+function getStoredSession() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+    if (!s) return null;
     return s;
   } catch { return null; }
 }
 
-function saveSession(user) {
-  const session = {
-    user: { id: user.id, name: user.name, email: user.email, role: user.role },
-    expiresAt: Date.now() + SESSION_DAYS * 86400 * 1000,
-  };
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  return session;
-}
-
-function clearSession() {
+function clearStoredSession() {
   localStorage.removeItem(SESSION_KEY);
 }
 
+// Auth token al — geçerliyse direkt, süresi dolmuşsa refresh dene
+async function getValidAuthToken() {
+  const s = getStoredSession();
+  if (!s) return null;
+  // Token süresi dolmuşsa refresh
+  if (s.expires_at && s.expires_at < Date.now() + 60000) { // 1 dk önce yenile
+    const refreshed = await supabaseRefreshToken();
+    return refreshed?.access_token || null;
+  }
+  return s.access_token;
+}
+
 const USER_ROLES = [
-  { key: "admin",  label: "Yönetici", desc: "Tam erişim · kullanıcı yönetebilir" },
-  { key: "editor", label: "Editör",    desc: "Tüm kayıtları düzenler" },
-  { key: "viewer", label: "Görüntüleyici", desc: "Sadece okur, düzenleyemez" },
+  { key: "admin",  label: "Yönetici",     desc: "Tüm işlemler + kullanıcı yönetimi" },
+  { key: "editor", label: "Editör",       desc: "Tüm kayıtları düzenler" },
+  { key: "viewer", label: "Görüntüleyici", desc: "Sadece okur" },
 ];
 
 
@@ -877,10 +937,10 @@ export default function App() {
   const [orders, setOrders] = useState([]);
   const [payments, setPayments] = useState([]);
   const [rates, setRates] = useState(DEFAULT_RATES);
-  const [users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [pendingOrderToOpen, setPendingOrderToOpen] = useState(null);
 
   const [toast, setToast] = useState(null);
   const showToast = useCallback((msg, type = "info") => {
@@ -893,10 +953,9 @@ export default function App() {
     ensureFonts();
     (async () => {
       try {
-        const [c, p, ba, o, pm, r, u] = await Promise.all([
+        const [c, p, ba, o, pm, r] = await Promise.all([
           storage.get("customers"), storage.get("products"), storage.get("bankAccounts"),
           storage.get("orders"), storage.get("payments"), storage.get("rates"),
-          storage.get("users"),
         ]);
         if (c) setCustomers(c);
         if (p) setProducts(p);
@@ -904,17 +963,17 @@ export default function App() {
         if (o) setOrders(o);
         if (pm) setPayments(pm);
         if (r) setRates(r);
-        if (u) setUsers(u);
 
-        // Oturum kontrolü
-        const session = getSession();
-        if (session && u) {
-          // Kullanıcı hâlâ users listesinde var mı?
-          const userExists = u.find((x) => x.id === session.user.id);
-          if (userExists) {
-            setCurrentUser(session.user);
+        // Supabase oturum kontrolü
+        const session = getStoredSession();
+        if (session?.user) {
+          // Token süresi dolmuşsa refresh dene
+          if (session.expires_at && session.expires_at < Date.now()) {
+            const refreshed = await supabaseRefreshToken();
+            if (refreshed) setCurrentUser(refreshed.user);
+            else clearStoredSession();
           } else {
-            clearSession();
+            setCurrentUser(session.user);
           }
         }
         setAuthReady(true);
@@ -952,7 +1011,6 @@ export default function App() {
   useEffect(() => { if (loaded) storage.set("orders", orders); }, [orders, loaded]);
   useEffect(() => { if (loaded) storage.set("payments", payments); }, [payments, loaded]);
   useEffect(() => { if (loaded) storage.set("rates", rates); }, [rates, loaded]);
-  useEffect(() => { if (loaded) storage.set("users", users); }, [users, loaded]);
 
   // ----- Vade geçmiş ödemeleri otomatik "gecikmiş" işaretle -----
   // Not: Bu, raporlama içindir; ödeme kaydının statusunu kalıcı değiştirmez.
@@ -979,9 +1037,9 @@ export default function App() {
     orders, setOrders,
     payments: enrichedPayments, setPayments,
     rates, setRates,
-    users, setUsers,
     currentUser, setCurrentUser,
     canEdit, isAdmin,
+    pendingOrderToOpen, setPendingOrderToOpen,
     showToast,
     setView,
   };
@@ -1007,8 +1065,7 @@ export default function App() {
         storageLabel={storage.label}
         currentUser={currentUser}
         onLoginClick={() => setShowLogin(true)}
-        onLogout={() => { clearSession(); setCurrentUser(null); showToast("Çıkış yapıldı", "info"); }}
-        usersCount={users.length}
+        onLogout={() => { clearStoredSession(); setCurrentUser(null); showToast("Çıkış yapıldı", "info"); }}
       />
       <main className="flex-1 overflow-x-hidden min-w-0">
         {view === "dashboard"     && <DashboardView {...ctx} />}
@@ -1023,10 +1080,8 @@ export default function App() {
       </main>
       <Toast toast={toast} onDismiss={() => setToast(null)} />
       <LoginModal
-        open={showLogin || (authReady && users.length === 0)}
+        open={showLogin}
         onClose={() => setShowLogin(false)}
-        users={users}
-        setUsers={setUsers}
         setCurrentUser={setCurrentUser}
         showToast={showToast}
       />
@@ -1038,7 +1093,7 @@ export default function App() {
 // SIDEBAR — sol menü
 // ============================================================================
 
-function Sidebar({ view, setView, storageMode, storageLabel, currentUser, onLoginClick, onLogout, usersCount }) {
+function Sidebar({ view, setView, storageMode, storageLabel, currentUser, onLoginClick, onLogout }) {
   const sections = [
     {
       title: "Genel",
@@ -1197,66 +1252,28 @@ function Sidebar({ view, setView, storageMode, storageLabel, currentUser, onLogi
 // LOGIN MODAL — ilk kullanıcı kurulumu + normal giriş
 // ============================================================================
 
-function LoginModal({ open, onClose, users, setUsers, setCurrentUser, showToast }) {
-  const isFirstSetup = users.length === 0;
-  const [mode, setMode] = useState(isFirstSetup ? "setup" : "login");
-  const [name, setName] = useState("");
+function LoginModal({ open, onClose, setCurrentUser, showToast }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [password2, setPassword2] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setMode(users.length === 0 ? "setup" : "login");
-      setName(""); setEmail(""); setPassword(""); setPassword2("");
-    }
-  }, [open, users.length]);
+    if (open) { setEmail(""); setPassword(""); }
+  }, [open]);
 
   if (!open) return null;
-
-  const handleSetup = async () => {
-    if (!name.trim() || !email.trim() || !password) return showToast("Tüm alanları doldur", "error");
-    if (password.length < 6) return showToast("Şifre en az 6 karakter olmalı", "error");
-    if (password !== password2) return showToast("Şifreler eşleşmiyor", "error");
-    setBusy(true);
-    try {
-      const salt = generateSalt();
-      const passwordHash = await hashPassword(password, salt);
-      const user = {
-        id: uid(),
-        name: name.trim(),
-        email: email.trim().toLowerCase(),
-        salt, passwordHash,
-        role: "admin",
-        createdAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString(),
-      };
-      setUsers([user]);
-      saveSession(user);
-      setCurrentUser({ id: user.id, name: user.name, email: user.email, role: user.role });
-      showToast("Yönetici hesabı oluşturuldu — giriş yapıldı", "success");
-      onClose();
-    } catch (e) { showToast("Hata: " + e.message, "error"); }
-    setBusy(false);
-  };
 
   const handleLogin = async () => {
     if (!email.trim() || !password) return showToast("Email ve şifre gerekli", "error");
     setBusy(true);
-    try {
-      const user = users.find((u) => u.email?.toLowerCase() === email.trim().toLowerCase());
-      if (!user) { setBusy(false); return showToast("Kullanıcı bulunamadı", "error"); }
-      const hash = await hashPassword(password, user.salt);
-      if (hash !== user.passwordHash) { setBusy(false); return showToast("Şifre yanlış", "error"); }
-      saveSession(user);
-      setCurrentUser({ id: user.id, name: user.name, email: user.email, role: user.role });
-      // Last login güncelle
-      setUsers((arr) => arr.map((u) => u.id === user.id ? { ...u, lastLogin: new Date().toISOString() } : u));
-      showToast(`Hoş geldin ${user.name}`, "success");
-      onClose();
-    } catch (e) { showToast("Hata: " + e.message, "error"); }
+    const result = await supabaseLogin(email, password);
     setBusy(false);
+    if (result.error) {
+      return showToast(result.error, "error");
+    }
+    setCurrentUser(result.session.user);
+    showToast(`Hoş geldin ${result.session.user.name}`, "success");
+    onClose();
   };
 
   return (
@@ -1268,63 +1285,35 @@ function LoginModal({ open, onClose, users, setUsers, setCurrentUser, showToast 
               <Lock size={15} style={{ color: TOKENS.ink }} />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white tracking-wide">{isFirstSetup ? "İLK KURULUM" : "GİRİŞ"}</h3>
+              <h3 className="text-sm font-bold text-white tracking-wide">GİRİŞ YAP</h3>
               <div className="text-[10px]" style={{ color: TOKENS.gold }}>İhracat Operasyonları</div>
             </div>
           </div>
           <p className="text-[11px]" style={{ color: "#94a3b8" }}>
-            {isFirstSetup
-              ? "Sisteme henüz kullanıcı yok. İlk yönetici hesabını oluştur."
-              : "Düzenleme yapmak için giriş yap. Misafirler sadece görüntüleyebilir."}
+            Düzenleme yapmak için giriş yap. Misafirler sadece görüntüleyebilir.
           </p>
         </div>
 
         <div className="p-6 space-y-3">
-          {mode === "setup" ? (
-            <>
-              <div>
-                <Label required>Adınız</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Adınız Soyadınız" autoFocus />
-              </div>
-              <div>
-                <Label required>Email</Label>
-                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ornek@firma.com" />
-              </div>
-              <div>
-                <Label required hint="en az 6 karakter">Şifre</Label>
-                <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-              </div>
-              <div>
-                <Label required>Şifre Tekrar</Label>
-                <Input type="password" value={password2} onChange={(e) => setPassword2(e.target.value)} />
-              </div>
-              <div className="text-[11px] p-2 rounded" style={{ background: TOKENS.gold + "15", color: TOKENS.ink, border: `1px solid ${TOKENS.gold}40` }}>
-                💡 Bu hesap "Yönetici" rolünde oluşturulur. Sonra Ayarlar → Kullanıcılar bölümünden ekibinin diğer üyelerini ekleyebilirsin.
-              </div>
-              <Btn variant="accent" size="lg" onClick={handleSetup} disabled={busy} className="w-full">
-                {busy ? "Oluşturuluyor..." : "Yöneticiyi Oluştur"}
-              </Btn>
-            </>
-          ) : (
-            <>
-              <div>
-                <Label required>Email</Label>
-                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} autoFocus placeholder="email@firma.com" />
-              </div>
-              <div>
-                <Label required>Şifre</Label>
-                <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} />
-              </div>
-              <Btn variant="accent" size="lg" onClick={handleLogin} disabled={busy} className="w-full">
-                {busy ? "Giriş yapılıyor..." : "Giriş Yap"}
-              </Btn>
-              <div className="text-center pt-2">
-                <button onClick={onClose} className="text-[11px] underline font-semibold" style={{ color: TOKENS.muted, background: "transparent", border: "none", cursor: "pointer" }}>
-                  Misafir olarak devam et (sadece görüntüleme)
-                </button>
-              </div>
-            </>
-          )}
+          <div>
+            <Label required>Email</Label>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} autoFocus placeholder="email@firma.com" />
+          </div>
+          <div>
+            <Label required>Şifre</Label>
+            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} />
+          </div>
+          <Btn variant="accent" size="lg" onClick={handleLogin} disabled={busy} className="w-full">
+            {busy ? "Giriş yapılıyor..." : "Giriş Yap"}
+          </Btn>
+          <div className="text-center pt-2">
+            <button onClick={onClose} className="text-[11px] underline font-semibold" style={{ color: TOKENS.muted, background: "transparent", border: "none", cursor: "pointer" }}>
+              Misafir olarak devam et (sadece görüntüleme)
+            </button>
+          </div>
+          <div className="text-[10px] p-2 rounded mt-3" style={{ background: TOKENS.gold + "12", color: TOKENS.ink, border: `1px solid ${TOKENS.gold}40` }}>
+            💡 <strong>Kullanıcı yönetimi:</strong> Yeni kullanıcılar Supabase Dashboard'dan eklenir. Authentication → Users → Add user.
+          </div>
         </div>
       </div>
     </div>
@@ -1652,7 +1641,7 @@ function QuickStartCard({ icon: Icon, title, desc, cta, onClick }) {
 // hesap riskimiz var bilmek hayati. Bekleyen + gecikmiş ödemeleri toplayıp
 // kredi limitiyle karşılaştırırız.
 
-function CustomersView({ customers, setCustomers, orders, payments, bankAccounts, rates, canEdit, showToast, setView }) {
+function CustomersView({ customers, setCustomers, orders, payments, bankAccounts, rates, canEdit, showToast, setView, setPendingOrderToOpen }) {
   const [search, setSearch] = useState("");
   const [countryFilter, setCountryFilter] = useState("");
   const [open, setOpen] = useState(false);
@@ -2006,13 +1995,12 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
       </Modal>
 
       {/* Detay görünüm */}
-      <CustomerDetailModal customer={viewing} onClose={() => setViewing(null)} orders={orders} payments={payments} bankAccounts={bankAccounts} rates={rates} setView={setView} />
+      <CustomerDetailModal customer={viewing} onClose={() => setViewing(null)} orders={orders} payments={payments} bankAccounts={bankAccounts} rates={rates} setView={setView} setPendingOrderToOpen={setPendingOrderToOpen} />
     </div>
   );
 }
 
-function CustomerDetailModal({ customer, onClose, orders, payments, bankAccounts, rates, setView }) {
-  const [orderViewing, setOrderViewing] = useState(null);
+function CustomerDetailModal({ customer, onClose, orders, payments, bankAccounts, rates, setView, setPendingOrderToOpen }) {
   if (!customer) return null;
   const custOrders = orders.filter((o) => o.customerId === customer.id).sort((a, b) => (b.orderDate || "").localeCompare(a.orderDate || ""));
   const custPayments = payments.filter((p) => custOrders.some((o) => o.id === p.orderId));
@@ -2099,10 +2087,15 @@ function CustomerDetailModal({ customer, onClose, orders, payments, bankAccounts
                   const total = orderTotal(o);
                   return (
                     <tr key={o.id} className="cursor-pointer transition" style={{ borderTop: `1px solid ${TOKENS.border}` }}
-                      onClick={() => setOrderViewing(o)}
+                      onClick={() => {
+                        // Müşteri modal'ını kapat → Siparişler sayfasına git → bu siparişi aç
+                        if (setPendingOrderToOpen) setPendingOrderToOpen(o.id);
+                        if (setView) setView("orders");
+                        onClose();
+                      }}
                       onMouseEnter={(e) => (e.currentTarget.style.background = TOKENS.cream)}
                       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                      title="Detay için tıkla"
+                      title="Siparişler sayfasında detay aç"
                     >
                       <td className="px-3 py-2 font-mono font-bold" style={{ color: TOKENS.navy }}>{o.orderNumber}</td>
                       <td className="px-3 py-2">{fmtDate(o.orderDate)}</td>
@@ -2124,19 +2117,6 @@ function CustomerDetailModal({ customer, onClose, orders, payments, bankAccounts
           </div>
         )}
       </div>
-
-      {/* Müşteri içindeki sipariş detayı (içiçe modal) */}
-      {orderViewing && (
-        <OrderDetailModal
-          order={orderViewing}
-          onClose={() => setOrderViewing(null)}
-          customers={[customer]}
-          payments={payments}
-          bankAccounts={bankAccounts || []}
-          rates={rates}
-          setView={setView}
-        />
-      )}
     </Modal>
   );
 }
@@ -2520,7 +2500,7 @@ function BankAccountsView({ bankAccounts, setBankAccounts, payments, rates, canE
 // "Ödeme Planı" sipariş kaydında oluşturulur ve "Ödemeler" modülünde her
 // taksitin tahsilatı ayrı ayrı kaydedilir.
 
-function OrdersView({ customers, products, orders, setOrders, payments, setPayments, bankAccounts, rates, canEdit, showToast, setView }) {
+function OrdersView({ customers, products, orders, setOrders, payments, setPayments, bankAccounts, rates, canEdit, showToast, setView, pendingOrderToOpen, setPendingOrderToOpen }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [customerFilter, setCustomerFilter] = useState("");
@@ -2529,6 +2509,15 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
+
+  // Müşteri sayfasından "siparişi aç" yönlendirmesi geldiyse, otomatik aç
+  useEffect(() => {
+    if (pendingOrderToOpen) {
+      const o = orders.find((x) => x.id === pendingOrderToOpen);
+      if (o) setViewing(o);
+      if (setPendingOrderToOpen) setPendingOrderToOpen(null);
+    }
+  }, [pendingOrderToOpen, orders, setPendingOrderToOpen]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -4800,7 +4789,7 @@ function CashFlowView({ orders, customers, payments, rates, setView }) {
 // RAPORLAR
 // ============================================================================
 
-function ReportsView({ orders, customers, products, payments, rates }) {
+function ReportsView({ orders = [], customers = [], products = [], payments = [], rates = {} }) {
   const [tab, setTab] = useState("summary");
 
   return (
@@ -4842,7 +4831,7 @@ function ReportsView({ orders, customers, products, payments, rates }) {
 }
 
 // ÖZET RAPOR — tarih aralığına göre tüm veriyi gösterir, Excel'e aktarılabilir
-function SummaryReport({ orders, customers, products, payments, rates }) {
+function SummaryReport({ orders = [], customers = [], products = [], payments = [], rates = {} }) {
   const [dateRange, setDateRange] = useState({
     from: addDays(todayISO(), -90),
     to: todayISO(),
@@ -5037,7 +5026,7 @@ function SummaryReport({ orders, customers, products, payments, rates }) {
 }
 
 // SEVKİYAT RAPORU — sevk edilen tarihe göre ciro
-function ShipmentReport({ orders, customers, rates }) {
+function ShipmentReport({ orders = [], customers = [], rates = {} }) {
   const [dateRange, setDateRange] = useState({
     from: addDays(todayISO(), -90),
     to: todayISO(),
@@ -5181,7 +5170,7 @@ function ShipmentReport({ orders, customers, rates }) {
   );
 }
 
-function CustomerReport({ orders, customers, payments, rates }) {
+function CustomerReport({ orders = [], customers = [], payments = [], rates = {} }) {
   const data = useMemo(() => {
     const map = {};
     orders.forEach((o) => {
@@ -5222,7 +5211,7 @@ function CustomerReport({ orders, customers, payments, rates }) {
   );
 }
 
-function ProductReport({ orders, products, rates }) {
+function ProductReport({ orders = [], products = [], rates = {} }) {
   const data = useMemo(() => {
     const map = {};
     orders.forEach((o) => {
@@ -5255,7 +5244,7 @@ function ProductReport({ orders, products, rates }) {
   );
 }
 
-function CountryReport({ orders, customers, rates }) {
+function CountryReport({ orders = [], customers = [], rates = {} }) {
   const data = useMemo(() => {
     const map = {};
     orders.forEach((o) => {
@@ -5286,7 +5275,7 @@ function CountryReport({ orders, customers, rates }) {
   );
 }
 
-function MethodReport({ payments, rates }) {
+function MethodReport({ payments = [], rates = {} }) {
   const data = useMemo(() => {
     const map = {};
     payments.filter((p) => p.status !== "cancelled").forEach((p) => {
@@ -5318,7 +5307,7 @@ function MethodReport({ payments, rates }) {
   );
 }
 
-function StatusReport({ orders, rates }) {
+function StatusReport({ orders = [], rates = {} }) {
   const data = useMemo(() => {
     const map = {};
     orders.forEach((o) => {
@@ -5637,10 +5626,35 @@ VITE_SUPABASE_ANON_KEY=eyJh...uzun-karakter-dizisi`}
           </div>
         </Card>
 
-        {/* Kullanıcılar (sadece adminlere görünür) */}
-        {isAdmin && (
-          <UsersSection users={users} setUsers={setUsers} currentUser={currentUser} showToast={showToast} />
-        )}
+        {/* Kullanıcılar — Supabase Auth ile yönetilir */}
+        <Card title="Kullanıcı Yönetimi" subtitle="Yeni kullanıcılar Supabase Dashboard üzerinden eklenir">
+          <div className="space-y-3 text-sm" style={{ color: TOKENS.ink }}>
+            <div className="p-3 rounded-md" style={{ background: TOKENS.gold + "12", border: `1px solid ${TOKENS.gold}40` }}>
+              <strong>Mevcut oturum:</strong> {currentUser ? `${currentUser.name} (${currentUser.email}) — ${USER_ROLES.find((r) => r.key === currentUser.role)?.label || currentUser.role}` : "Misafir (sadece görüntüleme)"}
+            </div>
+            <p className="text-xs" style={{ color: TOKENS.muted }}>
+              Kullanıcı eklemek/silmek için <strong>Supabase Dashboard</strong>'a gir → <strong>Authentication → Users</strong> sekmesine geç → "Add user" ile yeni kullanıcı oluştur. Email + şifre gir.
+            </p>
+            <div className="p-3 rounded-md text-xs" style={{ background: TOKENS.cream, border: `1px solid ${TOKENS.border}` }}>
+              <div className="font-bold mb-1" style={{ color: TOKENS.ink }}>Roller (User Metadata'da tutulur):</div>
+              <ul className="space-y-1 list-disc list-inside" style={{ color: TOKENS.muted }}>
+                {USER_ROLES.map((r) => <li key={r.key}><strong style={{ color: TOKENS.ink }}>{r.label}:</strong> {r.desc}</li>)}
+              </ul>
+              <div className="mt-2 pt-2 text-[11px]" style={{ borderTop: `1px solid ${TOKENS.border}` }}>
+                💡 Supabase'de kullanıcı eklerken <strong>"Auto Confirm User"</strong> seçeneğini işaretle, e-posta doğrulama beklemesin.<br/>
+                💡 Rol atamak için kullanıcıya tıkla → <strong>Raw User Meta Data</strong> → <code>{`{"role": "admin"}`}</code> ekle.
+              </div>
+            </div>
+            {SUPABASE_URL_AUTH && (
+              <a href={`${SUPABASE_URL_AUTH.replace(".supabase.co", ".supabase.com").replace("https://", "https://supabase.com/dashboard/project/")}/auth/users`}
+                target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-md"
+                style={{ background: TOKENS.navy, color: "white", textDecoration: "none" }}>
+                Supabase Dashboard'a Git <ArrowRight size={12} />
+              </a>
+            )}
+          </div>
+        </Card>
 
         {/* Veri özeti */}
         <Card title="Veri Özeti">
@@ -5666,7 +5680,7 @@ VITE_SUPABASE_ANON_KEY=eyJh...uzun-karakter-dizisi`}
         </Card>
 
         <div className="text-center text-[11px] py-4" style={{ color: TOKENS.muted }}>
-          İhracat Operasyonları · Yönetim Sistemi v2.1
+          İhracat Operasyonları · Yönetim Sistemi v2.2
         </div>
       </div>
     </div>
@@ -5675,156 +5689,3 @@ VITE_SUPABASE_ANON_KEY=eyJh...uzun-karakter-dizisi`}
 
 // ============================================================================
 // KULLANICI YÖNETİMİ — sadece adminler için
-// ============================================================================
-
-function UsersSection({ users, setUsers, currentUser, showToast }) {
-  const [adding, setAdding] = useState(null);
-  const [changingPwd, setChangingPwd] = useState(null);
-  const [busy, setBusy] = useState(false);
-
-  const startAdd = () => setAdding({ name: "", email: "", password: "", password2: "", role: "editor" });
-
-  const saveNewUser = async () => {
-    if (!adding.name.trim() || !adding.email.trim() || !adding.password) return showToast("Tüm alanları doldur", "error");
-    if (adding.password.length < 6) return showToast("Şifre en az 6 karakter olmalı", "error");
-    if (adding.password !== adding.password2) return showToast("Şifreler eşleşmiyor", "error");
-    if (users.some((u) => u.email?.toLowerCase() === adding.email.trim().toLowerCase())) {
-      return showToast("Bu email zaten kayıtlı", "error");
-    }
-    setBusy(true);
-    try {
-      const salt = generateSalt();
-      const passwordHash = await hashPassword(adding.password, salt);
-      const newUser = {
-        id: uid(),
-        name: adding.name.trim(),
-        email: adding.email.trim().toLowerCase(),
-        salt, passwordHash,
-        role: adding.role,
-        createdAt: new Date().toISOString(),
-      };
-      setUsers((arr) => [...arr, newUser]);
-      showToast(`${newUser.name} eklendi`, "success");
-      setAdding(null);
-    } catch (e) { showToast("Hata: " + e.message, "error"); }
-    setBusy(false);
-  };
-
-  const deleteUser = (user) => {
-    if (user.id === currentUser?.id) return showToast("Kendi hesabını silemezsin", "error");
-    if (user.role === "admin" && users.filter((u) => u.role === "admin").length === 1) {
-      return showToast("Sistemdeki tek yöneticiyi silemezsin", "error");
-    }
-    if (!confirm(`${user.name} (${user.email}) silinsin mi? Geri alınamaz.`)) return;
-    setUsers((arr) => arr.filter((u) => u.id !== user.id));
-    showToast("Kullanıcı silindi", "success");
-  };
-
-  const changeRole = (user, newRole) => {
-    if (user.id === currentUser?.id && newRole !== "admin") {
-      if (!confirm("Kendi rolünü adminden başka bir şeye değiştiriyorsun. Bu sayfaya bir daha erişemezsin. Onaylıyor musun?")) return;
-    }
-    if (user.role === "admin" && newRole !== "admin" && users.filter((u) => u.role === "admin").length === 1) {
-      return showToast("Sistemde en az bir yönetici olmalı", "error");
-    }
-    setUsers((arr) => arr.map((u) => u.id === user.id ? { ...u, role: newRole } : u));
-    showToast("Rol değiştirildi", "success");
-  };
-
-  const startPwdChange = (user) => setChangingPwd({ userId: user.id, name: user.name, password: "", password2: "" });
-
-  const savePwdChange = async () => {
-    if (!changingPwd.password) return showToast("Yeni şifre gerekli", "error");
-    if (changingPwd.password.length < 6) return showToast("Şifre en az 6 karakter olmalı", "error");
-    if (changingPwd.password !== changingPwd.password2) return showToast("Şifreler eşleşmiyor", "error");
-    setBusy(true);
-    try {
-      const salt = generateSalt();
-      const passwordHash = await hashPassword(changingPwd.password, salt);
-      setUsers((arr) => arr.map((u) => u.id === changingPwd.userId ? { ...u, salt, passwordHash } : u));
-      showToast("Şifre değiştirildi", "success");
-      setChangingPwd(null);
-    } catch (e) { showToast("Hata: " + e.message, "error"); }
-    setBusy(false);
-  };
-
-  return (
-    <Card title="Kullanıcılar" subtitle={`${users.length} kullanıcı · Yöneticiler ekleyebilir, silebilir, şifre sıfırlayabilir`}
-      action={<Btn variant="primary" size="sm" icon={Plus} onClick={startAdd}>Yeni Kullanıcı</Btn>}>
-      {users.length === 0 ? (
-        <div className="text-center py-6 text-xs" style={{ color: TOKENS.muted }}>Kullanıcı yok</div>
-      ) : (
-        <div className="space-y-2">
-          {users.map((u) => (
-            <div key={u.id} className="rounded-md p-3 flex items-center gap-3" style={{ background: TOKENS.cream + "60", border: `1px solid ${TOKENS.border}` }}>
-              <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-                style={{ background: u.role === "admin" ? TOKENS.gold : TOKENS.cream, color: TOKENS.ink, border: `2px solid ${u.role === "admin" ? TOKENS.goldDark : TOKENS.border}` }}>
-                {u.name?.charAt(0).toUpperCase() || "?"}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold" style={{ color: TOKENS.ink }}>{u.name}</span>
-                  {u.id === currentUser?.id && <span className="text-[9px] px-1.5 py-0.5 rounded font-bold" style={{ background: TOKENS.forest + "20", color: TOKENS.forest }}>SEN</span>}
-                </div>
-                <div className="text-xs" style={{ color: TOKENS.muted }}>
-                  {u.email}
-                  {u.lastLogin && <span className="ml-2">· Son giriş: {fmtDate(u.lastLogin)}</span>}
-                </div>
-              </div>
-              <Select value={u.role} onChange={(e) => changeRole(u, e.target.value)} className="w-32 text-xs">
-                {USER_ROLES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
-              </Select>
-              <Btn variant="ghost" size="xs" onClick={() => startPwdChange(u)}>Şifre</Btn>
-              {u.id !== currentUser?.id && (
-                <button onClick={() => deleteUser(u)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted, background: "transparent", border: "none" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}>
-                  <Trash2 size={14} />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="mt-4 p-3 rounded-md text-[11px]" style={{ background: TOKENS.cream, color: TOKENS.muted, border: `1px solid ${TOKENS.border}` }}>
-        <strong style={{ color: TOKENS.ink }}>Roller:</strong>
-        <ul className="mt-1 space-y-0.5 list-disc list-inside">
-          {USER_ROLES.map((r) => <li key={r.key}><strong>{r.label}:</strong> {r.desc}</li>)}
-        </ul>
-      </div>
-
-      {/* Yeni kullanıcı ekleme modali */}
-      <Modal open={!!adding} onClose={() => setAdding(null)} title="Yeni Kullanıcı" size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setAdding(null)}>İptal</Btn><Btn variant="primary" onClick={saveNewUser} disabled={busy}>{busy ? "Kaydediliyor..." : "Kullanıcı Oluştur"}</Btn></>}>
-        {adding && (
-          <div className="space-y-3">
-            <div><Label required>Ad Soyad</Label><Input value={adding.name} onChange={(e) => setAdding({ ...adding, name: e.target.value })} autoFocus /></div>
-            <div><Label required>Email</Label><Input type="email" value={adding.email} onChange={(e) => setAdding({ ...adding, email: e.target.value })} /></div>
-            <div><Label required hint="en az 6 karakter">Şifre</Label><Input type="password" value={adding.password} onChange={(e) => setAdding({ ...adding, password: e.target.value })} /></div>
-            <div><Label required>Şifre Tekrar</Label><Input type="password" value={adding.password2} onChange={(e) => setAdding({ ...adding, password2: e.target.value })} /></div>
-            <div><Label required>Rol</Label>
-              <Select value={adding.role} onChange={(e) => setAdding({ ...adding, role: e.target.value })}>
-                {USER_ROLES.map((r) => <option key={r.key} value={r.key}>{r.label} — {r.desc}</option>)}
-              </Select>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* Şifre değiştirme modali */}
-      <Modal open={!!changingPwd} onClose={() => setChangingPwd(null)} title={`Şifre Değiştir · ${changingPwd?.name}`} size="sm"
-        footer={<><Btn variant="ghost" onClick={() => setChangingPwd(null)}>İptal</Btn><Btn variant="primary" onClick={savePwdChange} disabled={busy}>{busy ? "Kaydediliyor..." : "Yeni Şifreyi Kaydet"}</Btn></>}>
-        {changingPwd && (
-          <div className="space-y-3">
-            <div className="text-[11px] p-2 rounded" style={{ background: TOKENS.gold + "15", color: TOKENS.ink }}>
-              ⚠ Bu kullanıcı yeni şifresiyle giriş yapacak. Eski şifre artık geçerli olmayacak.
-            </div>
-            <div><Label required hint="en az 6 karakter">Yeni Şifre</Label><Input type="password" value={changingPwd.password} onChange={(e) => setChangingPwd({ ...changingPwd, password: e.target.value })} autoFocus /></div>
-            <div><Label required>Şifre Tekrar</Label><Input type="password" value={changingPwd.password2} onChange={(e) => setChangingPwd({ ...changingPwd, password2: e.target.value })} /></div>
-          </div>
-        )}
-      </Modal>
-    </Card>
-  );
-}

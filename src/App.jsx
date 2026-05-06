@@ -1873,7 +1873,7 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
         </FilterBar>
 
         {customers.length === 0 ? (
-          <Card><EmptyState icon={Users} title="Henüz müşteri yok" hint="İhracat yaptığın firmaları kaydet. Sipariş girerken bu listeden seçeceksin; ülke ve tercih edilen para birimi otomatik gelecek." action={<Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>İlk Müşteriyi Ekle</Btn>} /></Card>
+          <Card><EmptyState icon={Users} title="Henüz müşteri yok" hint="İhracat yaptığın firmaları kaydet. Sipariş girerken bu listeden seçeceksin; ülke ve tercih edilen para birimi otomatik gelecek." action={canEdit ? <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>İlk Müşteriyi Ekle</Btn> : null} /></Card>
         ) : (
           <DataTable
             columns={columns}
@@ -1883,8 +1883,8 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
             actions={(r) => (
               <div className="flex items-center justify-end gap-1">
                 <button onClick={() => setViewing(r)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.cream; e.currentTarget.style.color = TOKENS.navy; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Eye size={14} /></button>
-                <button onClick={() => openEdit(r)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.cream; e.currentTarget.style.color = TOKENS.navy; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Pencil size={14} /></button>
-                <button onClick={() => remove(r.id)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Trash2 size={14} /></button>
+                {canEdit && <button onClick={() => openEdit(r)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.cream; e.currentTarget.style.color = TOKENS.navy; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Pencil size={14} /></button>}
+                {canEdit && <button onClick={() => remove(r.id)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Trash2 size={14} /></button>}
               </div>
             )}
           />
@@ -2292,14 +2292,14 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
         </FilterBar>
 
         {products.length === 0 ? (
-          <Card><EmptyState icon={Package} title="Ürün kataloğu boş" hint="Sattığın ürünleri ürün kodu, mamul kodu ve TR/EN isimleriyle tanımla. Sipariş girerken bu listeden seçebileceksin." action={<Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>İlk Ürünü Ekle</Btn>} /></Card>
+          <Card><EmptyState icon={Package} title="Ürün kataloğu boş" hint="Sattığın ürünleri ürün kodu, mamul kodu ve TR/EN isimleriyle tanımla. Sipariş girerken bu listeden seçebileceksin." action={canEdit ? <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>İlk Ürünü Ekle</Btn> : null} /></Card>
         ) : (
-          <DataTable columns={columns} rows={filtered} emptyText="Eşleşen ürün yok" actions={(r) => (
+          <DataTable columns={columns} rows={filtered} emptyText="Eşleşen ürün yok" actions={canEdit ? (r) => (
             <div className="flex items-center justify-end gap-1">
               <button onClick={() => openEdit(r)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.cream; e.currentTarget.style.color = TOKENS.navy; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Pencil size={14} /></button>
               <button onClick={() => remove(r.id)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Trash2 size={14} /></button>
             </div>
-          )} />
+          ) : undefined} />
         )}
       </div>
 
@@ -2429,7 +2429,7 @@ function BankAccountsView({ bankAccounts, setBankAccounts, payments, rates, canE
               icon={Landmark}
               title="Henüz banka hesabı yok"
               hint="Tahsilatlarının geldiği banka hesaplarını para birimi bazında kaydet. Ödeme girişinde hangi hesaba geldi seçeceksin — böylece her hesabın bakiyesini takip edersin."
-              action={<Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>İlk Hesabı Ekle</Btn>}
+              action={canEdit ? <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>İlk Hesabı Ekle</Btn> : null}
             />
           </Card>
         ) : (
@@ -2460,8 +2460,8 @@ function BankAccountsView({ bankAccounts, setBankAccounts, payments, rates, canE
                     <div className="text-[10px]" style={{ color: TOKENS.muted }}>{b.paymentCount} ödeme</div>
                   </div>
                   <div className="flex gap-1">
-                    <button onClick={() => openEdit(b)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.cream; e.currentTarget.style.color = TOKENS.navy; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Pencil size={14} /></button>
-                    <button onClick={() => remove(b.id)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Trash2 size={14} /></button>
+                    {canEdit && <button onClick={() => openEdit(b)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.cream; e.currentTarget.style.color = TOKENS.navy; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Pencil size={14} /></button>}
+                    {canEdit && <button onClick={() => remove(b.id)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Trash2 size={14} /></button>}
                   </div>
                 </div>
               </div>
@@ -2834,14 +2834,14 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
 
             {orders.length === 0 ? (
               <Card>
-                <EmptyState icon={FileText} title="Henüz sipariş yok" hint="İlk siparişini oluştur. Sipariş kaydederken hem kalemleri (satır bazlı) hem de ödeme planını (ön ödeme/sevk öncesi/vadeli) birlikte tanımlayacaksın." action={<Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>İlk Siparişi Oluştur</Btn>} />
+                <EmptyState icon={FileText} title="Henüz sipariş yok" hint="İlk siparişini oluştur. Sipariş kaydederken hem kalemleri (satır bazlı) hem de ödeme planını (ön ödeme/sevk öncesi/vadeli) birlikte tanımlayacaksın." action={canEdit ? <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>İlk Siparişi Oluştur</Btn> : null} />
               </Card>
             ) : (
               <DataTable columns={columns} rows={filtered} onRowClick={(r) => setViewing(r)} emptyText="Filtreyle eşleşen sipariş yok" actions={(r) => (
                 <div className="flex items-center justify-end gap-1">
                   <button onClick={() => setViewing(r)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.cream; e.currentTarget.style.color = TOKENS.navy; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Eye size={14} /></button>
-                  <button onClick={() => openEdit(r)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.cream; e.currentTarget.style.color = TOKENS.navy; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Pencil size={14} /></button>
-                  <button onClick={() => remove(r.id)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Trash2 size={14} /></button>
+                  {canEdit && <button onClick={() => openEdit(r)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.cream; e.currentTarget.style.color = TOKENS.navy; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Pencil size={14} /></button>}
+                  {canEdit && <button onClick={() => remove(r.id)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Trash2 size={14} /></button>}
                 </div>
               )} />
             )}
@@ -4289,7 +4289,7 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
             <EmptyState icon={CreditCard} title="Henüz ödeme kaydı yok" hint="Ödeme kayıtları, sipariş içindeki ödeme planından otomatik oluşur. Önce bir sipariş oluştur ve ödeme planı ekle." />
           </Card>
         ) : viewMode === "by-order" ? (
-          <PaymentsByOrder filtered={filtered} orders={orders} customers={customers} bankAccounts={bankAccounts} rates={rates} onMarkPaid={markAsPaid} onRevert={revert} onDelete={deletePayment} />
+          <PaymentsByOrder filtered={filtered} orders={orders} customers={customers} bankAccounts={bankAccounts} rates={rates} canEdit={canEdit} onMarkPaid={markAsPaid} onRevert={revert} onDelete={deletePayment} />
         ) : (
           <DataTable
             columns={[
@@ -4328,7 +4328,7 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
             ]}
             rows={filtered}
             emptyText="Eşleşen ödeme yok"
-            actions={(r) => (
+            actions={canEdit ? (r) => (
               <div className="flex items-center justify-end gap-1">
                 {r.status === "paid" ? (
                   <Btn variant="ghost" size="xs" onClick={() => revert(r)}>Geri Al</Btn>
@@ -4339,7 +4339,7 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
                   <Trash2 size={12} />
                 </button>
               </div>
-            )}
+            ) : undefined}
           />
         )}
       </div>
@@ -4396,7 +4396,7 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
 }
 
 // Sipariş bazlı ödeme görünümü — her sipariş bir kart, içinde plan kalemleri
-function PaymentsByOrder({ filtered, orders, customers, bankAccounts, rates, onMarkPaid, onRevert, onDelete }) {
+function PaymentsByOrder({ filtered, orders, customers, bankAccounts, rates, canEdit, onMarkPaid, onRevert, onDelete }) {
   // Filtreli ödemeleri sipariş bazlı grupla
   const grouped = useMemo(() => {
     const map = {};
@@ -4494,14 +4494,14 @@ function PaymentsByOrder({ filtered, orders, customers, bankAccounts, rates, onM
                       <div className="text-[10px]" style={{ color: TOKENS.muted }}>≈ {fmtMoney(toUSD(p.amount, p.currency, rates), "USD", { compact: true })}</div>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      {p.status === "paid" ? (
+                      {canEdit && (p.status === "paid" ? (
                         <Btn variant="ghost" size="xs" onClick={() => onRevert(p)}>Geri Al</Btn>
                       ) : (
                         <Btn variant="success" size="xs" icon={Check} onClick={() => onMarkPaid(p)}>Tahsil</Btn>
-                      )}
-                      <button onClick={() => onDelete(p)} className="p-1 rounded transition" style={{ color: TOKENS.muted, background: "transparent", border: "none" }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }} title="Ödemeyi sil">
+                      ))}
+                      {canEdit && <button onClick={() => onDelete(p)} className="p-1 rounded transition" style={{ color: TOKENS.muted, background: "transparent", border: "none" }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }} title="Ödemeyi sil">
                         <Trash2 size={12} />
-                      </button>
+                      </button>}
                     </div>
                   </div>
                 );
@@ -5510,11 +5510,22 @@ function SettingsView({ customers, setCustomers, products, setProducts, bankAcco
         {/* Hızlı eylemler */}
         <Card title="Hızlı Eylemler">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Btn variant="accent" icon={Sparkles} onClick={loadDemo}>Demo Yükle</Btn>
-            <Btn variant="secondary" icon={FileDown} onClick={fullBackup}>Tam Yedek Al</Btn>
-            <input ref={fileRef} type="file" accept=".json" onChange={(e) => { restoreBackup(e.target.files[0]); e.target.value = ""; }} className="hidden" />
-            <Btn variant="secondary" icon={FileUp} onClick={() => fileRef.current?.click()}>Yedekten Yükle</Btn>
-            <Btn variant="danger" icon={Trash2} onClick={wipeAll}>Tüm Veriyi Sil</Btn>
+            {canEdit ? (
+              <>
+                <Btn variant="accent" icon={Sparkles} onClick={loadDemo}>Demo Yükle</Btn>
+                <Btn variant="secondary" icon={FileDown} onClick={fullBackup}>Tam Yedek Al</Btn>
+                <input ref={fileRef} type="file" accept=".json" onChange={(e) => { restoreBackup(e.target.files[0]); e.target.value = ""; }} className="hidden" />
+                <Btn variant="secondary" icon={FileUp} onClick={() => fileRef.current?.click()}>Yedekten Yükle</Btn>
+                <Btn variant="danger" icon={Trash2} onClick={wipeAll}>Tüm Veriyi Sil</Btn>
+              </>
+            ) : (
+              <>
+                <Btn variant="secondary" icon={FileDown} onClick={fullBackup}>Tam Yedek Al</Btn>
+                <div className="col-span-3 flex items-center px-3 py-2 rounded-md text-xs font-semibold" style={{ background: TOKENS.cream, color: TOKENS.muted, border: `1px solid ${TOKENS.border}` }}>
+                  🔒 Veri değiştirme işlemleri için giriş yapmanız gerekiyor.
+                </div>
+              </>
+            )}
           </div>
           <p className="text-xs mt-3" style={{ color: TOKENS.muted }}>
             <strong>Demo Yükle:</strong> 4 müşteri, 5 ürün, 3 banka, 4 sipariş ve ilgili ödeme planlarıyla sistemi anında dolu görmek için.<br />
@@ -5554,7 +5565,7 @@ function SettingsView({ customers, setCustomers, products, setProducts, bankAcco
             {CURRENCIES.filter((c) => c !== "USD").map((c) => (
               <div key={c}>
                 <Label>{c}/USD</Label>
-                <Input type="number" step="0.0001" value={rates[c] || 0} onChange={(e) => setRates({ ...rates, [c]: parseFloat(e.target.value) || 0 })} />
+                <Input type="number" step="0.0001" value={rates[c] || 0} onChange={(e) => canEdit && setRates({ ...rates, [c]: parseFloat(e.target.value) || 0 })} readOnly={!canEdit} style={{ opacity: canEdit ? 1 : 0.7, cursor: canEdit ? "auto" : "not-allowed" }} />
               </div>
             ))}
           </div>

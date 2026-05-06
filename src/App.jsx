@@ -4863,13 +4863,13 @@ function SummaryReport({ orders = [], customers = [], products = [], payments = 
   // Özet metrikler
   const stats = useMemo(() => {
     const orderCount = filteredOrders.length;
-    const orderTotalUSD = filteredOrders.reduce((s, o) => s + orderTotalUSD(o, rates), 0);
+    const totalOrdersUSD = filteredOrders.reduce((s, o) => s + orderTotalUSD(o, rates), 0);
     const shippedCount = filteredOrders.filter((o) => o.actualShipmentDate || ["shipped", "delivered", "completed"].includes(o.status)).length;
     const shippedTotalUSD = filteredOrders.filter((o) => o.actualShipmentDate || ["shipped", "delivered", "completed"].includes(o.status)).reduce((s, o) => s + orderTotalUSD(o, rates), 0);
     const paidCount = filteredPayments.length;
     const paidTotalUSD = filteredPayments.reduce((s, p) => s + toUSD(p.amount, p.currency, rates), 0);
     const customerCount = new Set(filteredOrders.map((o) => o.customerId)).size;
-    return { orderCount, orderTotalUSD, shippedCount, shippedTotalUSD, paidCount, paidTotalUSD, customerCount };
+    return { orderCount, orderTotalUSD: totalOrdersUSD, shippedCount, shippedTotalUSD, paidCount, paidTotalUSD, customerCount };
   }, [filteredOrders, filteredPayments, rates]);
 
   // Excel'e aktarma — her şey

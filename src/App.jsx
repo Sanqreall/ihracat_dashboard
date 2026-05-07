@@ -363,6 +363,107 @@ const fmtDateWithWeek = (d) => {
   return w ? `${fmtDate(d)} · W${w}` : fmtDate(d);
 };
 
+// ============================================================================
+// PDF YAZDIRMA — Tek pencere, ortak stil
+// ============================================================================
+// Yeni pencere açar, A4 sayfa stiliyle render eder, otomatik yazdırma diyaloğu açar.
+// Kullanıcı "PDF olarak kaydet" seçeneğini seçebilir.
+
+function printPDF({ title, subtitle, contentHtml, orientation = "portrait" }) {
+  const w = window.open("", "_blank", "width=1000,height=750");
+  if (!w) { alert("Popup engellendi. Tarayıcı ayarlarından bu site için popup'a izin ver."); return; }
+
+  const html = `<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>${title}</title>
+<style>
+  @page { size: A4 ${orientation}; margin: 1.2cm; }
+  * { box-sizing: border-box; }
+  body { font-family: Calibri, "Carlito", Arial, sans-serif; font-size: 11px; color: #0F1A2E; margin: 0; padding: 20px; line-height: 1.45; background: white; }
+  .doc-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #C9A961; padding-bottom: 10px; margin-bottom: 14px; }
+  .doc-header .left h1 { font-size: 17px; margin: 0 0 3px; color: #0F1A2E; font-weight: 700; }
+  .doc-header .left .subtitle { font-size: 10px; color: #7A736A; }
+  .doc-header .right { text-align: right; font-size: 9px; color: #7A736A; line-height: 1.4; }
+  .doc-header .right .brand { font-size: 11px; font-weight: 700; color: #1E3A5F; margin-bottom: 2px; }
+  h2 { font-size: 12px; margin: 14px 0 6px; padding-bottom: 3px; border-bottom: 1px solid #C9A961; color: #1E3A5F; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+  h3 { font-size: 11px; margin: 10px 0 4px; color: #0F1A2E; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 10px; page-break-inside: avoid; }
+  th { padding: 6px 8px; border: 1px solid #ccc; background: #F8F5EE; text-align: left; font-weight: 700; color: #0F1A2E; font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; }
+  td { padding: 5px 8px; border: 1px solid #ccc; vertical-align: top; }
+  td.right, th.right { text-align: right; }
+  td.center, th.center { text-align: center; }
+  td.label { color: #7A736A; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; margin: 6px 0 12px; font-size: 11px; }
+  .info-grid > div { padding: 2px 0; }
+  .label { color: #7A736A; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+  .summary-card { background: #F8F5EE; border: 1px solid #C9A961; padding: 10px 14px; border-radius: 4px; margin: 8px 0 12px; }
+  .badge { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+  .text-success { color: #3E7D5A; font-weight: 700; }
+  .text-warning { color: #B87333; font-weight: 700; }
+  .text-danger  { color: #A6383D; font-weight: 700; }
+  .text-mono    { font-family: "Consolas", "Courier New", monospace; font-weight: 700; }
+  .footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 9px; color: #7A736A; text-align: center; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+  .kpi { padding: 8px 10px; background: #F8F5EE; border: 1px solid #ddd; border-left: 3px solid #C9A961; border-radius: 3px; }
+  .kpi .kpi-label { font-size: 9px; color: #7A736A; text-transform: uppercase; font-weight: 700; }
+  .kpi .kpi-value { font-size: 14px; font-weight: 700; color: #0F1A2E; margin-top: 2px; }
+  .print-btn { position: fixed; top: 10px; right: 10px; padding: 10px 18px; background: #1E3A5F; color: white; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 100; }
+  .print-btn:hover { background: #0F1A2E; }
+  @media print {
+    .no-print { display: none !important; }
+    body { padding: 0; }
+    h2 { page-break-after: avoid; }
+    table { page-break-inside: auto; }
+    tr { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+  <button class="print-btn no-print" onclick="window.print()">Yazdır / PDF Kaydet</button>
+  <div class="doc-header">
+    <div class="left">
+      <h1>${title}</h1>
+      ${subtitle ? `<div class="subtitle">${subtitle}</div>` : ""}
+    </div>
+    <div class="right">
+      <div class="brand">İhracat Operasyonları</div>
+      <div>Yönetim Sistemi</div>
+      <div style="margin-top:4px;color:#0F1A2E;font-weight:600">${fmtDateLong(todayISO())}</div>
+    </div>
+  </div>
+  ${contentHtml}
+  <div class="footer">
+    Bu rapor İhracat Operasyonları sisteminden ${fmtDateLong(todayISO())} tarihinde otomatik oluşturulmuştur.
+  </div>
+  <script>
+    window.addEventListener('load', () => setTimeout(() => window.print(), 500));
+  </script>
+</body>
+</html>`;
+
+  w.document.write(html);
+  w.document.close();
+}
+
+// HTML escape — XSS koruma + karakter sorunlarını engeller
+function htmlEscape(s) {
+  if (s === null || s === undefined) return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// Sayı formatı PDF için (Türkçe)
+function fmtMoneyPDF(n, cur) {
+  const v = (Number(n) || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return cur ? `${cur} ${v}` : v;
+}
+
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const daysBetween = (a, b) => {
@@ -1784,6 +1885,77 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
     showToast("Müşteri silindi", "success");
   };
 
+  // Müşteri listesini PDF yazdır — alacak/verecek özeti
+  const printList = () => {
+    if (!enrichedCustomers.length) return showToast("Yazdırılacak müşteri yok", "error");
+
+    const filteredList = enrichedCustomers.filter((c) => {
+      if (!search) return true;
+      const q = search.toLowerCase();
+      return (c.code || "").toLowerCase().includes(q) ||
+             (c.name || "").toLowerCase().includes(q) ||
+             (c.country || "").toLowerCase().includes(q) ||
+             (c.contactPerson || "").toLowerCase().includes(q) ||
+             (c.email || "").toLowerCase().includes(q);
+    });
+
+    const rows = filteredList.map((c) => {
+      const isOver = c.utilization !== null && c.utilization >= 100;
+      const isWarn = c.utilization !== null && c.utilization >= 75;
+      return `
+        <tr>
+          <td class="text-mono">${htmlEscape(c.code)}</td>
+          <td><div style="font-weight:700">${htmlEscape(c.name)}</div>${c.contactPerson ? `<div style="font-size:9px;color:#7A736A">${htmlEscape(c.contactPerson)}</div>` : ""}</td>
+          <td>${htmlEscape(c.country || "—")}</td>
+          <td class="center">${c.orderCount}</td>
+          <td class="right text-mono">$${(c.totalUSD || 0).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+          <td class="right text-mono ${c.openBalance > 0 ? 'text-warning' : 'text-success'}">${c.openBalance > 0 ? `$${c.openBalance.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}` : "✓"}</td>
+          <td class="right text-mono ${c.overdueBalance > 0 ? 'text-danger' : ''}">${c.overdueBalance > 0 ? `$${c.overdueBalance.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}` : "—"}</td>
+          <td class="right text-mono">${c.creditLimit > 0 ? `$${(c.creditLimit || 0).toLocaleString("tr-TR")}` : "—"}</td>
+          <td class="right ${isOver ? 'text-danger' : isWarn ? 'text-warning' : ''}">${c.utilization !== null ? `%${c.utilization}` : "—"}</td>
+        </tr>`;
+    }).join("");
+
+    // KPI'lar
+    const totalUSD = filteredList.reduce((s, c) => s + (c.totalUSD || 0), 0);
+    const totalOpen = filteredList.reduce((s, c) => s + (c.openBalance || 0), 0);
+    const totalOverdue = filteredList.reduce((s, c) => s + (c.overdueBalance || 0), 0);
+    const overUtil = filteredList.filter((c) => c.utilization >= 100).length;
+
+    const content = `
+      <div class="kpi-grid">
+        <div class="kpi"><div class="kpi-label">Toplam Müşteri</div><div class="kpi-value">${filteredList.length}</div></div>
+        <div class="kpi"><div class="kpi-label">Toplam Ciro (USD)</div><div class="kpi-value">$${totalUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">Toplam Alacak (USD)</div><div class="kpi-value" style="color:#B87333">$${totalOpen.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">Gecikmiş Alacak</div><div class="kpi-value" style="color:#A6383D">$${totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+      </div>
+      ${overUtil > 0 ? `<div style="font-size:10px;padding:6px 10px;background:#A6383D15;border-left:3px solid #A6383D;margin-bottom:8px"><strong style="color:#A6383D">⚠ ${overUtil} müşteri kredi limitini aşmış durumda.</strong></div>` : ""}
+      <table>
+        <thead>
+          <tr>
+            <th>Kod</th>
+            <th>Müşteri</th>
+            <th>Ülke</th>
+            <th class="center">Sipariş</th>
+            <th class="right">Ciro (USD)</th>
+            <th class="right">Açık Bakiye</th>
+            <th class="right">Gecikmiş</th>
+            <th class="right">Kredi Limit</th>
+            <th class="right">Kullanım</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+
+    printPDF({
+      title: "Müşteri Listesi · Alacak/Verecek Özeti",
+      subtitle: `${filteredList.length} müşteri${search ? ` · arama: "${search}"` : ""}`,
+      contentHtml: content,
+      orientation: "landscape",
+    });
+  };
+
   const handleExport = () => {
     if (!customers.length) return showToast("Aktarılacak müşteri yok", "error");
     const rows = enrichedCustomers.map((c) => ({
@@ -1873,6 +2045,7 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
     <div>
       <PageHeader title="Müşteriler" subtitle={`${customers.length} müşteri kaydı · Açık bakiye ve kredi kullanımı otomatik hesaplanır`}>
         <input id="cust-import" type="file" accept=".xlsx,.xls" onChange={(e) => handleImport(e.target.files[0])} className="hidden" />
+        <Btn variant="ghost" size="sm" icon={FileDown} onClick={printList}>PDF</Btn>
         <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>Dışa Aktar</Btn>
         {canEdit && <>
           <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>Şablon</Btn>
@@ -2483,10 +2656,72 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
     { key: "totalUSD", label: "Ciro", align: "right", render: (r) => <span style={{ color: TOKENS.muted }}>{fmtMoney(r.totalUSD, "USD", { compact: true })}</span> },
   ];
 
+  // Ürün katalog PDF
+  const printList = () => {
+    if (!enrichedProducts.length) return showToast("Yazdırılacak ürün yok", "error");
+
+    const list = enrichedProducts.filter((p) => {
+      if (!search) return true;
+      const q = search.toLowerCase();
+      return (p.productCode || "").toLowerCase().includes(q) ||
+             (p.manufacturingCode || "").toLowerCase().includes(q) ||
+             (p.nameTr || "").toLowerCase().includes(q) ||
+             (p.nameEn || "").toLowerCase().includes(q) ||
+             (p.category || "").toLowerCase().includes(q);
+    });
+
+    const rows = list.map((p) => `
+      <tr>
+        <td class="text-mono">${htmlEscape(p.productCode)}</td>
+        <td class="text-mono" style="color:#7A736A">${htmlEscape(p.manufacturingCode || "—")}</td>
+        <td><div style="font-weight:700">${htmlEscape(p.nameTr || "—")}</div>${p.nameEn ? `<div style="font-style:italic;font-size:9px;color:#7A736A">${htmlEscape(p.nameEn)}</div>` : ""}</td>
+        <td>${htmlEscape(p.category || "—")}</td>
+        <td class="center">${htmlEscape(p.unit || "—")}</td>
+        <td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(p.defaultPrice, p.defaultCurrency)}</td>
+        <td class="right text-mono">${(p.totalQty || 0).toLocaleString("tr-TR")} ${htmlEscape(p.unit || "")}</td>
+        <td class="right text-mono" style="color:#7A736A">$${(p.totalUSD || 0).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+      </tr>`).join("");
+
+    const totalCiro = list.reduce((s, p) => s + (p.totalUSD || 0), 0);
+    const cats = [...new Set(list.map((p) => p.category).filter(Boolean))].length;
+
+    const content = `
+      <div class="kpi-grid">
+        <div class="kpi"><div class="kpi-label">Toplam Ürün</div><div class="kpi-value">${list.length}</div></div>
+        <div class="kpi"><div class="kpi-label">Kategori</div><div class="kpi-value">${cats}</div></div>
+        <div class="kpi"><div class="kpi-label">Toplam Ciro (USD)</div><div class="kpi-value">$${totalCiro.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">Aktif Ürün</div><div class="kpi-value">${list.filter((p) => p.totalQty > 0).length}</div></div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Ürün Kodu</th>
+            <th>Mamul Kodu</th>
+            <th>İsim</th>
+            <th>Kategori</th>
+            <th class="center">Birim</th>
+            <th class="right">Fiyat</th>
+            <th class="right">Toplam Satış</th>
+            <th class="right">Ciro (USD)</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+
+    printPDF({
+      title: "Ürün Kataloğu",
+      subtitle: `${list.length} ürün${search ? ` · arama: "${search}"` : ""}`,
+      contentHtml: content,
+      orientation: "landscape",
+    });
+  };
+
   return (
     <div>
       <PageHeader title="Ürünler" subtitle={`${products.length} ürün · Sipariş kalemlerinde otomatik tamamlama yapar`}>
         <input id="prod-import" type="file" accept=".xlsx,.xls" onChange={(e) => handleImport(e.target.files[0])} className="hidden" />
+        <Btn variant="ghost" size="sm" icon={FileDown} onClick={printList}>PDF</Btn>
         <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>Dışa Aktar</Btn>
         {canEdit && <>
           <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>Şablon</Btn>
@@ -2869,6 +3104,82 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
     showToast("Sipariş silindi", "success");
   };
 
+  // Filtreli sipariş listesini PDF olarak yazdır
+  const printList = () => {
+    if (!filtered.length) return showToast("Yazdırılacak sipariş yok", "error");
+
+    const rows = filtered.map((o) => {
+      const c = customers.find((x) => x.id === o.customerId);
+      const t = orderTotal(o);
+      const paid = orderPaidAmount(o, payments);
+      const remaining = t - paid;
+      const st = ORDER_STATUSES.find((s) => s.key === o.status);
+      const usd = orderTotalUSD ? orderTotalUSD(o, rates) : toUSD(t, o.currency, rates);
+      return `
+        <tr>
+          <td class="text-mono">${htmlEscape(o.orderNumber)}</td>
+          <td><div style="font-weight:700">${htmlEscape(c?.name || "—")}</div><div style="font-size:9px;color:#7A736A">${htmlEscape(c?.country || "")}</div></td>
+          <td>${fmtDate(o.orderDate)}<div style="font-size:9px;color:#7A736A">W${getISOWeek(o.orderDate) || "—"}</div></td>
+          <td>${o.shipmentDate ? fmtDate(o.shipmentDate) : "—"}${o.shipmentDate ? `<div style="font-size:9px;color:#7A736A">W${getISOWeek(o.shipmentDate)}</div>` : ""}</td>
+          <td>${o.actualShipmentDate ? `<span class="text-success">${fmtDate(o.actualShipmentDate)}</span><div style="font-size:9px;color:#3E7D5A">W${getISOWeek(o.actualShipmentDate)}</div>` : "—"}</td>
+          <td class="center">${(o.items || []).length}</td>
+          <td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(t, o.currency)}</td>
+          <td class="right text-mono text-success">${paid > 0 ? fmtMoneyPDF(paid, o.currency) : "—"}</td>
+          <td class="right text-mono ${remaining > 0.01 ? 'text-warning' : 'text-success'}">${remaining > 0.01 ? fmtMoneyPDF(remaining, o.currency) : "✓"}</td>
+          <td class="right text-mono" style="color:#7A736A">$${(usd || 0).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+          <td>${st?.label || o.status}</td>
+        </tr>`;
+    }).join("");
+
+    // KPI'lar
+    const totalUSD = filtered.reduce((s, o) => s + (orderTotalUSD ? orderTotalUSD(o, rates) : toUSD(orderTotal(o), o.currency, rates)), 0);
+    const totalPaidUSD = filtered.reduce((s, o) => s + toUSD(orderPaidAmount(o, payments), o.currency, rates), 0);
+    const shipped = filtered.filter((o) => o.actualShipmentDate).length;
+
+    // Filtre özeti
+    const filters = [];
+    if (search) filters.push(`Arama: "${search}"`);
+    if (statusFilter) filters.push(`Durum: ${ORDER_STATUSES.find((s) => s.key === statusFilter)?.label}`);
+    if (customerFilter) filters.push(`Müşteri: ${customers.find((c) => c.id === customerFilter)?.name}`);
+    if (curFilter) filters.push(`Para Birimi: ${curFilter}`);
+    if (dateRange.from || dateRange.to) filters.push(`Tarih: ${dateRange.from || "..."} → ${dateRange.to || "..."}`);
+
+    const content = `
+      <div class="kpi-grid">
+        <div class="kpi"><div class="kpi-label">Toplam Sipariş</div><div class="kpi-value">${filtered.length}</div></div>
+        <div class="kpi"><div class="kpi-label">Sevk Edilen</div><div class="kpi-value">${shipped}</div></div>
+        <div class="kpi"><div class="kpi-label">Toplam Ciro (USD)</div><div class="kpi-value">$${totalUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">Tahsil (USD)</div><div class="kpi-value" style="color:#3E7D5A">$${totalPaidUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+      </div>
+      ${filters.length ? `<div style="font-size:10px;padding:6px 10px;background:#F8F5EE;border-radius:3px;margin-bottom:8px"><strong>Filtreler:</strong> ${filters.join(" · ")}</div>` : ""}
+      <table>
+        <thead>
+          <tr>
+            <th>Sipariş No</th>
+            <th>Müşteri</th>
+            <th>Sipariş</th>
+            <th>Plan. Sevk</th>
+            <th>Fiili Sevk</th>
+            <th class="center">Klm</th>
+            <th class="right">Tutar</th>
+            <th class="right">Tahsil</th>
+            <th class="right">Kalan</th>
+            <th class="right">USD</th>
+            <th>Durum</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+
+    printPDF({
+      title: "Sipariş Listesi",
+      subtitle: `${filtered.length} sipariş${filters.length ? " · filtreli" : ""}`,
+      contentHtml: content,
+      orientation: "landscape",
+    });
+  };
+
   const handleExport = () => {
     if (!orders.length) return showToast("Aktarılacak sipariş yok", "error");
     const rows = orders.flatMap((o) => {
@@ -3045,6 +3356,7 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
     <div>
       <PageHeader title="Siparişler" subtitle={`${orders.length} sipariş · Sipariş içinde kalemler ve ödeme planı birlikte yönetilir`}>
         <input id="order-import" type="file" accept=".xlsx,.xls" onChange={(e) => { handleImport(e.target.files[0]); e.target.value = ""; }} className="hidden" />
+        <Btn variant="ghost" size="sm" icon={FileDown} onClick={printList}>PDF</Btn>
         <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>Dışa Aktar</Btn>
         {canEdit && <>
           <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>Şablon</Btn>
@@ -4141,6 +4453,184 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
   const ship = SHIPPING_METHODS.find((s) => s.key === order.shippingMethod);
   const ShipIcon = ship?.icon || Ship;
 
+  // Sipariş PDF — proforma stili
+  const printOrder = () => {
+    const totals = calcOrderTotals(order);
+    const remaining = total - paid;
+
+    // Kalemler tablosu
+    const itemRows = (order.items || []).map((it, idx) => {
+      const qty = Number(it.quantity) || 0;
+      const price = Number(it.unitPrice) || 0;
+      const disc = Number(it.discount) || 0;
+      const baseTotal = qty * price;
+      const lineTotal = baseTotal * (1 - disc / 100);
+      return `
+        <tr>
+          <td class="center">${idx + 1}</td>
+          <td><div class="text-mono">${htmlEscape(it.productCode || "—")}</div>${it.manufacturingCode ? `<div style="font-size:8px;color:#7A736A">${htmlEscape(it.manufacturingCode)}</div>` : ""}</td>
+          <td><div style="font-weight:700">${htmlEscape(it.nameTr || "—")}</div>${it.nameEn ? `<div style="font-style:italic;font-size:9px;color:#7A736A">${htmlEscape(it.nameEn)}</div>` : ""}</td>
+          <td class="right text-mono">${qty.toLocaleString("tr-TR")} ${htmlEscape(it.unit || "")}</td>
+          <td class="right text-mono">${fmtMoneyPDF(price, order.currency)}</td>
+          <td class="right text-mono">${disc > 0 ? `%${disc}` : "—"}</td>
+          <td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(lineTotal, order.currency)}</td>
+        </tr>`;
+    }).join("");
+
+    // Ödeme planı
+    const planRows = (order.paymentPlan || []).map((p) => {
+      const tp = PAYMENT_PLAN_TYPES.find((t) => t.key === p.type);
+      const meth = PAYMENT_METHODS.find((m) => m.key === p.method);
+      const linkedPayment = orderPayments.find((x) => x.planItemId === p.id);
+      const isPaid = linkedPayment?.status === "paid";
+      return `
+        <tr>
+          <td>${tp?.label || p.type}</td>
+          <td class="right">${p.percentage ? `%${p.percentage}` : "—"}</td>
+          <td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(p.amount, order.currency)}</td>
+          <td>${meth?.label || p.method || "—"}</td>
+          <td>${p.dueDate ? fmtDate(p.dueDate) : "—"}</td>
+          <td class="${isPaid ? "text-success" : "text-warning"}">${isPaid ? "✓ Tahsil" : "Bekliyor"}</td>
+        </tr>`;
+    }).join("");
+
+    // Tahsilat hareketleri
+    const paymentRows = orderPayments
+      .sort((a, b) => (b.paidDate || b.dueDate || "").localeCompare(a.paidDate || a.dueDate || ""))
+      .map((p) => {
+        const tp = PAYMENT_PLAN_TYPES.find((t) => t.key === p.type);
+        const meth = PAYMENT_METHODS.find((m) => m.key === p.method);
+        const st = PAYMENT_STATUSES.find((s) => s.key === p.status);
+        const ba = bankAccounts.find((x) => x.id === p.bankAccountId);
+        return `
+          <tr>
+            <td>${tp?.label || p.type}</td>
+            <td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(p.amount, p.currency)}</td>
+            <td>${meth?.label || "—"}</td>
+            <td>${p.paidDate ? fmtDate(p.paidDate) : "—"}</td>
+            <td>${ba?.bankName || "—"}</td>
+            <td class="${p.status==='paid'?'text-success':p.status==='overdue'?'text-danger':'text-warning'}">${st?.label || p.status}</td>
+          </tr>`;
+      }).join("");
+
+    const content = `
+      <div class="info-grid">
+        <div><div class="label">Sipariş No</div><div class="text-mono" style="font-size:13px;font-weight:700">${htmlEscape(order.orderNumber)}</div></div>
+        <div><div class="label">Durum</div><div style="font-weight:700">${status?.label || order.status}</div></div>
+        <div><div class="label">Sipariş Tarihi</div><div>${fmtDateLong(order.orderDate)}</div></div>
+        <div><div class="label">Planlanan Sevk</div><div>${order.shipmentDate ? fmtDateWithWeek(order.shipmentDate) : "—"}</div></div>
+        ${order.actualShipmentDate ? `<div><div class="label">Fiili Sevk</div><div class="text-success">${fmtDateWithWeek(order.actualShipmentDate)}</div></div>` : ""}
+        ${order.deliveryDate ? `<div><div class="label">Teslim Tarihi</div><div>${fmtDateLong(order.deliveryDate)}</div></div>` : ""}
+        ${order.invoiceNumber ? `<div><div class="label">Fatura No</div><div class="text-mono">${htmlEscape(order.invoiceNumber)}</div></div>` : ""}
+        ${order.billOfLading ? `<div><div class="label">Konşimento</div><div class="text-mono">${htmlEscape(order.billOfLading)}</div></div>` : ""}
+      </div>
+
+      <h2>Müşteri Bilgileri</h2>
+      <div class="info-grid">
+        <div><div class="label">Müşteri Kodu</div><div class="text-mono">${htmlEscape(customer?.code || "—")}</div></div>
+        <div><div class="label">Müşteri Adı</div><div style="font-weight:700">${htmlEscape(customer?.name || "—")}</div></div>
+        <div><div class="label">Ülke</div><div>${htmlEscape(customer?.country || "—")}</div></div>
+        <div><div class="label">Yetkili</div><div>${htmlEscape(customer?.contactPerson || "—")}</div></div>
+        <div><div class="label">E-posta</div><div>${htmlEscape(customer?.email || "—")}</div></div>
+        <div><div class="label">Telefon</div><div>${htmlEscape(customer?.phone || "—")}</div></div>
+      </div>
+
+      <h2>Sevkiyat Bilgileri</h2>
+      <div class="info-grid">
+        ${incoterm ? `<div><div class="label">Incoterms</div><div style="font-weight:700">${incoterm.key} — ${incoterm.label}</div></div>` : ""}
+        ${ship ? `<div><div class="label">Sevk Yöntemi</div><div>${ship.label}</div></div>` : ""}
+        ${order.portOfLoading ? `<div><div class="label">Yükleme Limanı</div><div>${htmlEscape(order.portOfLoading)}</div></div>` : ""}
+        ${order.portOfDischarge ? `<div><div class="label">Boşaltma Limanı</div><div>${htmlEscape(order.portOfDischarge)}</div></div>` : ""}
+      </div>
+
+      <h2>Sipariş Kalemleri (${(order.items || []).length})</h2>
+      <table>
+        <thead>
+          <tr>
+            <th class="center" style="width:24px">#</th>
+            <th style="width:90px">Ürün Kodu</th>
+            <th>İsim</th>
+            <th class="right" style="width:80px">Miktar</th>
+            <th class="right" style="width:90px">Birim Fiyat</th>
+            <th class="right" style="width:60px">İsk %</th>
+            <th class="right" style="width:90px">Tutar</th>
+          </tr>
+        </thead>
+        <tbody>${itemRows || `<tr><td colspan="7" style="text-align:center;color:#7A736A;padding:12px">Kalem yok</td></tr>`}</tbody>
+        <tfoot>
+          ${totals.discount > 0 || totals.vatRate > 0 ? `<tr><td colspan="6" class="right" style="font-weight:700;color:#7A736A">Ara Toplam</td><td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(totals.subtotal, order.currency)}</td></tr>` : ""}
+          ${totals.discount > 0 ? `<tr><td colspan="6" class="right text-warning">Sipariş İskontosu (${order.discountType === "percentage" ? "%" + order.discountValue : "tutar"})</td><td class="right text-mono text-warning">− ${fmtMoneyPDF(totals.discount, order.currency)}</td></tr>` : ""}
+          ${totals.vatRate > 0 ? `<tr><td colspan="6" class="right" style="font-weight:700;color:#7A736A">KDV (%${totals.vatRate})</td><td class="right text-mono" style="font-weight:700">+ ${fmtMoneyPDF(totals.vatAmount, order.currency)}</td></tr>` : ""}
+          <tr style="background:#C9A96120;border-top:2px solid #C9A961">
+            <td colspan="6" class="right" style="font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:0.05em">Genel Toplam</td>
+            <td class="right text-mono" style="font-weight:700;font-size:13px">${fmtMoneyPDF(totals.total, order.currency)}</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div class="summary-card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div class="label">Tahsilat Durumu</div>
+            <div style="font-size:18px;font-weight:700;margin-top:3px;color:${remaining > 0.01 ? "#B87333" : "#3E7D5A"}">
+              ${remaining > 0.01 ? `${fmtMoneyPDF(remaining, order.currency)} kalan` : "TAMAMI TAHSİL EDİLDİ"}
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:9px;color:#7A736A">Tahsil Edilen / Toplam</div>
+            <div style="font-size:13px;font-weight:700">${fmtMoneyPDF(paid, order.currency)} / ${fmtMoneyPDF(total, order.currency)}</div>
+            <div style="font-size:10px;color:#7A736A;margin-top:2px">% ${total > 0 ? Math.round(paid / total * 100) : 0}</div>
+          </div>
+        </div>
+      </div>
+
+      ${planRows ? `
+      <h2>Ödeme Planı (${(order.paymentPlan || []).length})</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Tip</th>
+            <th class="right" style="width:60px">%</th>
+            <th class="right" style="width:100px">Tutar</th>
+            <th>Yöntem</th>
+            <th style="width:90px">Vade</th>
+            <th style="width:80px">Durum</th>
+          </tr>
+        </thead>
+        <tbody>${planRows}</tbody>
+      </table>
+      ` : ""}
+
+      ${paymentRows ? `
+      <h2>Tahsilat Hareketi (${orderPayments.length})</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Tip</th>
+            <th class="right" style="width:100px">Tutar</th>
+            <th>Yöntem</th>
+            <th style="width:90px">Tahsil Tarihi</th>
+            <th>Banka</th>
+            <th style="width:80px">Durum</th>
+          </tr>
+        </thead>
+        <tbody>${paymentRows}</tbody>
+      </table>
+      ` : ""}
+
+      ${order.notes ? `
+      <h2>Notlar</h2>
+      <div style="padding:8px 12px;background:#F8F5EE;border-left:3px solid #C9A961;font-size:11px">${htmlEscape(order.notes)}</div>
+      ` : ""}
+    `;
+
+    printPDF({
+      title: `Sipariş ${order.orderNumber}`,
+      subtitle: `${customer?.name || "—"} · ${fmtDateLong(order.orderDate)}`,
+      contentHtml: content,
+    });
+  };
+
   return (
     <Modal
       open={!!order}
@@ -4149,6 +4639,7 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
       subtitle={`${customer?.name || "—"} · ${fmtDateLong(order.orderDate)}`}
       size="2xl"
       footer={<>
+        <Btn variant="secondary" size="sm" icon={FileDown} onClick={printOrder}>PDF</Btn>
         {canEdit && onEdit && (
           <Btn variant="primary" size="sm" icon={Pencil} onClick={() => { onEdit(order); onClose(); }}>Siparişi Düzenle</Btn>
         )}
@@ -4476,6 +4967,70 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
     showToast("Ödeme kaydı silindi", "success");
   };
 
+  // Ödemeler listesi PDF
+  const printList = () => {
+    if (!filtered.length) return showToast("Yazdırılacak ödeme yok", "error");
+
+    const rows = filtered.map((p) => {
+      const tp = PAYMENT_PLAN_TYPES.find((t) => t.key === p.type);
+      const meth = PAYMENT_METHODS.find((m) => m.key === p.method);
+      const st = PAYMENT_STATUSES.find((s) => s.key === p.status);
+      return `
+        <tr>
+          <td class="text-mono">${htmlEscape(p.order?.orderNumber || "—")}</td>
+          <td><div style="font-weight:700">${htmlEscape(p.customer?.name || "—")}</div><div style="font-size:9px;color:#7A736A">${htmlEscape(p.customer?.country || "")}</div></td>
+          <td>${tp?.label || p.type}</td>
+          <td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(p.amount, p.currency)}</td>
+          <td>${meth?.label || "—"}</td>
+          <td>${p.dueDate ? fmtDate(p.dueDate) : "—"}</td>
+          <td>${p.paidDate ? `<span class="text-success">${fmtDate(p.paidDate)}</span>` : "—"}</td>
+          <td class="${p.status==='paid'?'text-success':p.status==='overdue'?'text-danger':p.status==='partial'?'text-warning':''}" style="font-weight:700">${st?.label || p.status}</td>
+        </tr>`;
+    }).join("");
+
+    // KPI'lar (USD)
+    const totalPending = filtered.filter((p) => p.status === "pending").reduce((s, p) => s + toUSD(Number(p.amount) || 0, p.currency, rates), 0);
+    const totalPaid = filtered.filter((p) => p.status === "paid").reduce((s, p) => s + toUSD(Number(p.amount) || 0, p.currency, rates), 0);
+    const totalOverdue = filtered.filter((p) => p.status === "overdue").reduce((s, p) => s + toUSD(Number(p.amount) || 0, p.currency, rates), 0);
+
+    const filters = [];
+    if (search) filters.push(`Arama: "${search}"`);
+    if (statusFilter) filters.push(`Durum: ${PAYMENT_STATUSES.find((s) => s.key === statusFilter)?.label}`);
+    if (typeFilter) filters.push(`Tip: ${PAYMENT_PLAN_TYPES.find((t) => t.key === typeFilter)?.label}`);
+
+    const content = `
+      <div class="kpi-grid">
+        <div class="kpi"><div class="kpi-label">Toplam Kayıt</div><div class="kpi-value">${filtered.length}</div></div>
+        <div class="kpi"><div class="kpi-label">Tahsil Edilen (USD)</div><div class="kpi-value" style="color:#3E7D5A">$${totalPaid.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">Bekleyen (USD)</div><div class="kpi-value" style="color:#B87333">$${totalPending.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">Gecikmiş (USD)</div><div class="kpi-value" style="color:#A6383D">$${totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+      </div>
+      ${filters.length ? `<div style="font-size:10px;padding:6px 10px;background:#F8F5EE;border-radius:3px;margin-bottom:8px"><strong>Filtreler:</strong> ${filters.join(" · ")}</div>` : ""}
+      <table>
+        <thead>
+          <tr>
+            <th>Sipariş</th>
+            <th>Müşteri</th>
+            <th>Tip</th>
+            <th class="right">Tutar</th>
+            <th>Yöntem</th>
+            <th>Vade</th>
+            <th>Tahsil Tarihi</th>
+            <th>Durum</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+
+    printPDF({
+      title: "Ödeme Listesi",
+      subtitle: `${filtered.length} ödeme${filters.length ? " · filtreli" : ""}`,
+      contentHtml: content,
+      orientation: "landscape",
+    });
+  };
+
   const handleExport = () => {
     if (!payments.length) return showToast("Aktarılacak ödeme yok", "error");
     const rows = enriched.map((p) => ({
@@ -4520,6 +5075,7 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
             Liste
           </button>
         </div>
+        <Btn variant="ghost" size="sm" icon={FileDown} onClick={printList}>PDF</Btn>
         <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>Dışa Aktar</Btn>
       </PageHeader>
 
@@ -4888,6 +5444,98 @@ function CashFlowView({ orders, customers, payments, rates, setView }) {
     return Object.values(buckets).sort((a, b) => a.month.localeCompare(b.month));
   }, [filteredPayments, rates]);
 
+  // Nakit akışı PDF
+  const printList = () => {
+    if (!filteredPayments.length) return alert("Yazdırılacak ödeme yok");
+
+    // Ödeme satırları (vadeye göre sıralı)
+    const sorted = [...filteredPayments].sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""));
+    const rows = sorted.map((p) => {
+      const order = orders.find((o) => o.id === p.orderId);
+      const cust = customers.find((c) => c.id === order?.customerId);
+      const tp = PAYMENT_PLAN_TYPES.find((t) => t.key === p.type);
+      const meth = PAYMENT_METHODS.find((m) => m.key === p.method);
+      const usd = toUSD(Number(p.amount) || 0, p.currency, rates);
+      const isOverdue = p.status === "overdue";
+      const today = todayISO();
+      const daysUntil = p.dueDate ? Math.ceil((new Date(p.dueDate) - new Date(today)) / 86400000) : 0;
+      return `
+        <tr>
+          <td>${p.dueDate ? `<div style="font-weight:700">${fmtDate(p.dueDate)}</div><div style="font-size:9px;color:${isOverdue ? '#A6383D' : '#7A736A'}">${isOverdue ? `${Math.abs(daysUntil)} gün gecikti` : daysUntil === 0 ? "bugün" : `${daysUntil} gün sonra`}</div>` : "—"}</td>
+          <td class="text-mono">${htmlEscape(order?.orderNumber || "—")}</td>
+          <td><div style="font-weight:700">${htmlEscape(cust?.name || "—")}</div><div style="font-size:9px;color:#7A736A">${htmlEscape(cust?.country || "")}</div></td>
+          <td>${tp?.label || p.type}</td>
+          <td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(p.amount, p.currency)}</td>
+          <td class="right text-mono" style="color:#7A736A">$${usd.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+          <td>${meth?.label || "—"}</td>
+          <td class="${isOverdue ? 'text-danger' : 'text-warning'}" style="font-weight:700">${isOverdue ? "GECİKMİŞ" : "Bekliyor"}</td>
+        </tr>`;
+    }).join("");
+
+    // Aylık özet
+    const monthlyRows = monthlyChart.map((m) => `
+      <tr>
+        <td style="font-weight:700">${m.label}</td>
+        <td class="right text-success text-mono">$${(m.expected || 0).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+        <td class="right text-danger text-mono">$${(m.overdue || 0).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+        <td class="right text-mono" style="font-weight:700">$${((m.expected || 0) + (m.overdue || 0)).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+      </tr>`).join("");
+
+    const filters = [];
+    if (statusFilter !== "all") filters.push(statusFilter === "pending" ? "Sadece Bekleyen" : "Sadece Gecikmiş");
+    if (customerFilter) filters.push(`Müşteri: ${customers.find((c) => c.id === customerFilter)?.name}`);
+    if (orderSearch) filters.push(`Sipariş: "${orderSearch}"`);
+
+    const content = `
+      <div class="kpi-grid">
+        <div class="kpi"><div class="kpi-label">Önümüzdeki ${period} Gün</div><div class="kpi-value">${filteredPayments.length} ödeme</div></div>
+        <div class="kpi"><div class="kpi-label">Toplam (USD)</div><div class="kpi-value">$${stats.total.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">7 Gün İçinde</div><div class="kpi-value" style="color:#3E7D5A">$${stats.next7.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">Gecikmiş</div><div class="kpi-value" style="color:#A6383D">$${stats.totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+      </div>
+      ${filters.length ? `<div style="font-size:10px;padding:6px 10px;background:#F8F5EE;border-radius:3px;margin-bottom:8px"><strong>Filtreler:</strong> ${filters.join(" · ")}</div>` : ""}
+
+      ${monthlyRows ? `
+      <h2>Aylık Tahsilat Projeksiyonu</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Ay</th>
+            <th class="right">Beklenen (USD)</th>
+            <th class="right">Gecikmiş (USD)</th>
+            <th class="right">Toplam (USD)</th>
+          </tr>
+        </thead>
+        <tbody>${monthlyRows}</tbody>
+      </table>
+      ` : ""}
+
+      <h2>Detaylı Liste (Vade Tarihine Göre)</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Vade</th>
+            <th>Sipariş</th>
+            <th>Müşteri</th>
+            <th>Tip</th>
+            <th class="right">Tutar</th>
+            <th class="right">USD</th>
+            <th>Yöntem</th>
+            <th>Durum</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+
+    printPDF({
+      title: "Nakit Akışı Projeksiyonu",
+      subtitle: `Önümüzdeki ${period} gün${filters.length ? " · filtreli" : ""}`,
+      contentHtml: content,
+      orientation: "landscape",
+    });
+  };
+
   return (
     <div>
       <PageHeader title="Nakit Akışı" subtitle="Yaklaşan tahsilatların net tarih listesi · Gecikmişler her zaman gösterilir">
@@ -4903,6 +5551,7 @@ function CashFlowView({ orders, customers, payments, rates, setView }) {
           <option value="180">180 gün</option>
           <option value="365">1 yıl</option>
         </Select>
+        <Btn variant="ghost" size="sm" icon={FileDown} onClick={printList}>PDF</Btn>
       </PageHeader>
 
       <div className="p-8 space-y-4">
@@ -5169,6 +5818,152 @@ function SummaryReport({ orders = [], customers = [], products = [], payments = 
     return { orderCount, orderTotalUSD: totalOrdersUSD, shippedCount, shippedTotalUSD, paidCount, paidTotalUSD, customerCount };
   }, [filteredOrders, filteredPayments, rates]);
 
+  // Özet rapor PDF
+  const printSummary = () => {
+    // Top 10 müşteri
+    const customerStats = {};
+    filteredOrders.forEach((o) => {
+      if (!customerStats[o.customerId]) customerStats[o.customerId] = { orderCount: 0, totalUSD: 0 };
+      customerStats[o.customerId].orderCount++;
+      customerStats[o.customerId].totalUSD += orderTotalUSD(o, rates);
+    });
+    const topCustomers = Object.entries(customerStats)
+      .map(([id, st]) => ({ ...st, customer: customers.find((c) => c.id === id) }))
+      .filter((x) => x.customer)
+      .sort((a, b) => b.totalUSD - a.totalUSD)
+      .slice(0, 10);
+
+    // Ülke bazlı
+    const countryStats = {};
+    filteredOrders.forEach((o) => {
+      const c = customers.find((x) => x.id === o.customerId);
+      const country = c?.country || "—";
+      if (!countryStats[country]) countryStats[country] = { count: 0, totalUSD: 0 };
+      countryStats[country].count++;
+      countryStats[country].totalUSD += orderTotalUSD(o, rates);
+    });
+    const topCountries = Object.entries(countryStats)
+      .map(([country, st]) => ({ country, ...st }))
+      .sort((a, b) => b.totalUSD - a.totalUSD)
+      .slice(0, 10);
+
+    // Top ürünler (kalem bazında)
+    const productStats = {};
+    filteredOrders.forEach((o) => {
+      (o.items || []).forEach((it) => {
+        const k = it.productCode || "?";
+        if (!productStats[k]) productStats[k] = { name: it.nameTr || it.nameEn || "—", qty: 0, totalUSD: 0, unit: it.unit || "" };
+        productStats[k].qty += Number(it.quantity) || 0;
+        const lineTotal = (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0) * (1 - (Number(it.discount) || 0) / 100);
+        productStats[k].totalUSD += toUSD(lineTotal, o.currency, rates);
+      });
+    });
+    const topProducts = Object.entries(productStats)
+      .map(([code, st]) => ({ code, ...st }))
+      .sort((a, b) => b.totalUSD - a.totalUSD)
+      .slice(0, 10);
+
+    const customerRows = topCustomers.map((c, i) => `
+      <tr>
+        <td class="center" style="font-weight:700">${i + 1}</td>
+        <td class="text-mono">${htmlEscape(c.customer.code)}</td>
+        <td><div style="font-weight:700">${htmlEscape(c.customer.name)}</div><div style="font-size:9px;color:#7A736A">${htmlEscape(c.customer.country || "")}</div></td>
+        <td class="center">${c.orderCount}</td>
+        <td class="right text-mono" style="font-weight:700">$${c.totalUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+      </tr>`).join("");
+
+    const countryRows = topCountries.map((c, i) => `
+      <tr>
+        <td class="center" style="font-weight:700">${i + 1}</td>
+        <td style="font-weight:700">${htmlEscape(c.country)}</td>
+        <td class="center">${c.count}</td>
+        <td class="right text-mono" style="font-weight:700">$${c.totalUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+      </tr>`).join("");
+
+    const productRows = topProducts.map((p, i) => `
+      <tr>
+        <td class="center" style="font-weight:700">${i + 1}</td>
+        <td class="text-mono">${htmlEscape(p.code)}</td>
+        <td style="font-weight:700">${htmlEscape(p.name)}</td>
+        <td class="right text-mono">${p.qty.toLocaleString("tr-TR")} ${htmlEscape(p.unit)}</td>
+        <td class="right text-mono" style="font-weight:700">$${p.totalUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+      </tr>`).join("");
+
+    const dateBasisLabel = dateBasis === "shipmentDate" ? "Sevk Tarihi" : "Sipariş Tarihi";
+
+    const content = `
+      <div class="info-grid">
+        <div><div class="label">Tarih Aralığı</div><div style="font-weight:700">${fmtDateLong(dateRange.from)} - ${fmtDateLong(dateRange.to)}</div></div>
+        <div><div class="label">Tarih Baz Alındı</div><div style="font-weight:700">${dateBasisLabel}</div></div>
+      </div>
+
+      <h2>Özet Metrikler</h2>
+      <div class="kpi-grid">
+        <div class="kpi"><div class="kpi-label">Toplam Sipariş</div><div class="kpi-value">${stats.orderCount}</div></div>
+        <div class="kpi"><div class="kpi-label">Toplam Müşteri</div><div class="kpi-value">${stats.customerCount}</div></div>
+        <div class="kpi"><div class="kpi-label">Toplam Ciro (USD)</div><div class="kpi-value">$${stats.orderTotalUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">Sevkiyat Cirosu</div><div class="kpi-value" style="color:#3E7D5A">$${stats.shippedTotalUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">Sevk Edilen</div><div class="kpi-value">${stats.shippedCount}</div></div>
+        <div class="kpi"><div class="kpi-label">Tahsil Edilen</div><div class="kpi-value" style="color:#3E7D5A">$${stats.paidTotalUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">Tahsilat Sayısı</div><div class="kpi-value">${stats.paidCount}</div></div>
+        <div class="kpi"><div class="kpi-label">Ortalama Sipariş</div><div class="kpi-value">$${(stats.orderCount > 0 ? stats.orderTotalUSD / stats.orderCount : 0).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+      </div>
+
+      ${customerRows ? `
+      <h2>En Yüksek Cirolu Müşteriler (Top 10)</h2>
+      <table>
+        <thead>
+          <tr>
+            <th class="center" style="width:30px">#</th>
+            <th>Kod</th>
+            <th>Müşteri</th>
+            <th class="center">Sipariş</th>
+            <th class="right">Ciro (USD)</th>
+          </tr>
+        </thead>
+        <tbody>${customerRows}</tbody>
+      </table>
+      ` : ""}
+
+      ${countryRows ? `
+      <h2>Ülke Bazlı Ciro (Top 10)</h2>
+      <table>
+        <thead>
+          <tr>
+            <th class="center" style="width:30px">#</th>
+            <th>Ülke</th>
+            <th class="center">Sipariş</th>
+            <th class="right">Ciro (USD)</th>
+          </tr>
+        </thead>
+        <tbody>${countryRows}</tbody>
+      </table>
+      ` : ""}
+
+      ${productRows ? `
+      <h2>En Çok Satan Ürünler (Top 10)</h2>
+      <table>
+        <thead>
+          <tr>
+            <th class="center" style="width:30px">#</th>
+            <th>Kod</th>
+            <th>İsim</th>
+            <th class="right">Toplam Adet</th>
+            <th class="right">Ciro (USD)</th>
+          </tr>
+        </thead>
+        <tbody>${productRows}</tbody>
+      </table>
+      ` : ""}
+    `;
+
+    printPDF({
+      title: "Özet Rapor",
+      subtitle: `${fmtDateLong(dateRange.from)} - ${fmtDateLong(dateRange.to)} · ${dateBasisLabel} bazlı`,
+      contentHtml: content,
+    });
+  };
+
   // Excel'e aktarma — her şey
   const exportFullReport = () => {
     const wb = XLSX.utils.book_new();
@@ -5266,6 +6061,7 @@ function SummaryReport({ orders = [], customers = [], products = [], payments = 
               const d = new Date();
               setDateRange({ from: `${d.getFullYear()}-01-01`, to: todayISO() });
             }}>Bu yıl</Btn>
+            <Btn variant="secondary" size="sm" icon={FileDown} onClick={printSummary}>PDF</Btn>
             <Btn variant="primary" size="sm" icon={FileDown} onClick={exportFullReport}>Excel'e Tüm Rapor</Btn>
           </div>
         </div>

@@ -341,6 +341,28 @@ const fmtDateLong = (d) => {
   return dt.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
 };
 
+// ISO 8601 hafta numarası — "W15" gibi gösterilir
+function getISOWeek(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  const target = new Date(d.valueOf());
+  const dayNr = (d.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3);
+  const firstThursday = target.valueOf();
+  target.setMonth(0, 1);
+  if (target.getDay() !== 4) {
+    target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+  }
+  return 1 + Math.ceil((firstThursday - target) / 604800000);
+}
+
+const fmtDateWithWeek = (d) => {
+  if (!d) return "—";
+  const w = getISOWeek(d);
+  return w ? `${fmtDate(d)} · W${w}` : fmtDate(d);
+};
+
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const daysBetween = (a, b) => {
@@ -2005,8 +2027,201 @@ function CustomerDetailModal({ customer, onClose, orders, payments, bankAccounts
   const custOrders = orders.filter((o) => o.customerId === customer.id).sort((a, b) => (b.orderDate || "").localeCompare(a.orderDate || ""));
   const custPayments = payments.filter((p) => custOrders.some((o) => o.id === p.orderId));
 
+  // Hesap ekstresi yazdır — yeni pencere aç, HTML render et, kullanıcı PDF'e kaydetsin
+  const printStatement = () => {
+    const w = window.open("", "_blank", "width=900,height=700");
+    if (!w) { alert("Popup engellendi. Tarayıcı ayarlarından bu site için popup'a izin ver."); return; }
+
+    // Para birimi bazında özet
+    const curRows = Object.keys(customer.totalsByCurrency || {}).map((cur) => {
+      const total = customer.totalsByCurrency[cur] || 0;
+      const paid = customer.paidByCurrency?.[cur] || 0;
+      const open = customer.openByCurrency?.[cur] || 0;
+      return `
+        <tr>
+          <td style="padding:8px;border:1px solid #ccc;font-weight:bold">${cur}</td>
+          <td style="padding:8px;border:1px solid #ccc;text-align:right">${total.toLocaleString("tr-TR", {minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="padding:8px;border:1px solid #ccc;text-align:right;color:#3E7D5A">${paid.toLocaleString("tr-TR", {minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="padding:8px;border:1px solid #ccc;text-align:right;color:#B87333;font-weight:bold">${open.toLocaleString("tr-TR", {minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        </tr>`;
+    }).join("");
+
+    // Sipariş listesi
+    const orderRows = custOrders.map((o) => {
+      const t = orderTotal(o);
+      const paid = orderPaidAmount(o, payments);
+      const remaining = t - paid;
+      const st = ORDER_STATUSES.find((s) => s.key === o.status);
+      return `
+        <tr>
+          <td style="padding:6px 8px;border:1px solid #ccc;font-family:monospace;font-weight:bold">${o.orderNumber}</td>
+          <td style="padding:6px 8px;border:1px solid #ccc">${fmtDate(o.orderDate)}</td>
+          <td style="padding:6px 8px;border:1px solid #ccc">${o.actualShipmentDate ? fmtDate(o.actualShipmentDate) : (o.shipmentDate ? fmtDate(o.shipmentDate) + " (plan)" : "—")}</td>
+          <td style="padding:6px 8px;border:1px solid #ccc">${st?.label || o.status}</td>
+          <td style="padding:6px 8px;border:1px solid #ccc;text-align:right">${o.currency} ${t.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="padding:6px 8px;border:1px solid #ccc;text-align:right;color:#3E7D5A">${o.currency} ${paid.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="padding:6px 8px;border:1px solid #ccc;text-align:right;color:${remaining > 0.01 ? "#B87333" : "#3E7D5A"};font-weight:bold">${o.currency} ${remaining.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        </tr>`;
+    }).join("");
+
+    // Tahsilat hareketi
+    const paymentRows = custPayments
+      .sort((a, b) => (b.paidDate || b.dueDate || "").localeCompare(a.paidDate || a.dueDate || ""))
+      .map((p) => {
+        const o = custOrders.find((x) => x.id === p.orderId);
+        const tp = PAYMENT_PLAN_TYPES.find((t) => t.key === p.type);
+        const st = PAYMENT_STATUSES.find((s) => s.key === p.status);
+        return `
+          <tr>
+            <td style="padding:6px 8px;border:1px solid #ccc;font-family:monospace">${o?.orderNumber || "—"}</td>
+            <td style="padding:6px 8px;border:1px solid #ccc">${tp?.label || p.type}</td>
+            <td style="padding:6px 8px;border:1px solid #ccc">${p.dueDate ? fmtDate(p.dueDate) : "—"}</td>
+            <td style="padding:6px 8px;border:1px solid #ccc">${p.paidDate ? fmtDate(p.paidDate) : "—"}</td>
+            <td style="padding:6px 8px;border:1px solid #ccc;text-align:right">${p.currency} ${(Number(p.amount)||0).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+            <td style="padding:6px 8px;border:1px solid #ccc;color:${p.status==='paid'?'#3E7D5A':p.status==='overdue'?'#A6383D':'#7A736A'};font-weight:bold">${st?.label || p.status}</td>
+          </tr>`;
+      }).join("");
+
+    const html = `<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Hesap Ekstresi - ${customer.name}</title>
+<style>
+  @page { size: A4; margin: 1.5cm; }
+  body { font-family: Calibri, Arial, sans-serif; font-size: 11px; color: #0F1A2E; margin: 0; padding: 20px; line-height: 1.4; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #C9A961; padding-bottom: 12px; margin-bottom: 16px; }
+  h1 { font-size: 18px; margin: 0 0 4px; color: #0F1A2E; }
+  h2 { font-size: 13px; margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #C9A961; color: #1E3A5F; }
+  .subtitle { font-size: 10px; color: #7A736A; }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; margin-bottom: 12px; font-size: 11px; }
+  .info-grid div { padding: 3px 0; }
+  .label { color: #7A736A; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 10px; }
+  th { padding: 8px; border: 1px solid #ccc; background: #F8F5EE; text-align: left; font-weight: bold; color: #0F1A2E; font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .summary-card { background: #F8F5EE; border: 1px solid #C9A961; padding: 12px 16px; border-radius: 4px; margin: 8px 0 16px; }
+  .footer { margin-top: 24px; padding-top: 12px; border-top: 1px solid #ccc; font-size: 9px; color: #7A736A; text-align: center; }
+  @media print { .no-print { display: none; } body { padding: 0; } }
+  .print-btn { position: fixed; top: 10px; right: 10px; padding: 10px 20px; background: #1E3A5F; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; }
+</style>
+</head>
+<body>
+  <button class="print-btn no-print" onclick="window.print()">🖨️ Yazdır / PDF Kaydet</button>
+  <div class="header">
+    <div>
+      <h1>HESAP EKSTRESİ</h1>
+      <div class="subtitle">İhracat Operasyonları · Hesap Hareketi</div>
+    </div>
+    <div style="text-align:right;font-size:10px;color:#7A736A">
+      <div>Hazırlanma Tarihi:</div>
+      <div style="font-weight:bold;color:#0F1A2E;font-size:11px">${fmtDateLong(todayISO())}</div>
+    </div>
+  </div>
+
+  <h2>Müşteri Bilgileri</h2>
+  <div class="info-grid">
+    <div><div class="label">Müşteri Kodu</div><div style="font-family:monospace;font-weight:bold">${customer.code || "—"}</div></div>
+    <div><div class="label">Müşteri Adı</div><div style="font-weight:bold">${customer.name}</div></div>
+    <div><div class="label">Ülke</div><div>${customer.country || "—"}</div></div>
+    <div><div class="label">Yetkili Kişi</div><div>${customer.contactPerson || "—"}</div></div>
+    <div><div class="label">E-posta</div><div>${customer.email || "—"}</div></div>
+    <div><div class="label">Telefon</div><div>${customer.phone || "—"}</div></div>
+    ${customer.address ? `<div style="grid-column:span 2"><div class="label">Adres</div><div>${customer.address}</div></div>` : ""}
+    ${customer.taxNumber ? `<div><div class="label">Vergi No</div><div style="font-family:monospace">${customer.taxNumber}</div></div>` : ""}
+  </div>
+
+  <h2>Para Birimi Bazında Bakiye Özeti</h2>
+  ${curRows ? `
+  <table>
+    <thead>
+      <tr>
+        <th>Para Birimi</th>
+        <th style="text-align:right">Toplam Ciro</th>
+        <th style="text-align:right">Tahsil Edilen</th>
+        <th style="text-align:right">Açık Bakiye (Alacak)</th>
+      </tr>
+    </thead>
+    <tbody>${curRows}</tbody>
+  </table>
+  ` : '<div style="color:#7A736A;font-style:italic">Bu müşteri için henüz işlem yok.</div>'}
+
+  <div class="summary-card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div class="label">Toplam Açık Bakiye (USD karşılığı)</div>
+        <div style="font-size:20px;font-weight:bold;color:${customer.openBalance > 0 ? "#B87333" : "#3E7D5A"};margin-top:4px">
+          ${customer.openBalance > 0 ? "ALACAK" : "BAKİYE YOK"}: $${(customer.openBalance || 0).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}
+        </div>
+      </div>
+      <div style="text-align:right;font-size:10px;color:#7A736A">
+        <div>Toplam Sipariş: <strong style="color:#0F1A2E">${custOrders.length}</strong></div>
+        <div>Toplam Ciro (USD): <strong style="color:#0F1A2E">$${(customer.totalUSD || 0).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Sipariş Listesi (${custOrders.length})</h2>
+  ${custOrders.length > 0 ? `
+  <table>
+    <thead>
+      <tr>
+        <th>Sipariş No</th>
+        <th>Tarih</th>
+        <th>Sevk</th>
+        <th>Durum</th>
+        <th style="text-align:right">Tutar</th>
+        <th style="text-align:right">Tahsil</th>
+        <th style="text-align:right">Kalan</th>
+      </tr>
+    </thead>
+    <tbody>${orderRows}</tbody>
+  </table>
+  ` : '<div style="color:#7A736A;font-style:italic">Sipariş yok.</div>'}
+
+  <h2>Ödeme Hareketi (${custPayments.length})</h2>
+  ${custPayments.length > 0 ? `
+  <table>
+    <thead>
+      <tr>
+        <th>Sipariş</th>
+        <th>Tip</th>
+        <th>Vade</th>
+        <th>Tahsil Tarihi</th>
+        <th style="text-align:right">Tutar</th>
+        <th>Durum</th>
+      </tr>
+    </thead>
+    <tbody>${paymentRows}</tbody>
+  </table>
+  ` : '<div style="color:#7A736A;font-style:italic">Ödeme kaydı yok.</div>'}
+
+  ${customer.notes ? `
+  <h2>Notlar</h2>
+  <div style="padding:10px;background:#F8F5EE;border-left:3px solid #C9A961">${customer.notes}</div>
+  ` : ""}
+
+  <div class="footer">
+    Bu ekstre İhracat Operasyonları sisteminden ${fmtDateLong(todayISO())} tarihinde otomatik oluşturulmuştur.
+  </div>
+
+  <script>
+    // Sayfa yüklenince yazdırma diyalogunu otomatik aç
+    window.addEventListener('load', () => setTimeout(() => window.print(), 500));
+  </script>
+</body>
+</html>`;
+
+    w.document.write(html);
+    w.document.close();
+  };
+
   return (
-    <Modal open={!!customer} onClose={onClose} title={customer.name} subtitle={`${customer.code} · ${customer.country || "—"}`} size="xl">
+    <Modal open={!!customer} onClose={onClose} title={customer.name} subtitle={`${customer.code} · ${customer.country || "—"}`} size="xl"
+      footer={<>
+        <Btn variant="secondary" size="sm" icon={FileDown} onClick={printStatement}>PDF Hesap Ekstresi</Btn>
+        <Btn variant="ghost" size="sm" onClick={onClose}>Kapat</Btn>
+      </>}
+    >
       <div className="space-y-5">
         {/* Üst metrikler */}
         <div className="grid grid-cols-4 gap-3">
@@ -2757,28 +2972,66 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
   const total = (o) => orderTotal(o);
 
   const columns = [
-    { key: "orderNumber", label: "Sipariş No", render: (r) => <span className="font-mono text-xs font-semibold" style={{ color: TOKENS.navy }}>{r.orderNumber}</span> },
+    { key: "orderNumber", label: "Sipariş No", render: (r) => <span className="font-mono text-xs font-bold" style={{ color: TOKENS.navy }}>{r.orderNumber}</span> },
     { key: "customer", label: "Müşteri", sortValue: (r) => customers.find((c) => c.id === r.customerId)?.name || "", render: (r) => {
       const c = customers.find((x) => x.id === r.customerId);
       return (
         <div>
-          <div className="font-medium" style={{ color: TOKENS.ink }}>{c?.name || "—"}</div>
-          <div className="text-[11px]" style={{ color: TOKENS.muted }}>{c?.country || ""}</div>
+          <div className="font-bold text-xs" style={{ color: TOKENS.ink }}>{c?.name || "—"}</div>
+          <div className="text-[10px] font-semibold" style={{ color: TOKENS.muted }}>{c?.country || ""}</div>
         </div>
       );
     }},
-    { key: "orderDate", label: "Tarih", render: (r) => fmtDate(r.orderDate) },
-    { key: "items", label: "Kalem", align: "center", sortValue: (r) => (r.items || []).length, render: (r) => (r.items || []).length },
-    { key: "total", label: "Tutar", align: "right", sortValue: (r) => total(r), render: (r) => fmtMoney(total(r), r.currency) },
-    { key: "totalUSD", label: "USD", align: "right", sortValue: (r) => toUSD(total(r), r.currency, rates), render: (r) => <span style={{ color: TOKENS.muted }}>{fmtMoney(toUSD(total(r), r.currency, rates), "USD", { compact: true })}</span> },
-    { key: "paid", label: "Ödeme", align: "right", sortValue: (r) => orderPaidAmount(r, payments) / (total(r) || 1), render: (r) => {
+    { key: "orderDate", label: "Sipariş", sortValue: (r) => r.orderDate || "", render: (r) => (
+      <div>
+        <div className="text-xs font-semibold">{fmtDate(r.orderDate)}</div>
+        <div className="text-[10px] font-bold" style={{ color: TOKENS.muted }}>W{getISOWeek(r.orderDate) || "—"}</div>
+      </div>
+    )},
+    { key: "shipmentDate", label: "Plan. Sevk", sortValue: (r) => r.shipmentDate || "", render: (r) => r.shipmentDate ? (
+      <div>
+        <div className="text-xs font-semibold">{fmtDate(r.shipmentDate)}</div>
+        <div className="text-[10px] font-bold" style={{ color: TOKENS.muted }}>W{getISOWeek(r.shipmentDate)}</div>
+      </div>
+    ) : <span style={{ color: TOKENS.muted }}>—</span> },
+    { key: "actualShipmentDate", label: "Fiili Sevk", sortValue: (r) => r.actualShipmentDate || "", render: (r) => r.actualShipmentDate ? (
+      <div>
+        <div className="text-xs font-bold" style={{ color: TOKENS.forest }}>{fmtDate(r.actualShipmentDate)}</div>
+        <div className="text-[10px] font-bold" style={{ color: TOKENS.forest + "cc" }}>W{getISOWeek(r.actualShipmentDate)}</div>
+      </div>
+    ) : <span style={{ color: TOKENS.muted }}>—</span> },
+    { key: "items", label: "Klm", align: "center", sortValue: (r) => (r.items || []).length, render: (r) => <span className="font-bold">{(r.items || []).length}</span> },
+    { key: "total", label: "Tutar / Ödenen", align: "right", sortValue: (r) => total(r), render: (r) => {
+      const t = total(r);
+      const paid = orderPaidAmount(r, payments);
+      const remaining = t - paid;
+      return (
+        <div className="text-right">
+          <div className="text-xs font-bold tabular-nums" style={{ color: TOKENS.ink }}>{fmtMoney(t, r.currency)}</div>
+          {paid > 0 ? (
+            <div className="text-[10px] font-semibold tabular-nums" style={{ color: TOKENS.forest }}>
+              ✓ {fmtMoney(paid, r.currency)}
+            </div>
+          ) : (
+            <div className="text-[10px] font-semibold" style={{ color: TOKENS.muted }}>—</div>
+          )}
+          {remaining > 0.01 && paid > 0 && (
+            <div className="text-[10px] font-semibold tabular-nums" style={{ color: TOKENS.copper }}>
+              {fmtMoney(remaining, r.currency)} kaldı
+            </div>
+          )}
+        </div>
+      );
+    }},
+    { key: "totalUSD", label: "USD", align: "right", sortValue: (r) => orderTotalUSD ? orderTotalUSD(r, rates) : toUSD(total(r), r.currency, rates), render: (r) => <span className="text-[11px] font-semibold" style={{ color: TOKENS.muted }}>{fmtMoney(orderTotalUSD ? orderTotalUSD(r, rates) : toUSD(total(r), r.currency, rates), "USD", { compact: true })}</span> },
+    { key: "paid", label: "Tahsil", align: "right", sortValue: (r) => orderPaidAmount(r, payments) / (total(r) || 1), render: (r) => {
       const t = total(r);
       const paid = orderPaidAmount(r, payments);
       const pct = t > 0 ? Math.round((paid / t) * 100) : 0;
       const color = pct === 100 ? TOKENS.forest : pct >= 50 ? TOKENS.gold : pct > 0 ? TOKENS.copper : TOKENS.muted;
       return (
         <div className="inline-flex flex-col items-end">
-          <div className="text-xs font-semibold" style={{ color }}>%{pct}</div>
+          <div className="text-xs font-bold tabular-nums" style={{ color }}>%{pct}</div>
           <div className="w-12 h-1 rounded-full overflow-hidden mt-0.5" style={{ background: TOKENS.cream }}>
             <div className="h-full" style={{ width: `${pct}%`, background: color }} />
           </div>
@@ -2850,7 +3103,17 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
       </div>
 
       <OrderEditModal open={open} onClose={() => { setOpen(false); setEditing(null); }} editing={editing} setEditing={setEditing} customers={customers} products={products} onSave={save} />
-      <OrderDetailModal order={viewing} onClose={() => setViewing(null)} customers={customers} payments={payments} bankAccounts={bankAccounts} rates={rates} setView={setView} />
+      <OrderDetailModal
+        order={viewing}
+        onClose={() => setViewing(null)}
+        customers={customers}
+        payments={payments}
+        bankAccounts={bankAccounts}
+        rates={rates}
+        setView={setView}
+        canEdit={canEdit}
+        onEdit={(o) => { setEditing({ ...o }); setOpen(true); }}
+      />
     </div>
   );
 }
@@ -3867,7 +4130,7 @@ function OrderItemsSection({ editing, setEditing, products, itemsTotal, addItem,
 // SİPARİŞ DETAY GÖRÜNÜMÜ
 // ============================================================================
 
-function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, rates, setView }) {
+function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, rates, setView, onEdit, canEdit }) {
   if (!order) return null;
   const customer = customers.find((c) => c.id === order.customerId);
   const orderPayments = payments.filter((p) => p.orderId === order.id);
@@ -3885,6 +4148,12 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
       title={`Sipariş ${order.orderNumber}`}
       subtitle={`${customer?.name || "—"} · ${fmtDateLong(order.orderDate)}`}
       size="2xl"
+      footer={<>
+        {canEdit && onEdit && (
+          <Btn variant="primary" size="sm" icon={Pencil} onClick={() => { onEdit(order); onClose(); }}>Siparişi Düzenle</Btn>
+        )}
+        <Btn variant="ghost" size="sm" onClick={onClose}>Kapat</Btn>
+      </>}
     >
       <div className="space-y-5">
         <div className="grid grid-cols-4 gap-3">
@@ -4529,22 +4798,29 @@ function CashFlowView({ orders, customers, payments, rates, setView }) {
   const [period, setPeriod] = useState("90"); // gün
   const [groupBy, setGroupBy] = useState("day"); // day, week, month
   const [statusFilter, setStatusFilter] = useState("all"); // all, pending, overdue
+  const [customerFilter, setCustomerFilter] = useState(""); // müşteri ID
+  const [orderSearch, setOrderSearch] = useState(""); // PO arama (sipariş no)
 
   // Filtreli ödemeler
   const filteredPayments = useMemo(() => {
     const days = Number(period);
     const today = todayISO();
     const endDate = addDays(today, days);
+    const orderQ = orderSearch.toLowerCase().trim();
     return payments.filter((p) => {
       if (p.status === "paid" || p.status === "cancelled") return false;
       if (!p.dueDate) return false;
       if (statusFilter === "overdue" && p.status !== "overdue") return false;
       if (statusFilter === "pending" && p.status !== "pending") return false;
+      // Müşteri ve PO filtresi
+      const order = orders.find((o) => o.id === p.orderId);
+      if (customerFilter && order?.customerId !== customerFilter) return false;
+      if (orderQ && !order?.orderNumber?.toLowerCase().includes(orderQ)) return false;
       // Gecikmişler her zaman gösterilsin (period dahilinde olmasa bile)
       if (p.status === "overdue") return true;
       return p.dueDate <= endDate;
     });
-  }, [payments, period, statusFilter]);
+  }, [payments, period, statusFilter, customerFilter, orderSearch, orders]);
 
   // Tarih bazlı gruplandırma (gün, hafta veya ay)
   const grouped = useMemo(() => {
@@ -4640,8 +4916,8 @@ function CashFlowView({ orders, customers, payments, rates, setView }) {
 
         {/* Filtreler */}
         <FilterBar>
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-semibold" style={{ color: TOKENS.muted }}>GÖSTER:</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-bold" style={{ color: TOKENS.muted }}>GÖSTER:</span>
             {[
               { key: "all", label: "Tümü" },
               { key: "overdue", label: "Sadece Gecikmiş" },
@@ -4650,7 +4926,7 @@ function CashFlowView({ orders, customers, payments, rates, setView }) {
               <button
                 key={f.key}
                 onClick={() => setStatusFilter(f.key)}
-                className="px-3 py-1.5 text-xs font-semibold rounded-md transition"
+                className="px-3 py-1.5 text-xs font-bold rounded-md transition"
                 style={{
                   background: statusFilter === f.key ? TOKENS.navy : "white",
                   color: statusFilter === f.key ? "white" : TOKENS.ink,
@@ -4660,6 +4936,27 @@ function CashFlowView({ orders, customers, payments, rates, setView }) {
                 {f.label}
               </button>
             ))}
+            <div className="h-6 w-px mx-1" style={{ background: TOKENS.border }} />
+            <Select value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} className="text-xs" style={{ minWidth: "180px" }}>
+              <option value="">Tüm Müşteriler</option>
+              {customers.map((c) => <option key={c.id} value={c.id}>{c.code} — {c.name}</option>)}
+            </Select>
+            <div className="relative">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: TOKENS.muted }} />
+              <input
+                type="text"
+                value={orderSearch}
+                onChange={(e) => setOrderSearch(e.target.value)}
+                placeholder="Sipariş no ara..."
+                className="pl-7 pr-3 py-1.5 text-xs rounded-md font-semibold focus:outline-none"
+                style={{ border: `1px solid ${TOKENS.border}`, background: "white", width: "160px" }}
+              />
+            </div>
+            {(customerFilter || orderSearch) && (
+              <button onClick={() => { setCustomerFilter(""); setOrderSearch(""); }} className="text-[11px] font-bold underline" style={{ color: TOKENS.copper, background: "transparent", border: "none", cursor: "pointer" }}>
+                Filtreleri Temizle
+              </button>
+            )}
           </div>
         </FilterBar>
 

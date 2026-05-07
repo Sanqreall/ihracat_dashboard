@@ -44,6 +44,327 @@ import * as XLSX from "xlsx";
 // Anadolu / boutique ihracat estetiği: derin lacivert + sıcak altın + krem.
 // Generic SaaS pastelinden uzak durmak için sıcak terracotta/oxblood seçildi.
 
+// ============================================================================
+// İ18N — DİL DESTEĞİ (TR / EN)
+// ============================================================================
+// Pragmatik bir çeviri sistemi: kritik UI metinleri her iki dilde tutulur,
+// localStorage'dan tercih okunur. PDF çıktıları da aynı dictionary'i kullanır.
+
+const LANG_KEY = "exportflow_lang";
+
+const TRANSLATIONS = {
+  tr: {
+    // Sidebar / Genel
+    dashboard: "Gösterge Paneli",
+    customers: "Müşteriler",
+    products: "Ürünler",
+    orders: "Siparişler",
+    payments: "Ödemeler",
+    cashflow: "Nakit Akışı",
+    reports: "Raporlar",
+    settings: "Ayarlar",
+    bankAccounts: "Banka Hesapları",
+    records: "Kayıtlar",
+    operations: "Operasyon",
+    analysis: "Analiz",
+    system: "Sistem",
+    // Buttons
+    save: "Kaydet",
+    cancel: "İptal",
+    close: "Kapat",
+    delete: "Sil",
+    edit: "Düzenle",
+    new: "Yeni",
+    search: "Ara",
+    filter: "Filtre",
+    clear: "Temizle",
+    confirm: "Onayla",
+    back: "Geri",
+    next: "İleri",
+    print: "Yazdır",
+    export: "Dışa Aktar",
+    import: "İçe Aktar",
+    template: "Şablon",
+    download: "İndir",
+    upload: "Yükle",
+    pdf: "PDF",
+    excel: "Excel",
+    yes: "Evet",
+    no: "Hayır",
+    add: "Ekle",
+    remove: "Kaldır",
+    view: "Görüntüle",
+    detail: "Detay",
+    actions: "İşlemler",
+    // Müşteri form
+    customerCode: "Müşteri Kodu",
+    customerName: "Müşteri Adı",
+    contactPerson: "Yetkili Kişi",
+    email: "E-posta",
+    phone: "Telefon",
+    country: "Ülke",
+    address: "Adres",
+    taxNumber: "Vergi No",
+    notes: "Notlar",
+    defaultCurrency: "Varsayılan Para Birimi",
+    paymentTerms: "Vade (gün)",
+    // Sipariş
+    orderNumber: "Sipariş No",
+    orderDate: "Sipariş Tarihi",
+    shipmentDate: "Planlanan Sevk",
+    actualShipmentDate: "Fiili Sevk",
+    deliveryDate: "Teslim Tarihi",
+    customer: "Müşteri",
+    items: "Kalemler",
+    item: "Kalem",
+    quantity: "Adet",
+    unitPrice: "Birim Fiyat",
+    discount: "İskonto",
+    subtotal: "Ara Toplam",
+    vat: "KDV",
+    total: "Toplam",
+    grandTotal: "Genel Toplam",
+    additionalCosts: "İlave Maliyetler",
+    paymentPlan: "Ödeme Planı",
+    incoterms: "Incoterms",
+    shippingMethod: "Sevk Yöntemi",
+    portOfLoading: "Yükleme Limanı",
+    portOfDischarge: "Boşaltma Limanı",
+    invoiceNumber: "Fatura No",
+    billOfLading: "Konşimento",
+    status: "Durum",
+    currency: "Para Birimi",
+    amount: "Tutar",
+    // Ödeme
+    dueDate: "Vade Tarihi",
+    paidDate: "Tahsil Tarihi",
+    paymentMethod: "Ödeme Yöntemi",
+    bankAccount: "Banka Hesabı",
+    referenceNumber: "Referans No",
+    paymentType: "Tip",
+    // Dashboard
+    totalOrderVolume: "Toplam Sipariş Hacmi",
+    totalReceived: "Tahsil Edilen",
+    pendingPayments: "Bekleyen Tahsilat",
+    overduePayments: "Gecikmiş",
+    monthlyCollection: "Aylık Tahsilat",
+    last12Months: "Son 12 ay",
+    paid: "Tahsil Edilen",
+    pending: "Bekleyen",
+    overdue: "Gecikmiş",
+    cancelled: "İptal Edildi",
+    partial: "Kısmi",
+    // KPI
+    totalOrders: "Toplam Sipariş",
+    activeOrders: "Aktif Sipariş",
+    shippedOrders: "Sevk Edilen",
+    totalCustomers: "Toplam Müşteri",
+    totalRevenue: "Toplam Ciro",
+    openBalance: "Açık Bakiye",
+    overdueBalance: "Gecikmiş Bakiye",
+    overdueTotalBalance: "Gecikmiş Toplam Bakiye",
+    // Misafir
+    guestMode: "MİSAFİR — SADECE OKUMA",
+    loginToEdit: "Düzenleme için giriş yap",
+    login: "GİRİŞ YAP",
+    logout: "ÇIKIŞ YAP",
+    // PDF başlıkları
+    pdfOrderTitle: "Sipariş",
+    pdfOrderListTitle: "Sipariş Listesi",
+    pdfCustomerListTitle: "Müşteri Listesi · Alacak/Verecek Özeti",
+    pdfProductCatalogTitle: "Ürün Kataloğu",
+    pdfPaymentListTitle: "Ödeme Listesi",
+    pdfCashflowTitle: "Nakit Akışı Projeksiyonu",
+    pdfStatementTitle: "HESAP EKSTRESİ",
+    pdfSummaryTitle: "Özet Rapor",
+    pdfCreatedAt: "Hazırlanma Tarihi",
+    pdfPrintBtn: "Yazdır / PDF Kaydet",
+    pdfFilters: "Filtreler",
+    pdfFooter: "Bu rapor İhracat Operasyonları sisteminden otomatik oluşturulmuştur.",
+    pdfShipmentInfo: "Sevkiyat Bilgileri",
+    pdfCustomerInfo: "Müşteri Bilgileri",
+    pdfPaymentMovements: "Ödeme Hareketi",
+    pdfOrderList: "Sipariş Listesi",
+    pdfCurrencySummary: "Para Birimi Bazında Bakiye Özeti",
+    pdfTopCustomers: "En Yüksek Cirolu Müşteriler",
+    pdfTopCountries: "Ülke Bazlı Ciro",
+    pdfTopProducts: "En Çok Satan Ürünler",
+    pdfSummaryMetrics: "Özet Metrikler",
+    pdfMonthlyProjection: "Aylık Tahsilat Projeksiyonu",
+    pdfDetailedList: "Detaylı Liste (Vade Tarihine Göre)",
+    receivable: "ALACAK",
+    noBalance: "BAKİYE YOK",
+    daysOverdue: "gün gecikti",
+    daysToGo: "gün sonra",
+    today: "bugün",
+    waiting: "Bekliyor",
+    collected: "Tahsil",
+    // Diğer
+    language: "Dil",
+    turkish: "Türkçe",
+    english: "İngilizce",
+  },
+  en: {
+    dashboard: "Dashboard",
+    customers: "Customers",
+    products: "Products",
+    orders: "Orders",
+    payments: "Payments",
+    cashflow: "Cash Flow",
+    reports: "Reports",
+    settings: "Settings",
+    bankAccounts: "Bank Accounts",
+    records: "Records",
+    operations: "Operations",
+    analysis: "Analytics",
+    system: "System",
+    save: "Save",
+    cancel: "Cancel",
+    close: "Close",
+    delete: "Delete",
+    edit: "Edit",
+    new: "New",
+    search: "Search",
+    filter: "Filter",
+    clear: "Clear",
+    confirm: "Confirm",
+    back: "Back",
+    next: "Next",
+    print: "Print",
+    export: "Export",
+    import: "Import",
+    template: "Template",
+    download: "Download",
+    upload: "Upload",
+    pdf: "PDF",
+    excel: "Excel",
+    yes: "Yes",
+    no: "No",
+    add: "Add",
+    remove: "Remove",
+    view: "View",
+    detail: "Detail",
+    actions: "Actions",
+    customerCode: "Customer Code",
+    customerName: "Customer Name",
+    contactPerson: "Contact Person",
+    email: "Email",
+    phone: "Phone",
+    country: "Country",
+    address: "Address",
+    taxNumber: "Tax Number",
+    notes: "Notes",
+    defaultCurrency: "Default Currency",
+    paymentTerms: "Payment Terms (days)",
+    orderNumber: "Order No.",
+    orderDate: "Order Date",
+    shipmentDate: "Planned Shipment",
+    actualShipmentDate: "Actual Shipment",
+    deliveryDate: "Delivery Date",
+    customer: "Customer",
+    items: "Items",
+    item: "Item",
+    quantity: "Quantity",
+    unitPrice: "Unit Price",
+    discount: "Discount",
+    subtotal: "Subtotal",
+    vat: "VAT",
+    total: "Total",
+    grandTotal: "Grand Total",
+    additionalCosts: "Additional Costs",
+    paymentPlan: "Payment Plan",
+    incoterms: "Incoterms",
+    shippingMethod: "Shipping Method",
+    portOfLoading: "Port of Loading",
+    portOfDischarge: "Port of Discharge",
+    invoiceNumber: "Invoice No.",
+    billOfLading: "Bill of Lading",
+    status: "Status",
+    currency: "Currency",
+    amount: "Amount",
+    dueDate: "Due Date",
+    paidDate: "Payment Date",
+    paymentMethod: "Payment Method",
+    bankAccount: "Bank Account",
+    referenceNumber: "Reference No.",
+    paymentType: "Type",
+    totalOrderVolume: "Total Order Volume",
+    totalReceived: "Received",
+    pendingPayments: "Pending Payments",
+    overduePayments: "Overdue",
+    monthlyCollection: "Monthly Collection",
+    last12Months: "Last 12 months",
+    paid: "Paid",
+    pending: "Pending",
+    overdue: "Overdue",
+    cancelled: "Cancelled",
+    partial: "Partial",
+    totalOrders: "Total Orders",
+    activeOrders: "Active Orders",
+    shippedOrders: "Shipped",
+    totalCustomers: "Total Customers",
+    totalRevenue: "Total Revenue",
+    openBalance: "Open Balance",
+    overdueBalance: "Overdue Balance",
+    overdueTotalBalance: "Total Overdue Balance",
+    guestMode: "GUEST — READ ONLY",
+    loginToEdit: "Log in to edit",
+    login: "LOG IN",
+    logout: "LOG OUT",
+    pdfOrderTitle: "Order",
+    pdfOrderListTitle: "Order List",
+    pdfCustomerListTitle: "Customer List · Receivables Summary",
+    pdfProductCatalogTitle: "Product Catalog",
+    pdfPaymentListTitle: "Payment List",
+    pdfCashflowTitle: "Cash Flow Projection",
+    pdfStatementTitle: "ACCOUNT STATEMENT",
+    pdfSummaryTitle: "Summary Report",
+    pdfCreatedAt: "Generated On",
+    pdfPrintBtn: "Print / Save as PDF",
+    pdfFilters: "Filters",
+    pdfFooter: "This report was automatically generated by the Export Operations system.",
+    pdfShipmentInfo: "Shipment Information",
+    pdfCustomerInfo: "Customer Information",
+    pdfPaymentMovements: "Payment Movements",
+    pdfOrderList: "Order List",
+    pdfCurrencySummary: "Balance Summary by Currency",
+    pdfTopCustomers: "Top Customers by Revenue",
+    pdfTopCountries: "Revenue by Country",
+    pdfTopProducts: "Top Selling Products",
+    pdfSummaryMetrics: "Summary Metrics",
+    pdfMonthlyProjection: "Monthly Collection Projection",
+    pdfDetailedList: "Detailed List (by Due Date)",
+    receivable: "RECEIVABLE",
+    noBalance: "NO BALANCE",
+    daysOverdue: "days overdue",
+    daysToGo: "days to go",
+    today: "today",
+    waiting: "Waiting",
+    collected: "Paid",
+    language: "Language",
+    turkish: "Turkish",
+    english: "English",
+  },
+};
+
+// Aktif dil ve değiştirme yardımcıları
+function getStoredLang() {
+  try {
+    return localStorage.getItem(LANG_KEY) || "tr";
+  } catch { return "tr"; }
+}
+function setStoredLang(l) {
+  try {
+    localStorage.setItem(LANG_KEY, l);
+  } catch {}
+}
+
+// Çeviri fonksiyonu — fallback Türkçe'ye
+function tr(lang, key) {
+  return TRANSLATIONS[lang]?.[key] || TRANSLATIONS.tr[key] || key;
+}
+
+
 const TOKENS = {
   bg: "#F8F5EE",         // krem arka plan
   ink: "#0F1A2E",        // derin gece mavisi (sidebar)
@@ -369,9 +690,15 @@ const fmtDateWithWeek = (d) => {
 // Yeni pencere açar, A4 sayfa stiliyle render eder, otomatik yazdırma diyaloğu açar.
 // Kullanıcı "PDF olarak kaydet" seçeneğini seçebilir.
 
-function printPDF({ title, subtitle, contentHtml, orientation = "portrait" }) {
+function printPDF({ title, subtitle, contentHtml, orientation = "portrait", lang }) {
   const w = window.open("", "_blank", "width=1000,height=750");
-  if (!w) { alert("Popup engellendi. Tarayıcı ayarlarından bu site için popup'a izin ver."); return; }
+  // Eğer lang parametresi verilmediyse localStorage'dan otomatik oku
+  const activeLang = lang || getStoredLang();
+  if (!w) { alert(activeLang === "en" ? "Popup blocked. Please allow popups for this site." : "Popup engellendi. Tarayıcı ayarlarından bu site için popup'a izin ver."); return; }
+
+  const t = (key) => tr(activeLang, key);
+  const brandTitle = activeLang === "en" ? "Export Operations" : "İhracat Operasyonları";
+  const brandSub = activeLang === "en" ? "Management System" : "Yönetim Sistemi";
 
   const html = `<!DOCTYPE html>
 <html lang="tr">
@@ -421,21 +748,21 @@ function printPDF({ title, subtitle, contentHtml, orientation = "portrait" }) {
 </style>
 </head>
 <body>
-  <button class="print-btn no-print" onclick="window.print()">Yazdır / PDF Kaydet</button>
+  <button class="print-btn no-print" onclick="window.print()">${t("pdfPrintBtn")}</button>
   <div class="doc-header">
     <div class="left">
       <h1>${title}</h1>
       ${subtitle ? `<div class="subtitle">${subtitle}</div>` : ""}
     </div>
     <div class="right">
-      <div class="brand">İhracat Operasyonları</div>
-      <div>Yönetim Sistemi</div>
+      <div class="brand">${brandTitle}</div>
+      <div>${brandSub}</div>
       <div style="margin-top:4px;color:#0F1A2E;font-weight:600">${fmtDateLong(todayISO())}</div>
     </div>
   </div>
   ${contentHtml}
   <div class="footer">
-    Bu rapor İhracat Operasyonları sisteminden ${fmtDateLong(todayISO())} tarihinde otomatik oluşturulmuştur.
+    ${t("pdfFooter")} · ${fmtDateLong(todayISO())}
   </div>
   <script>
     window.addEventListener('load', () => setTimeout(() => window.print(), 500));
@@ -639,12 +966,16 @@ function calcOrderTotals(order) {
   }
   const afterDiscount = Math.max(0, subtotal - discount);
 
+  // İlave maliyetler (palet, paket, navlun vb) - KDV'ye dahil olur
+  const additionalCosts = (order?.additionalCosts || []).reduce((s, c) => s + (Number(c.amount) || 0), 0);
+  const baseForVat = afterDiscount + additionalCosts;
+
   // KDV
   const vatRate = Number(order?.vatRate) || 0;
-  const vatAmount = afterDiscount * vatRate / 100;
-  const total = afterDiscount + vatAmount;
+  const vatAmount = baseForVat * vatRate / 100;
+  const total = baseForVat + vatAmount;
 
-  return { subtotal, discount, afterDiscount, vatRate, vatAmount, total };
+  return { subtotal, discount, afterDiscount, additionalCosts, baseForVat, vatRate, vatAmount, total };
 }
 
 const orderTotal = (o) => calcOrderTotals(o).total;
@@ -886,7 +1217,7 @@ function Modal({ open, onClose, title, subtitle, children, size = "md", footer }
 }
 
 // Tablo — sıralama, satır tıklama, eylem sütunu
-function DataTable({ columns, rows, keyField = "id", onRowClick, emptyText = "Kayıt yok", emptyHint, actions, defaultSort }) {
+function DataTable({ columns, rows, keyField = "id", onRowClick, emptyText = "Kayıt yok", emptyHint, actions, defaultSort, rowStyle }) {
   const [sort, setSort] = useState(defaultSort || { key: null, dir: "asc" });
 
   const sorted = useMemo(() => {
@@ -952,14 +1283,18 @@ function DataTable({ columns, rows, keyField = "id", onRowClick, emptyText = "Ka
                 </td>
               </tr>
             ) : (
-              sorted.map((row, idx) => (
+              sorted.map((row, idx) => {
+                const customStyle = rowStyle ? rowStyle(row) : null;
+                const baseBg = customStyle?.background || "white";
+                const hoverBg = customStyle?.hoverBackground || (TOKENS.cream + "60");
+                return (
                 <tr
                   key={row[keyField] ?? idx}
                   onClick={() => onRowClick?.(row)}
                   className={`transition ${onRowClick ? "cursor-pointer" : ""}`}
-                  style={{ borderBottom: `1px solid ${TOKENS.border}30` }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = TOKENS.cream + "60")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "white")}
+                  style={{ borderBottom: `1px solid ${TOKENS.border}30`, background: baseBg }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = hoverBg)}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = baseBg)}
                 >
                   {columns.map((c) => (
                     <td
@@ -976,7 +1311,8 @@ function DataTable({ columns, rows, keyField = "id", onRowClick, emptyText = "Ka
                     </td>
                   )}
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
@@ -1064,6 +1400,9 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [pendingOrderToOpen, setPendingOrderToOpen] = useState(null);
+  const [lang, setLangState] = useState(getStoredLang());
+  const setLang = (l) => { setStoredLang(l); setLangState(l); };
+  const t = useCallback((key) => tr(lang, key), [lang]);
 
   const [toast, setToast] = useState(null);
   const showToast = useCallback((msg, type = "info") => {
@@ -1165,6 +1504,7 @@ export default function App() {
     pendingOrderToOpen, setPendingOrderToOpen,
     showToast,
     setView,
+    lang, setLang, t,
   };
 
   // ----- Yükleniyor ekranı -----
@@ -1189,6 +1529,9 @@ export default function App() {
         currentUser={currentUser}
         onLoginClick={() => setShowLogin(true)}
         onLogout={() => { clearStoredSession(); setCurrentUser(null); showToast("Çıkış yapıldı", "info"); }}
+        lang={lang}
+        setLang={setLang}
+        t={t}
       />
       <main className="flex-1 overflow-x-hidden min-w-0">
         {view === "dashboard"     && <DashboardView {...ctx} />}
@@ -1216,39 +1559,39 @@ export default function App() {
 // SIDEBAR — sol menü
 // ============================================================================
 
-function Sidebar({ view, setView, storageMode, storageLabel, currentUser, onLoginClick, onLogout }) {
+function Sidebar({ view, setView, storageMode, storageLabel, currentUser, onLoginClick, onLogout, lang, setLang, t }) {
   const sections = [
     {
-      title: "Genel",
+      title: t("dashboard"),
       items: [
-        { key: "dashboard", label: "Gösterge Paneli", icon: LayoutDashboard },
+        { key: "dashboard", label: t("dashboard"), icon: LayoutDashboard },
       ],
     },
     {
-      title: "Operasyon",
+      title: t("operations"),
       items: [
-        { key: "orders",    label: "Siparişler",      icon: FileText },
-        { key: "payments",  label: "Ödemeler",        icon: CreditCard },
-        { key: "cashflow",  label: "Nakit Akışı",     icon: TrendingUp },
+        { key: "orders",    label: t("orders"),    icon: FileText },
+        { key: "payments",  label: t("payments"),  icon: CreditCard },
+        { key: "cashflow",  label: t("cashflow"),  icon: TrendingUp },
       ],
     },
     {
-      title: "Kayıtlar",
+      title: t("records"),
       items: [
-        { key: "customers",    label: "Müşteriler",       icon: Users },
-        { key: "products",     label: "Ürünler",          icon: Package },
+        { key: "customers", label: t("customers"), icon: Users },
+        { key: "products",  label: t("products"),  icon: Package },
       ],
     },
     {
-      title: "Analiz",
+      title: t("analysis"),
       items: [
-        { key: "reports",  label: "Raporlar",  icon: BarChart3 },
+        { key: "reports",  label: t("reports"),  icon: BarChart3 },
       ],
     },
     {
-      title: "Sistem",
+      title: t("system"),
       items: [
-        { key: "settings", label: "Ayarlar",   icon: Settings },
+        { key: "settings", label: t("settings"),  icon: Settings },
       ],
     },
   ];
@@ -1333,24 +1676,50 @@ function Sidebar({ view, setView, storageMode, storageLabel, currentUser, onLogi
               onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.12)")}
               onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
             >
-              ÇIKIŞ YAP
+              {t("logout")}
             </button>
           </div>
         ) : (
           <div>
             <div className="rounded-md p-2.5 mb-2" style={{ background: "rgba(166, 56, 61, 0.12)", border: "1px solid rgba(166, 56, 61, 0.3)" }}>
-              <div className="text-[10px] font-bold mb-1" style={{ color: "#fca5a5" }}>👁 MİSAFİR — SADECE OKUMA</div>
-              <div className="text-[10px]" style={{ color: "#94a3b8" }}>Düzenleme için giriş yap</div>
+              <div className="text-[10px] font-bold mb-1" style={{ color: "#fca5a5" }}>👁 {t("guestMode")}</div>
+              <div className="text-[10px]" style={{ color: "#94a3b8" }}>{t("loginToEdit")}</div>
             </div>
             <button
               onClick={onLoginClick}
               className="w-full text-[11px] font-bold py-2 rounded transition flex items-center justify-center gap-1.5"
               style={{ background: TOKENS.gold, color: TOKENS.ink, border: "none" }}
             >
-              <Lock size={11} /> GİRİŞ YAP
+              <Lock size={11} /> {t("login")}
             </button>
           </div>
         )}
+      </div>
+
+      {/* DİL SEÇİCİ */}
+      <div className="p-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+        <div className="text-[9px] uppercase tracking-wider font-bold mb-1.5" style={{ color: "#64748b" }}>{t("language")}</div>
+        <div className="flex gap-1 rounded-md p-0.5" style={{ background: "rgba(255,255,255,0.04)" }}>
+          {[
+            { key: "tr", label: "TR", full: t("turkish") },
+            { key: "en", label: "EN", full: t("english") },
+          ].map((l) => (
+            <button
+              key={l.key}
+              onClick={() => setLang(l.key)}
+              title={l.full}
+              className="flex-1 px-2 py-1 text-[10px] font-bold rounded transition"
+              style={{
+                background: lang === l.key ? TOKENS.gold : "transparent",
+                color: lang === l.key ? TOKENS.ink : "#94a3b8",
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* DEPOLAMA DURUMU */}
@@ -1360,11 +1729,6 @@ function Sidebar({ view, setView, storageMode, storageLabel, currentUser, onLogi
           <span className="text-[10px] uppercase tracking-wider font-bold" style={{ color: storageBadge.color }}>
             {storageBadge.text}
           </span>
-        </div>
-        <div className="text-[10px]" style={{ color: "#64748b" }}>
-          {storageMode === "cloud" && "Tüm kullanıcılar gerçek zamanlı senkron"}
-          {storageMode === "shared" && "Test kullanıcıları aynı veriyi görür"}
-          {storageMode === "local" && "Yalnızca bu tarayıcıda saklanır"}
         </div>
       </div>
     </aside>
@@ -1472,6 +1836,7 @@ function Toast({ toast, onDismiss }) {
 // ============================================================================
 
 function DashboardView({ customers, products, orders, payments, rates, setView }) {
+  const [kpiDetail, setKpiDetail] = useState(null); // null | "orders" | "paid" | "pending" | "overdue"
   // Tüm hesaplamalar burada yapılır, alt bileşenlere geçilir
   const stats = useMemo(() => {
     const totalOrdersUSD = orders.reduce((s, o) => s + orderTotalUSD(o, rates), 0);
@@ -1482,7 +1847,7 @@ function DashboardView({ customers, products, orders, payments, rates, setView }
     return { totalOrdersUSD, paidUSD, pendingUSD, overdueUSD, activeOrders };
   }, [orders, payments, rates]);
 
-  // Aylık ciro — son 12 ay (bir önceki yıl ile karşılaştırma için)
+  // Aylık tahsilat — son 12 ay · sadece tahsil edilen ödemeler · USD
   const monthlyRevenue = useMemo(() => {
     const now = new Date();
     const buckets = [];
@@ -1491,17 +1856,17 @@ function DashboardView({ customers, products, orders, payments, rates, setView }
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       buckets.push({ key, label: d.toLocaleDateString("tr-TR", { month: "short" }), value: 0, count: 0 });
     }
-    orders.forEach((o) => {
-      if (!o.orderDate) return;
-      const k = o.orderDate.slice(0, 7);
+    payments.forEach((p) => {
+      if (p.status !== "paid" || !p.paidDate) return;
+      const k = p.paidDate.slice(0, 7);
       const b = buckets.find((b) => b.key === k);
       if (b) {
-        b.value += orderTotalUSD(o, rates);
+        b.value += toUSD(Number(p.amount) || 0, p.currency, rates);
         b.count++;
       }
     });
     return buckets;
-  }, [orders, rates]);
+  }, [payments, rates]);
 
   // Top 5 müşteri (USD ciroya göre)
   const topCustomers = useMemo(() => {
@@ -1590,26 +1955,26 @@ function DashboardView({ customers, products, orders, payments, rates, setView }
           </div>
         )}
 
-        {/* KPI KARTLARI */}
+        {/* KPI KARTLARI — tıklanabilir */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard icon={DollarSign}   label="Toplam Sipariş Hacmi" value={fmtMoney(stats.totalOrdersUSD, "USD", { compact: true })} sub={`${orders.length} sipariş`}                       accent={TOKENS.navy} />
-          <KPICard icon={CheckCircle2} label="Tahsil Edilen"        value={fmtMoney(stats.paidUSD, "USD", { compact: true })}        sub={`${payments.filter(p => p.status === "paid").length} ödeme`} accent={TOKENS.forest} />
-          <KPICard icon={Clock}        label="Bekleyen Tahsilat"     value={fmtMoney(stats.pendingUSD, "USD", { compact: true })}     sub={`${payments.filter(p => p.status === "pending").length} kayıt`} accent={TOKENS.gold} />
-          <KPICard icon={AlertTriangle} label="Gecikmiş"             value={fmtMoney(stats.overdueUSD, "USD", { compact: true })}     sub={`${payments.filter(p => p.status === "overdue").length} kayıt`} accent={TOKENS.oxblood} />
+          <KPICard icon={DollarSign}    label="Toplam Sipariş Hacmi" value={fmtMoney(stats.totalOrdersUSD, "USD", { compact: true })} sub={`${orders.length} sipariş`}                       accent={TOKENS.navy}    onClick={() => setKpiDetail("orders")} />
+          <KPICard icon={CheckCircle2}  label="Tahsil Edilen"        value={fmtMoney(stats.paidUSD, "USD", { compact: true })}        sub={`${payments.filter(p => p.status === "paid").length} ödeme`}    accent={TOKENS.forest}  onClick={() => setKpiDetail("paid")} />
+          <KPICard icon={Clock}         label="Bekleyen Tahsilat"    value={fmtMoney(stats.pendingUSD, "USD", { compact: true })}     sub={`${payments.filter(p => p.status === "pending").length} kayıt`} accent={TOKENS.gold}    onClick={() => setKpiDetail("pending")} />
+          <KPICard icon={AlertTriangle} label="Gecikmiş"             value={fmtMoney(stats.overdueUSD, "USD", { compact: true })}     sub={`${payments.filter(p => p.status === "overdue").length} kayıt`} accent={TOKENS.oxblood} onClick={() => setKpiDetail("overdue")} />
         </div>
 
         {/* GRAFİKLER */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card title="Aylık Ciro" subtitle="Son 12 ay · USD bazında" className="lg:col-span-2">
+          <Card title="Aylık Tahsilat" subtitle="Son 12 ay · Tahsil edilen ödemeler · USD" className="lg:col-span-2">
             <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={monthlyRevenue} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%"   stopColor={TOKENS.gold} stopOpacity={0.55} />
-                    <stop offset="100%" stopColor={TOKENS.gold} stopOpacity={0.02} />
+                    <stop offset="0%"   stopColor={TOKENS.forest} stopOpacity={0.55} />
+                    <stop offset="100%" stopColor={TOKENS.forest} stopOpacity={0.02} />
                   </linearGradient>
                   <linearGradient id="revStroke" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%"   stopColor={TOKENS.copper} />
+                    <stop offset="0%"   stopColor={TOKENS.forest} />
                     <stop offset="100%" stopColor={TOKENS.gold} />
                   </linearGradient>
                 </defs>
@@ -1617,11 +1982,21 @@ function DashboardView({ customers, products, orders, payments, rates, setView }
                 <XAxis dataKey="label" tick={{ fontSize: 12, fill: TOKENS.ink, fontWeight: 600 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: TOKENS.muted, fontWeight: 500 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} axisLine={false} tickLine={false} />
                 <Tooltip
-                  formatter={(v) => [fmtMoney(v), "Ciro"]}
-                  contentStyle={{ fontSize: 13, borderRadius: 8, border: `1px solid ${TOKENS.border}`, fontWeight: 600, padding: "8px 12px" }}
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    const v = payload[0]?.value || 0;
+                    const c = payload[0]?.payload?.count || 0;
+                    return (
+                      <div style={{ background: "white", border: `1px solid ${TOKENS.border}`, borderRadius: 6, padding: "8px 12px", fontSize: 13, fontWeight: 600 }}>
+                        <div style={{ color: TOKENS.ink, marginBottom: 4 }}>{label}</div>
+                        <div style={{ color: TOKENS.forest }}>Tahsil edilen: {fmtMoney(v)}</div>
+                        <div style={{ color: TOKENS.muted, marginTop: 3, fontWeight: 400, fontSize: 11 }}>{c} ödeme</div>
+                      </div>
+                    );
+                  }}
                   cursor={{ stroke: TOKENS.gold, strokeWidth: 1, strokeDasharray: "3 3" }}
                 />
-                <Area type="monotone" dataKey="value" stroke="url(#revStroke)" strokeWidth={3} fill="url(#revGrad)" dot={{ r: 4, fill: TOKENS.gold, strokeWidth: 2, stroke: "white" }} activeDot={{ r: 6, fill: TOKENS.copper, strokeWidth: 2, stroke: "white" }} />
+                <Area type="monotone" dataKey="value" stroke="url(#revStroke)" strokeWidth={3} fill="url(#revGrad)" dot={{ r: 4, fill: TOKENS.forest, strokeWidth: 2, stroke: "white" }} activeDot={{ r: 6, fill: TOKENS.forest, strokeWidth: 2, stroke: "white" }} />
               </AreaChart>
             </ResponsiveContainer>
           </Card>
@@ -1712,14 +2087,169 @@ function DashboardView({ customers, products, orders, payments, rates, setView }
           </Card>
         </div>
       </div>
+
+      {/* KPI DETAY MODAL — kart tıklamasıyla açılır */}
+      <KPIDetailModal
+        kind={kpiDetail}
+        onClose={() => setKpiDetail(null)}
+        orders={orders}
+        customers={customers}
+        payments={payments}
+        rates={rates}
+        setView={setView}
+      />
     </div>
   );
 }
 
-function KPICard({ icon: Icon, label, value, sub, accent }) {
+// KPI detay modali — Toplam Sipariş / Tahsil / Bekleyen / Gecikmiş kartlarına basınca
+function KPIDetailModal({ kind, onClose, orders, customers, payments, rates, setView }) {
+  if (!kind) return null;
+
+  const config = {
+    orders: {
+      title: "Toplam Sipariş Hacmi",
+      subtitle: `${orders.length} sipariş · USD karşılığı`,
+      color: TOKENS.navy,
+      icon: DollarSign,
+    },
+    paid: {
+      title: "Tahsil Edilen Ödemeler",
+      subtitle: `${payments.filter(p => p.status === "paid").length} kayıt`,
+      color: TOKENS.forest,
+      icon: CheckCircle2,
+    },
+    pending: {
+      title: "Bekleyen Tahsilat",
+      subtitle: `${payments.filter(p => p.status === "pending").length} kayıt`,
+      color: TOKENS.gold,
+      icon: Clock,
+    },
+    overdue: {
+      title: "Gecikmiş Tahsilat",
+      subtitle: `${payments.filter(p => p.status === "overdue").length} kayıt`,
+      color: TOKENS.oxblood,
+      icon: AlertTriangle,
+    },
+  };
+  const cfg = config[kind];
+
+  // İçerik — siparişler veya ödemeler
+  let rows = null;
+  let total = 0;
+  if (kind === "orders") {
+    const sorted = [...orders].sort((a, b) => (b.orderDate || "").localeCompare(a.orderDate || ""));
+    total = sorted.reduce((s, o) => s + orderTotalUSD(o, rates), 0);
+    rows = sorted.map((o) => {
+      const c = customers.find((x) => x.id === o.customerId);
+      const t = orderTotal(o);
+      const usd = orderTotalUSD(o, rates);
+      const st = ORDER_STATUSES.find((s) => s.key === o.status);
+      return (
+        <tr key={o.id} className="cursor-pointer transition" style={{ borderTop: `1px solid ${TOKENS.border}` }}
+          onClick={() => { setView("orders"); onClose(); }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = TOKENS.cream)}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        >
+          <td className="px-3 py-2 font-mono text-xs font-bold" style={{ color: TOKENS.navy }}>{o.orderNumber}</td>
+          <td className="px-3 py-2 text-xs"><div className="font-bold">{c?.name || "—"}</div><div className="text-[10px]" style={{ color: TOKENS.muted }}>{c?.country || ""}</div></td>
+          <td className="px-3 py-2 text-xs">{fmtDate(o.orderDate)}</td>
+          <td className="px-3 py-2 text-right text-xs font-bold tabular-nums">{fmtMoney(t, o.currency)}</td>
+          <td className="px-3 py-2 text-right text-xs tabular-nums" style={{ color: TOKENS.muted }}>{fmtMoney(usd, "USD", { compact: true })}</td>
+          <td className="px-3 py-2"><Badge color={st?.color}>{st?.label}</Badge></td>
+        </tr>
+      );
+    });
+  } else {
+    const filtered = payments.filter((p) => p.status === kind);
+    const sorted = [...filtered].sort((a, b) => (b.dueDate || "").localeCompare(a.dueDate || ""));
+    total = sorted.reduce((s, p) => s + toUSD(Number(p.amount) || 0, p.currency, rates), 0);
+    rows = sorted.map((p) => {
+      const order = orders.find((o) => o.id === p.orderId);
+      const cust = customers.find((c) => c.id === order?.customerId);
+      const tp = PAYMENT_PLAN_TYPES.find((t) => t.key === p.type);
+      const usd = toUSD(Number(p.amount) || 0, p.currency, rates);
+      return (
+        <tr key={p.id} className="cursor-pointer transition" style={{ borderTop: `1px solid ${TOKENS.border}` }}
+          onClick={() => { setView("payments"); onClose(); }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = TOKENS.cream)}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        >
+          <td className="px-3 py-2 font-mono text-xs font-bold" style={{ color: TOKENS.navy }}>{order?.orderNumber || "—"}</td>
+          <td className="px-3 py-2 text-xs"><div className="font-bold">{cust?.name || "—"}</div><div className="text-[10px]" style={{ color: TOKENS.muted }}>{cust?.country || ""}</div></td>
+          <td className="px-3 py-2 text-xs">{tp?.label || p.type}</td>
+          <td className="px-3 py-2 text-right text-xs font-bold tabular-nums">{fmtMoney(p.amount, p.currency)}</td>
+          <td className="px-3 py-2 text-right text-xs tabular-nums" style={{ color: TOKENS.muted }}>{fmtMoney(usd, "USD", { compact: true })}</td>
+          <td className="px-3 py-2 text-xs">{p.dueDate ? fmtDate(p.dueDate) : "—"}</td>
+          {kind === "paid" && <td className="px-3 py-2 text-xs text-success" style={{ color: TOKENS.forest }}>{p.paidDate ? fmtDate(p.paidDate) : "—"}</td>}
+        </tr>
+      );
+    });
+  }
+
   return (
-    <div className="rounded-xl p-5 relative overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
-      style={{ background: "white", border: `1px solid ${TOKENS.border}`, boxShadow: "0 1px 3px rgba(15, 26, 46, 0.04)" }}>
+    <Modal open={!!kind} onClose={onClose} title={cfg.title} subtitle={cfg.subtitle} size="2xl"
+      footer={<Btn variant="ghost" size="sm" onClick={onClose}>Kapat</Btn>}>
+      <div className="space-y-4">
+        <div className="rounded-md p-4 flex items-center justify-between" style={{ background: cfg.color + "10", border: `1px solid ${cfg.color}40` }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: cfg.color + "25" }}>
+              <cfg.icon size={20} style={{ color: cfg.color }} />
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider font-bold" style={{ color: TOKENS.muted }}>Toplam (USD)</div>
+              <div className="text-xl font-bold tabular-nums" style={{ color: cfg.color }}>{fmtMoney(total, "USD")}</div>
+            </div>
+          </div>
+          <div className="text-xs" style={{ color: TOKENS.muted }}>
+            {rows.length === 0 ? "Kayıt yok" : `${rows.length} kayıt · Tıklayarak detaya git`}
+          </div>
+        </div>
+
+        {rows.length === 0 ? (
+          <div className="text-center py-8 text-sm" style={{ color: TOKENS.muted }}>Bu kategoride kayıt bulunmuyor.</div>
+        ) : (
+          <div className="rounded-md overflow-hidden" style={{ border: `1px solid ${TOKENS.border}`, maxHeight: "60vh", overflowY: "auto" }}>
+            <table className="w-full text-xs">
+              <thead style={{ background: TOKENS.cream, position: "sticky", top: 0, zIndex: 1 }}>
+                {kind === "orders" ? (
+                  <tr>
+                    <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-bold">Sipariş No</th>
+                    <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-bold">Müşteri</th>
+                    <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-bold">Tarih</th>
+                    <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider font-bold">Tutar</th>
+                    <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider font-bold">USD</th>
+                    <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-bold">Durum</th>
+                  </tr>
+                ) : (
+                  <tr>
+                    <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-bold">Sipariş</th>
+                    <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-bold">Müşteri</th>
+                    <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-bold">Tip</th>
+                    <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider font-bold">Tutar</th>
+                    <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider font-bold">USD</th>
+                    <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-bold">Vade</th>
+                    {kind === "paid" && <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-bold">Tahsil</th>}
+                  </tr>
+                )}
+              </thead>
+              <tbody>{rows}</tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function KPICard({ icon: Icon, label, value, sub, accent, onClick }) {
+  const Component = onClick ? "button" : "div";
+  return (
+    <Component
+      onClick={onClick}
+      className={`rounded-xl p-5 relative overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 ${onClick ? "cursor-pointer text-left w-full" : ""}`}
+      style={{ background: "white", border: `1px solid ${TOKENS.border}`, boxShadow: "0 1px 3px rgba(15, 26, 46, 0.04)" }}
+    >
       {/* Üstteki renkli aksent şerit */}
       <div className="absolute top-0 left-0 right-0 h-1.5"
         style={{ background: `linear-gradient(90deg, ${accent}, ${accent}90)` }} />
@@ -1734,13 +2264,14 @@ function KPICard({ icon: Icon, label, value, sub, accent }) {
             <Icon size={15} style={{ color: accent }} strokeWidth={2.2} />
           </div>
           <span className="text-[10px] uppercase tracking-widest font-bold" style={{ color: TOKENS.muted }}>{label}</span>
+          {onClick && <ChevronRight size={12} className="ml-auto" style={{ color: TOKENS.muted }} />}
         </div>
         <div className="text-3xl tabular-nums leading-tight" style={{ color: TOKENS.ink, fontWeight: 700, letterSpacing: "-0.02em" }}>
           {value}
         </div>
         <div className="text-xs mt-1.5 font-semibold" style={{ color: TOKENS.muted }}>{sub}</div>
       </div>
-    </div>
+    </Component>
   );
 }
 
@@ -1809,9 +2340,9 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
       paidByCurrency[p.currency] += Number(p.amount) || 0;
     });
 
-    const limitUSD = (Number(c.creditLimit) || 0);
-    const utilization = limitUSD > 0 ? Math.round((openBalance / limitUSD) * 100) : null;
-    return { ...c, totalUSD, openBalance, overdueBalance, limitUSD, utilization, orderCount: custOrders.length, totalsByCurrency, openByCurrency, paidByCurrency };
+
+
+    return { ...c, totalUSD, openBalance, overdueBalance, orderCount: custOrders.length, totalsByCurrency, openByCurrency, paidByCurrency };
   }), [customers, orders, payments, rates]);
 
   const countries = useMemo(() => [...new Set(customers.map((c) => c.country).filter(Boolean))].sort(), [customers]);
@@ -1833,7 +2364,6 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
       country: "", address: "", taxNumber: "",
       defaultCurrency: "USD",
       defaultPaymentTerms: 30, // gün (sevk tarihinden itibaren)
-      creditLimit: 0,
       preferredIncoterm: "FOB",
       // Varsayılan ödeme planı yapısı (sipariş açılınca otomatik gelir)
       defaultPaymentMethod: "bank_transfer",
@@ -1861,7 +2391,6 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
     if (!editing.code?.trim()) return showToast("Müşteri kodu zorunlu", "error");
     const cleaned = {
       ...editing,
-      creditLimit: Number(editing.creditLimit) || 0,
       defaultPaymentTerms: Number(editing.defaultPaymentTerms) || 0,
     };
     if (editing.id) {
@@ -1900,8 +2429,6 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
     });
 
     const rows = filteredList.map((c) => {
-      const isOver = c.utilization !== null && c.utilization >= 100;
-      const isWarn = c.utilization !== null && c.utilization >= 75;
       return `
         <tr>
           <td class="text-mono">${htmlEscape(c.code)}</td>
@@ -1910,9 +2437,7 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
           <td class="center">${c.orderCount}</td>
           <td class="right text-mono">$${(c.totalUSD || 0).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
           <td class="right text-mono ${c.openBalance > 0 ? 'text-warning' : 'text-success'}">${c.openBalance > 0 ? `$${c.openBalance.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}` : "✓"}</td>
-          <td class="right text-mono ${c.overdueBalance > 0 ? 'text-danger' : ''}">${c.overdueBalance > 0 ? `$${c.overdueBalance.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}` : "—"}</td>
-          <td class="right text-mono">${c.creditLimit > 0 ? `$${(c.creditLimit || 0).toLocaleString("tr-TR")}` : "—"}</td>
-          <td class="right ${isOver ? 'text-danger' : isWarn ? 'text-warning' : ''}">${c.utilization !== null ? `%${c.utilization}` : "—"}</td>
+          <td class="right text-mono ${c.overdueBalance > 0 ? 'text-danger' : ''}" style="font-weight:${c.overdueBalance > 0 ? '700' : '400'}">${c.overdueBalance > 0 ? `$${c.overdueBalance.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}` : "—"}</td>
         </tr>`;
     }).join("");
 
@@ -1920,16 +2445,16 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
     const totalUSD = filteredList.reduce((s, c) => s + (c.totalUSD || 0), 0);
     const totalOpen = filteredList.reduce((s, c) => s + (c.openBalance || 0), 0);
     const totalOverdue = filteredList.reduce((s, c) => s + (c.overdueBalance || 0), 0);
-    const overUtil = filteredList.filter((c) => c.utilization >= 100).length;
+    const overdueCount = filteredList.filter((c) => c.overdueBalance > 0).length;
 
     const content = `
       <div class="kpi-grid">
         <div class="kpi"><div class="kpi-label">Toplam Müşteri</div><div class="kpi-value">${filteredList.length}</div></div>
         <div class="kpi"><div class="kpi-label">Toplam Ciro (USD)</div><div class="kpi-value">$${totalUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
         <div class="kpi"><div class="kpi-label">Toplam Alacak (USD)</div><div class="kpi-value" style="color:#B87333">$${totalOpen.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-        <div class="kpi"><div class="kpi-label">Gecikmiş Alacak</div><div class="kpi-value" style="color:#A6383D">$${totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">Gecikmiş Alacak (USD)</div><div class="kpi-value" style="color:#A6383D">$${totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
       </div>
-      ${overUtil > 0 ? `<div style="font-size:10px;padding:6px 10px;background:#A6383D15;border-left:3px solid #A6383D;margin-bottom:8px"><strong style="color:#A6383D">⚠ ${overUtil} müşteri kredi limitini aşmış durumda.</strong></div>` : ""}
+      ${overdueCount > 0 ? `<div style="font-size:10px;padding:6px 10px;background:#A6383D15;border-left:3px solid #A6383D;margin-bottom:8px"><strong style="color:#A6383D">⚠ ${overdueCount} müşteride gecikmiş alacak var. Toplam gecikmiş tutar: $${totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</strong></div>` : ""}
       <table>
         <thead>
           <tr>
@@ -1939,9 +2464,7 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
             <th class="center">Sipariş</th>
             <th class="right">Ciro (USD)</th>
             <th class="right">Açık Bakiye</th>
-            <th class="right">Gecikmiş</th>
-            <th class="right">Kredi Limit</th>
-            <th class="right">Kullanım</th>
+            <th class="right">Gecikmiş Toplam Bakiye</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -1963,7 +2486,7 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
       "Email": c.email || "", "Telefon": c.phone || "",
       "Ülke": c.country || "", "Adres": c.address || "", "Vergi No": c.taxNumber || "",
       "Varsayılan Para Birimi": c.defaultCurrency, "Vade (gün)": c.defaultPaymentTerms,
-      "Kredi Limiti (USD)": c.creditLimit, "Tercih Incoterm": c.preferredIncoterm || "",
+      "Tercih Incoterm": c.preferredIncoterm || "",
       "Toplam Sipariş Sayısı": c.orderCount,
       "Toplam Ciro (USD)": c.totalUSD.toFixed(2),
       "Açık Bakiye (USD)": c.openBalance.toFixed(2),
@@ -1990,7 +2513,6 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
         taxNumber: String(r["Vergi No"] || ""),
         defaultCurrency: String(r["Varsayılan Para Birimi"] || "USD").toUpperCase(),
         defaultPaymentTerms: Number(r["Vade (gün)"] || 30),
-        creditLimit: Number(r["Kredi Limiti (USD)"] || 0),
         preferredIncoterm: String(r["Tercih Incoterm"] || "FOB"),
         notes: String(r["Notlar"] || ""),
         createdAt: todayISO(),
@@ -2006,7 +2528,6 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
       "Email": "info@ornek.com", "Telefon": "+49...", "Ülke": "Almanya",
       "Adres": "...", "Vergi No": "DE...",
       "Varsayılan Para Birimi": "EUR", "Vade (gün)": 60,
-      "Kredi Limiti (USD)": 50000, "Tercih Incoterm": "FOB", "Notlar": "",
     }], "musteri_sablonu.xlsx", "Şablon");
   };
 
@@ -2027,18 +2548,6 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
         {r.overdueBalance > 0 && <div className="text-[10px] tabular-nums" style={{ color: TOKENS.oxblood }}>{fmtMoney(r.overdueBalance)} geç</div>}
       </div>
     )},
-    { key: "utilization", label: "Kredi Kull.", align: "center", sortValue: (r) => r.utilization || 0, render: (r) => {
-      if (r.utilization === null) return <span className="text-xs" style={{ color: TOKENS.muted }}>limit yok</span>;
-      const color = r.utilization >= 100 ? TOKENS.oxblood : r.utilization >= 75 ? TOKENS.terracotta : r.utilization >= 50 ? TOKENS.gold : TOKENS.forest;
-      return (
-        <div className="inline-flex flex-col items-center gap-0.5">
-          <div className="text-xs font-semibold tabular-nums" style={{ color }}>{r.utilization}%</div>
-          <div className="w-14 h-1 rounded-full overflow-hidden" style={{ background: TOKENS.cream }}>
-            <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, r.utilization)}%`, background: color }} />
-          </div>
-        </div>
-      );
-    }},
   ];
 
   return (
@@ -2168,17 +2677,6 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
                 }
                 return <div className="mt-2 text-[11px]" style={{ color: TOKENS.terracotta }}>⚠ Toplam %{total} (sipariş ekranında düzeltebilirsin, kayıt yine de olur)</div>;
               })()}
-            </div>
-
-            <div>
-              <SectionTitle>Kredi & Risk <span className="font-normal text-[10px] normal-case" style={{ color: TOKENS.muted }}>· Açık hesap satışta uyarı için</span></SectionTitle>
-              <div>
-                <Label hint="USD · 0 = sınırsız">Kredi Limiti</Label>
-                <Input type="number" step="100" value={editing.creditLimit} onChange={(e) => setEditing({ ...editing, creditLimit: e.target.value })} />
-                <p className="text-[11px] mt-1.5" style={{ color: TOKENS.muted }}>
-                  Bu müşteriye kabul ettiğin maksimum açık hesap tutarı. Açık bakiyesi bu limite yaklaştığında dashboard'da uyarı görürsün.
-                </p>
-              </div>
             </div>
 
             <div>
@@ -2401,7 +2899,6 @@ function CustomerDetailModal({ customer, onClose, orders, payments, bankAccounts
           <MetricBox label="Toplam Sipariş" value={custOrders.length} accent={TOKENS.navy} />
           <MetricBox label="Ciro (USD)" value={fmtMoney(customer.totalUSD, "USD", { compact: true })} accent={TOKENS.gold} />
           <MetricBox label="Açık Bakiye" value={fmtMoney(customer.openBalance, "USD", { compact: true })} accent={customer.openBalance > 0 ? TOKENS.copper : TOKENS.muted} />
-          <MetricBox label="Kredi Kullanımı" value={customer.utilization !== null ? `${customer.utilization}%` : "—"} accent={customer.utilization >= 75 ? TOKENS.oxblood : TOKENS.forest} />
         </div>
 
         {/* Para Birimi Bazlı */}
@@ -2584,7 +3081,11 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
   const save = () => {
     if (!editing.productCode?.trim()) return showToast("Ürün kodu zorunlu", "error");
     if (!editing.nameTr?.trim() && !editing.nameEn?.trim()) return showToast("En az bir isim girin", "error");
-    const cleaned = { ...editing, defaultPrice: Number(editing.defaultPrice) || 0 };
+    // Aynı ürün kodu kontrolü (case-insensitive)
+    const codeNormalized = editing.productCode.trim().toLowerCase();
+    const duplicate = products.find((p) => p.productCode?.trim().toLowerCase() === codeNormalized && p.id !== editing.id);
+    if (duplicate) return showToast(`Bu ürün kodu zaten kayıtlı: ${duplicate.productCode} - ${duplicate.nameTr || duplicate.nameEn}`, "error");
+    const cleaned = { ...editing, productCode: editing.productCode.trim(), defaultPrice: Number(editing.defaultPrice) || 0 };
     if (editing.id) {
       setProducts((arr) => arr.map((x) => x.id === editing.id ? cleaned : x));
       showToast("Ürün güncellendi", "success");
@@ -2959,6 +3460,7 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
+  const [viewMode, setViewMode] = useState("list"); // list | calendar (ay/hafta accordion)
 
   // Müşteri sayfasından "siparişi aç" yönlendirmesi geldiyse, otomatik aç
   useEffect(() => {
@@ -3356,6 +3858,10 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
     <div>
       <PageHeader title="Siparişler" subtitle={`${orders.length} sipariş · Sipariş içinde kalemler ve ödeme planı birlikte yönetilir`}>
         <input id="order-import" type="file" accept=".xlsx,.xls" onChange={(e) => { handleImport(e.target.files[0]); e.target.value = ""; }} className="hidden" />
+        <div className="flex gap-1 rounded-md p-0.5" style={{ background: TOKENS.cream, border: `1px solid ${TOKENS.border}` }}>
+          <button onClick={() => setViewMode("list")} className="px-3 py-1.5 text-xs font-bold rounded transition" style={{ background: viewMode === "list" ? "white" : "transparent", color: viewMode === "list" ? TOKENS.ink : TOKENS.muted, boxShadow: viewMode === "list" ? "0 1px 2px rgba(0,0,0,0.05)" : "none" }}>Liste</button>
+          <button onClick={() => setViewMode("calendar")} className="px-3 py-1.5 text-xs font-bold rounded transition" style={{ background: viewMode === "calendar" ? "white" : "transparent", color: viewMode === "calendar" ? TOKENS.ink : TOKENS.muted, boxShadow: viewMode === "calendar" ? "0 1px 2px rgba(0,0,0,0.05)" : "none" }}>Ay / Hafta</button>
+        </div>
         <Btn variant="ghost" size="sm" icon={FileDown} onClick={printList}>PDF</Btn>
         <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>Dışa Aktar</Btn>
         {canEdit && <>
@@ -3401,14 +3907,29 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
               <Card>
                 <EmptyState icon={FileText} title="Henüz sipariş yok" hint="İlk siparişini oluştur. Sipariş kaydederken hem kalemleri (satır bazlı) hem de ödeme planını (ön ödeme/sevk öncesi/vadeli) birlikte tanımlayacaksın." action={canEdit ? <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>İlk Siparişi Oluştur</Btn> : null} />
               </Card>
-            ) : (
-              <DataTable columns={columns} rows={filtered} onRowClick={(r) => setViewing(r)} emptyText="Filtreyle eşleşen sipariş yok" actions={(r) => (
+            ) : viewMode === "list" ? (
+              <DataTable columns={columns} rows={filtered} onRowClick={(r) => setViewing(r)}
+                emptyText="Filtreyle eşleşen sipariş yok"
+                rowStyle={(r) => r.actualShipmentDate
+                  ? { background: "#3E7D5A14", hoverBackground: "#3E7D5A22" }
+                  : null}
+                actions={(r) => (
                 <div className="flex items-center justify-end gap-1">
                   <button onClick={() => setViewing(r)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.cream; e.currentTarget.style.color = TOKENS.navy; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Eye size={14} /></button>
                   {canEdit && <button onClick={() => openEdit(r)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.cream; e.currentTarget.style.color = TOKENS.navy; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Pencil size={14} /></button>}
                   {canEdit && <button onClick={() => remove(r.id)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Trash2 size={14} /></button>}
                 </div>
               )} />
+            ) : (
+              <OrdersCalendarView
+                orders={filtered}
+                customers={customers}
+                rates={rates}
+                payments={payments}
+                onView={(o) => setViewing(o)}
+                onEdit={canEdit ? (o) => openEdit(o) : null}
+                onDelete={canEdit ? (id) => remove(id) : null}
+              />
             )}
           </>
         )}
@@ -3476,6 +3997,200 @@ function syncPaymentsFromPlan(order, currentPayments, setPayments) {
 // ============================================================================
 // SİPARİŞ DÜZENLEME MODALI — kalemler + ödeme planı bir arada
 // ============================================================================
+
+// ============================================================================
+// SİPARİŞ AY/HAFTA GÖRÜNÜMÜ — Accordion: Ay → Sipariş → Kalemler
+// ============================================================================
+// Mayıs ayı altında o ayın siparişleri (sipariş no), her sipariş genişletilince
+// kalemleri görünür. Salt görüntüleme için ek bir mod.
+
+function OrdersCalendarView({ orders, customers, rates, payments, onView, onEdit, onDelete }) {
+  const [openMonths, setOpenMonths] = useState({}); // { "2026-05": true }
+  const [openOrders, setOpenOrders] = useState({}); // { orderId: true }
+
+  // Ay bazında grupla — sipariş tarihine göre
+  const grouped = useMemo(() => {
+    const m = {};
+    orders.forEach((o) => {
+      const d = o.orderDate || o.createdAt;
+      if (!d) return;
+      const key = d.slice(0, 7); // "2026-05"
+      if (!m[key]) m[key] = [];
+      m[key].push(o);
+    });
+    // Her ay içinde tarihe göre sırala (yeni → eski)
+    Object.keys(m).forEach((k) => m[k].sort((a, b) => (b.orderDate || "").localeCompare(a.orderDate || "")));
+    // Aylar yeni → eski
+    return Object.entries(m).sort(([a], [b]) => b.localeCompare(a));
+  }, [orders]);
+
+  if (grouped.length === 0) {
+    return (
+      <Card>
+        <div className="text-center py-12 text-sm" style={{ color: TOKENS.muted }}>
+          Filtreyle eşleşen sipariş yok
+        </div>
+      </Card>
+    );
+  }
+
+  const toggleMonth = (k) => setOpenMonths((s) => ({ ...s, [k]: !s[k] }));
+  const toggleOrder = (id) => setOpenOrders((s) => ({ ...s, [id]: !s[id] }));
+
+  const monthLabel = (key) => {
+    const [y, m] = key.split("-");
+    const d = new Date(Number(y), Number(m) - 1, 1);
+    return d.toLocaleDateString("tr-TR", { month: "long", year: "numeric" }).toUpperCase();
+  };
+
+  return (
+    <div className="space-y-2">
+      {grouped.map(([monthKey, monthOrders]) => {
+        const isMonthOpen = openMonths[monthKey] !== false; // varsayılan açık
+        const monthTotal = monthOrders.reduce((s, o) => s + orderTotalUSD(o, rates), 0);
+        const shippedCount = monthOrders.filter((o) => o.actualShipmentDate).length;
+        return (
+          <div key={monthKey} className="rounded-lg overflow-hidden" style={{ background: "white", border: `1px solid ${TOKENS.border}` }}>
+            {/* AY BAŞLIĞI */}
+            <button
+              onClick={() => toggleMonth(monthKey)}
+              className="w-full px-4 py-3 flex items-center justify-between transition"
+              style={{ background: TOKENS.navy, color: "white", border: "none", cursor: "pointer" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = TOKENS.ink)}
+              onMouseLeave={(e) => (e.currentTarget.style.background = TOKENS.navy)}
+            >
+              <div className="flex items-center gap-3">
+                {isMonthOpen ? <ChevronDown size={18} style={{ color: TOKENS.gold }} /> : <ChevronRight size={18} style={{ color: TOKENS.gold }} />}
+                <span className="text-sm font-bold tracking-wide">{monthLabel(monthKey)}</span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ background: TOKENS.gold + "30", color: TOKENS.gold }}>
+                  {monthOrders.length} sipariş
+                </span>
+                {shippedCount > 0 && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ background: TOKENS.forest + "30", color: "#86efac" }}>
+                    {shippedCount} sevk edildi
+                  </span>
+                )}
+              </div>
+              <div className="text-sm font-bold tabular-nums" style={{ color: TOKENS.gold }}>
+                ${monthTotal.toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </div>
+            </button>
+
+            {/* SİPARİŞLER */}
+            {isMonthOpen && (
+              <div>
+                {monthOrders.map((o) => {
+                  const isOpen = openOrders[o.id];
+                  const c = customers.find((x) => x.id === o.customerId);
+                  const t = orderTotal(o);
+                  const paid = orderPaidAmount(o, payments);
+                  const remaining = t - paid;
+                  const totals = calcOrderTotals(o);
+                  const st = ORDER_STATUSES.find((s) => s.key === o.status);
+                  const isShipped = !!o.actualShipmentDate;
+                  return (
+                    <div key={o.id} style={{ borderTop: `1px solid ${TOKENS.border}` }}>
+                      {/* SİPARİŞ SATIRI */}
+                      <div
+                        className="px-4 py-2.5 flex items-center gap-3 transition cursor-pointer"
+                        style={{ background: isShipped ? "#3E7D5A14" : "white" }}
+                        onClick={() => toggleOrder(o.id)}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = isShipped ? "#3E7D5A22" : TOKENS.cream)}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = isShipped ? "#3E7D5A14" : "white")}
+                      >
+                        {isOpen ? <ChevronDown size={14} style={{ color: TOKENS.gold }} /> : <ChevronRight size={14} style={{ color: TOKENS.muted }} />}
+                        <div className="font-mono text-xs font-bold w-32 flex-shrink-0" style={{ color: TOKENS.navy }}>{o.orderNumber}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-bold truncate" style={{ color: TOKENS.ink }}>{c?.name || "—"}</div>
+                          <div className="text-[10px] font-semibold" style={{ color: TOKENS.muted }}>
+                            {fmtDate(o.orderDate)} · W{getISOWeek(o.orderDate) || "—"}
+                            {o.shipmentDate && ` · Plan. Sevk: W${getISOWeek(o.shipmentDate)}`}
+                            {o.actualShipmentDate && <span style={{ color: TOKENS.forest }}> · Fiili Sevk: W{getISOWeek(o.actualShipmentDate)}</span>}
+                          </div>
+                        </div>
+                        <div className="w-24 text-right">
+                          <div className="text-xs font-bold tabular-nums">{fmtMoney(t, o.currency)}</div>
+                          {paid > 0 && <div className="text-[10px] font-semibold tabular-nums" style={{ color: TOKENS.forest }}>✓ {fmtMoney(paid, o.currency)}</div>}
+                          {remaining > 0.01 && paid > 0 && <div className="text-[10px] font-semibold tabular-nums" style={{ color: TOKENS.copper }}>{fmtMoney(remaining, o.currency)}</div>}
+                        </div>
+                        <div className="w-20 text-right">
+                          <Badge color={st?.color}>{st?.label}</Badge>
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <button onClick={() => onView(o)} className="p-1 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.cream; e.currentTarget.style.color = TOKENS.navy; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }} title="Detayı gör"><Eye size={13} /></button>
+                          {onEdit && <button onClick={() => onEdit(o)} className="p-1 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.cream; e.currentTarget.style.color = TOKENS.navy; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }} title="Düzenle"><Pencil size={13} /></button>}
+                          {onDelete && <button onClick={() => onDelete(o.id)} className="p-1 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }} title="Sil"><Trash2 size={13} /></button>}
+                        </div>
+                      </div>
+
+                      {/* KALEMLER */}
+                      {isOpen && (
+                        <div style={{ background: TOKENS.cream + "60", borderTop: `1px solid ${TOKENS.border}` }}>
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr style={{ background: TOKENS.cream }}>
+                                <th className="px-3 py-1.5 text-left text-[10px] uppercase tracking-wider font-bold" style={{ color: TOKENS.muted }}>Ürün</th>
+                                <th className="px-3 py-1.5 text-left text-[10px] uppercase tracking-wider font-bold" style={{ color: TOKENS.muted }}>İsim</th>
+                                <th className="px-3 py-1.5 text-right text-[10px] uppercase tracking-wider font-bold" style={{ color: TOKENS.muted }}>Adet</th>
+                                <th className="px-3 py-1.5 text-right text-[10px] uppercase tracking-wider font-bold" style={{ color: TOKENS.muted }}>Birim Fiyat</th>
+                                <th className="px-3 py-1.5 text-right text-[10px] uppercase tracking-wider font-bold" style={{ color: TOKENS.muted }}>İsk %</th>
+                                <th className="px-3 py-1.5 text-right text-[10px] uppercase tracking-wider font-bold" style={{ color: TOKENS.muted }}>Toplam</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(o.items || []).length === 0 ? (
+                                <tr><td colSpan="6" className="px-3 py-3 text-center text-[11px] italic" style={{ color: TOKENS.muted }}>Bu siparişte kalem yok</td></tr>
+                              ) : (o.items || []).map((it) => {
+                                const baseT = (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0);
+                                const lineDisc = Number(it.discount) || 0;
+                                const lineT = baseT * (1 - lineDisc / 100);
+                                return (
+                                  <tr key={it.id} style={{ borderTop: `1px solid ${TOKENS.border}30` }}>
+                                    <td className="px-3 py-1.5 font-mono font-bold text-[11px]" style={{ color: TOKENS.navy }}>{it.productCode}</td>
+                                    <td className="px-3 py-1.5 text-[11px]"><div className="font-bold">{it.nameTr || "—"}</div>{it.nameEn && <div className="text-[10px] italic" style={{ color: TOKENS.muted }}>{it.nameEn}</div>}</td>
+                                    <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-[11px]">{fmtNum(it.quantity)} {it.unit}</td>
+                                    <td className="px-3 py-1.5 text-right tabular-nums text-[11px]">{fmtMoney(it.unitPrice, o.currency)}</td>
+                                    <td className="px-3 py-1.5 text-right tabular-nums text-[11px]" style={{ color: lineDisc > 0 ? TOKENS.copper : TOKENS.muted }}>{lineDisc > 0 ? `%${lineDisc}` : "—"}</td>
+                                    <td className="px-3 py-1.5 text-right tabular-nums font-bold text-[11px]">{fmtMoney(lineT, o.currency)}</td>
+                                  </tr>
+                                );
+                              })}
+                              {/* Totals */}
+                              {(totals.discount > 0 || totals.vatRate > 0 || (o.additionalCosts || []).length > 0) && (
+                                <tr style={{ borderTop: `1px solid ${TOKENS.border}` }}>
+                                  <td colSpan="5" className="px-3 py-1 text-right text-[10px] font-semibold" style={{ color: TOKENS.muted }}>Ara Toplam</td>
+                                  <td className="px-3 py-1 text-right tabular-nums font-bold text-[10px]">{fmtMoney(totals.subtotal, o.currency)}</td>
+                                </tr>
+                              )}
+                              {totals.discount > 0 && (
+                                <tr><td colSpan="5" className="px-3 py-1 text-right text-[10px] font-semibold" style={{ color: TOKENS.copper }}>İskonto</td><td className="px-3 py-1 text-right tabular-nums font-bold text-[10px]" style={{ color: TOKENS.copper }}>− {fmtMoney(totals.discount, o.currency)}</td></tr>
+                              )}
+                              {(o.additionalCosts || []).map((c, ix) => (
+                                <tr key={c.id || ix}><td colSpan="5" className="px-3 py-1 text-right text-[10px] font-semibold" style={{ color: TOKENS.copper }}>+ {c.description || "İlave Maliyet"}</td><td className="px-3 py-1 text-right tabular-nums font-bold text-[10px]" style={{ color: TOKENS.copper }}>+ {fmtMoney(c.amount, o.currency)}</td></tr>
+                              ))}
+                              {totals.vatRate > 0 && (
+                                <tr><td colSpan="5" className="px-3 py-1 text-right text-[10px] font-semibold" style={{ color: TOKENS.muted }}>KDV (%{totals.vatRate})</td><td className="px-3 py-1 text-right tabular-nums font-bold text-[10px]">+ {fmtMoney(totals.vatAmount, o.currency)}</td></tr>
+                              )}
+                              <tr style={{ background: TOKENS.gold + "20", borderTop: `2px solid ${TOKENS.gold}` }}>
+                                <td colSpan="5" className="px-3 py-1.5 text-right font-bold text-[11px] uppercase tracking-wider" style={{ color: TOKENS.ink }}>Genel Toplam</td>
+                                <td className="px-3 py-1.5 text-right tabular-nums font-bold text-xs" style={{ color: TOKENS.ink }}>{fmtMoney(totals.total, o.currency)}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 
 function OrderEditModal({ open, onClose, editing, setEditing, customers, products, onSave }) {
   if (!editing) return null;
@@ -3746,6 +4461,83 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
           updateItem={updateItem}
           pickProduct={pickProduct}
         />
+
+        {/* İLAVE MALİYETLER (palet, paket, navlun vb) */}
+        <div>
+          <div className="flex items-center justify-between mb-3 pb-2" style={{ borderBottom: `1px solid ${TOKENS.border}` }}>
+            <div className="text-[11px] uppercase tracking-widest font-bold" style={{ color: TOKENS.copper }}>
+              İlave Maliyetler
+              <span className="ml-2 normal-case font-normal text-[10px]" style={{ color: TOKENS.muted }}>
+                · palet, paketleme, navlun vb. KDV'ye dahil edilir
+              </span>
+            </div>
+            <Btn variant="secondary" size="xs" icon={Plus} onClick={() => {
+              const cur = editing.additionalCosts || [];
+              setEditing({ ...editing, additionalCosts: [...cur, { id: uid(), description: "", amount: 0 }] });
+            }}>Maliyet Ekle</Btn>
+          </div>
+
+          {(editing.additionalCosts || []).length === 0 ? (
+            <div className="text-center py-4 text-xs rounded-md" style={{ background: TOKENS.cream, color: TOKENS.muted, border: `1px dashed ${TOKENS.border}` }}>
+              Henüz ek maliyet yok. "Maliyet Ekle" ile ekle (örn: Palet, Paketleme, Navlun, Sigorta).
+            </div>
+          ) : (
+            <div className="rounded-md overflow-hidden" style={{ border: `1px solid ${TOKENS.border}` }}>
+              <table className="w-full text-xs">
+                <thead style={{ background: TOKENS.cream }}>
+                  <tr>
+                    <th className="text-left px-3 py-2 text-[10px] uppercase tracking-wider font-bold">Açıklama</th>
+                    <th className="text-right px-3 py-2 text-[10px] uppercase tracking-wider font-bold w-40">Tutar ({editing.currency})</th>
+                    <th className="w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(editing.additionalCosts || []).map((c, idx) => (
+                    <tr key={c.id || idx} style={{ borderTop: `1px solid ${TOKENS.border}` }}>
+                      <td className="px-3 py-1.5">
+                        <Input value={c.description}
+                          onChange={(e) => {
+                            const arr = [...(editing.additionalCosts || [])];
+                            arr[idx] = { ...arr[idx], description: e.target.value };
+                            setEditing({ ...editing, additionalCosts: arr });
+                          }}
+                          placeholder="Örn: Palet, Paketleme, Navlun..." />
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <Input type="number" step="0.01" value={c.amount ?? 0}
+                          onChange={(e) => {
+                            const arr = [...(editing.additionalCosts || [])];
+                            arr[idx] = { ...arr[idx], amount: parseNumber(e.target.value) };
+                            setEditing({ ...editing, additionalCosts: arr });
+                          }}
+                          className="text-right tabular-nums" />
+                      </td>
+                      <td className="px-2">
+                        <button onClick={() => {
+                          const arr = (editing.additionalCosts || []).filter((_, i) => i !== idx);
+                          setEditing({ ...editing, additionalCosts: arr });
+                        }} className="p-1 rounded transition" style={{ color: TOKENS.muted, background: "transparent", border: "none" }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}>
+                          <Trash2 size={12} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: TOKENS.copper + "10", borderTop: `1px solid ${TOKENS.copper}40` }}>
+                    <td className="px-3 py-2 text-right text-[11px] font-bold" style={{ color: TOKENS.ink }}>İlave Maliyet Toplamı</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-bold" style={{ color: TOKENS.copper }}>
+                      {fmtMoney((editing.additionalCosts || []).reduce((s, c) => s + (Number(c.amount) || 0), 0), editing.currency)}
+                    </td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
 
         {/* ÖDEME PLANI */}
         <div>
@@ -4558,8 +5350,9 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
         </thead>
         <tbody>${itemRows || `<tr><td colspan="7" style="text-align:center;color:#7A736A;padding:12px">Kalem yok</td></tr>`}</tbody>
         <tfoot>
-          ${totals.discount > 0 || totals.vatRate > 0 ? `<tr><td colspan="6" class="right" style="font-weight:700;color:#7A736A">Ara Toplam</td><td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(totals.subtotal, order.currency)}</td></tr>` : ""}
+          ${totals.discount > 0 || totals.vatRate > 0 || (order.additionalCosts || []).length > 0 ? `<tr><td colspan="6" class="right" style="font-weight:700;color:#7A736A">Ara Toplam</td><td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(totals.subtotal, order.currency)}</td></tr>` : ""}
           ${totals.discount > 0 ? `<tr><td colspan="6" class="right text-warning">Sipariş İskontosu (${order.discountType === "percentage" ? "%" + order.discountValue : "tutar"})</td><td class="right text-mono text-warning">− ${fmtMoneyPDF(totals.discount, order.currency)}</td></tr>` : ""}
+          ${(order.additionalCosts || []).map((c) => `<tr><td colspan="6" class="right" style="color:#B87333">+ ${htmlEscape(c.description || "İlave Maliyet")}</td><td class="right text-mono" style="color:#B87333;font-weight:700">+ ${fmtMoneyPDF(c.amount, order.currency)}</td></tr>`).join("")}
           ${totals.vatRate > 0 ? `<tr><td colspan="6" class="right" style="font-weight:700;color:#7A736A">KDV (%${totals.vatRate})</td><td class="right text-mono" style="font-weight:700">+ ${fmtMoneyPDF(totals.vatAmount, order.currency)}</td></tr>` : ""}
           <tr style="background:#C9A96120;border-top:2px solid #C9A961">
             <td colspan="6" class="right" style="font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:0.05em">Genel Toplam</td>
@@ -4724,6 +5517,14 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
                         <td className="px-3 py-1.5 text-right tabular-nums font-bold" style={{ color: TOKENS.copper }}>− {fmtMoney(totals.discount, order.currency)}</td>
                       </tr>
                     )}
+                    {(order.additionalCosts || []).map((c, ix) => (
+                      <tr key={c.id || ix} style={{ background: TOKENS.cream + "60" }}>
+                        <td colSpan="5" className="px-3 py-1.5 text-right text-[11px] font-semibold" style={{ color: TOKENS.copper }}>
+                          + {c.description || "İlave Maliyet"}
+                        </td>
+                        <td className="px-3 py-1.5 text-right tabular-nums font-bold" style={{ color: TOKENS.copper }}>+ {fmtMoney(c.amount, order.currency)}</td>
+                      </tr>
+                    ))}
                     {totals.vatRate > 0 && (
                       <tr style={{ background: TOKENS.cream + "60" }}>
                         <td colSpan="5" className="px-3 py-1.5 text-right text-[11px] font-semibold" style={{ color: TOKENS.muted }}>KDV (%{totals.vatRate})</td>

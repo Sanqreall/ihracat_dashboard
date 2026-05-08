@@ -11,7 +11,7 @@
  *   orders        → Siparişler (müşteriye bağlı, kalemler ve ödeme planı içerir)
  *   payments      → Ödeme kayıtları (sipariş + plan kalemine bağlı)
  *   rates         → Manuel döviz kurları (USD bazında, raporlar için)
- *a
+ *
  * STORAGE: İki mod destekler:
  *   1. Yerel mod (localStorage): tek kullanıcı, tarayıcı yerel
  *   2. Bulut mod (Supabase):    paylaşımlı, çoklu kullanıcı, gerçek zamanlı
@@ -315,7 +315,7 @@ const TRANSLATIONS = {
     upcomingPayments: "Yaklaşan Tahsilatlar",
     nextMonth: "Önümüzdeki",
     addCost: "Maliyet Ekle",
-    additionalCostsSubtitle: "palet, paketleme, navlun vb. KDV'ye dahil edilir",
+    additionalCostsSubtitle: "palet, paketleme, navlun vb. — KDV matrahına dahil edilmez",
     noAdditionalCosts: "Henüz ek maliyet yok. \"Maliyet Ekle\" ile ekle.",
     description: "Açıklama",
     additionalCostTotal: "İlave Maliyet Toplamı",
@@ -570,7 +570,7 @@ const TRANSLATIONS = {
     upcomingPayments: "Upcoming Payments",
     nextMonth: "Next",
     addCost: "Add Cost",
-    additionalCostsSubtitle: "pallet, packaging, freight etc. — included in VAT base",
+    additionalCostsSubtitle: "pallet, packaging, freight etc. — excluded from VAT base",
     noAdditionalCosts: "No additional costs yet. Click \"Add Cost\" to add.",
     description: "Description",
     additionalCostTotal: "Additional Costs Total",
@@ -1219,16 +1219,22 @@ function calcOrderTotals(order) {
   }
   const afterDiscount = Math.max(0, subtotal - discount);
 
-  // İlave maliyetler (palet, paket, navlun vb) - KDV'ye dahil olur
+  // İlave maliyetler (palet, paket, navlun vb) — KDV'ye dahil EDİLMEZ, ayrıca gösterilir
+  // Her maliyet kaleminde kendi KDV'si olabilir (vatRate alanı)
   const additionalCosts = (order?.additionalCosts || []).reduce((s, c) => s + (Number(c.amount) || 0), 0);
-  const baseForVat = afterDiscount + additionalCosts;
+  const additionalCostsVat = (order?.additionalCosts || []).reduce((s, c) => {
+    const amt = Number(c.amount) || 0;
+    const rate = Number(c.vatRate) || 0;
+    return s + (amt * rate / 100);
+  }, 0);
+  const baseForVat = afterDiscount; // İlave maliyet KDV matrahına girmez
 
-  // KDV
+  // KDV (sadece mal bedeli üzerinden)
   const vatRate = Number(order?.vatRate) || 0;
   const vatAmount = baseForVat * vatRate / 100;
-  const total = baseForVat + vatAmount;
+  const total = afterDiscount + vatAmount + additionalCosts + additionalCostsVat;
 
-  return { subtotal, discount, afterDiscount, additionalCosts, baseForVat, vatRate, vatAmount, total };
+  return { subtotal, discount, afterDiscount, additionalCosts, additionalCostsVat, baseForVat, vatRate, vatAmount, total };
 }
 
 const orderTotal = (o) => calcOrderTotals(o).total;
@@ -3718,17 +3724,9 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
 
   // Ürün katalog PDF
   const printList = () => {
-    if (!enrichedProducts.length) return showToast(lang === "en" ? "No products to print" : "Yazdırılacak ürün yok", "error");
+    if (!filtered.length) return showToast(lang === "en" ? "No products to print" : "Yazdırılacak ürün yok", "error");
 
-    const list = enrichedProducts.filter((p) => {
-      if (!search) return true;
-      const q = search.toLowerCase();
-      return (p.productCode || "").toLowerCase().includes(q) ||
-             (p.manufacturingCode || "").toLowerCase().includes(q) ||
-             (p.nameTr || "").toLowerCase().includes(q) ||
-             (p.nameEn || "").toLowerCase().includes(q) ||
-             (p.category || "").toLowerCase().includes(q);
-    });
+    const list = filtered;
 
     const rows = list.map((p) => `
       <tr>
@@ -4302,8 +4300,12 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
         const totalsRows = `
           ${totals.discount > 0 || totals.vatRate > 0 || (o.additionalCosts || []).length > 0 ? `<tr><td colspan="5" class="right" style="font-size:10px;color:#7A736A">${lang === "en" ? "Subtotal" : "Ara Toplam"}</td><td class="right text-mono" style="font-size:10px;font-weight:700">${fmtMoneyPDF(totals.subtotal, o.currency)}</td></tr>` : ""}
           ${totals.discount > 0 ? `<tr><td colspan="5" class="right" style="font-size:10px;color:#B87333">${lang === "en" ? "Discount" : "İskonto"}</td><td class="right text-mono" style="font-size:10px;color:#B87333">− ${fmtMoneyPDF(totals.discount, o.currency)}</td></tr>` : ""}
-          ${(o.additionalCosts || []).map((cc) => `<tr><td colspan="5" class="right" style="font-size:10px;color:#B87333">+ ${htmlEscape(cc.description || "İlave")}</td><td class="right text-mono" style="font-size:10px;color:#B87333">+ ${fmtMoneyPDF(cc.amount, o.currency)}</td></tr>`).join("")}
           ${totals.vatRate > 0 ? `<tr><td colspan="5" class="right" style="font-size:10px;color:#7A736A">${lang === "en" ? "VAT" : "KDV"} (%${totals.vatRate})</td><td class="right text-mono" style="font-size:10px">+ ${fmtMoneyPDF(totals.vatAmount, o.currency)}</td></tr>` : ""}
+          ${(o.additionalCosts || []).map((cc) => {
+            const acAmt = Number(cc.amount) || 0;
+            const acVatAmt = acAmt * (Number(cc.vatRate) || 0) / 100;
+            return `<tr><td colspan="5" class="right" style="font-size:10px;color:#B87333">+ ${htmlEscape(cc.description || "İlave")}${cc.vatRate > 0 ? ` (+%${cc.vatRate} KDV)` : ""}</td><td class="right text-mono" style="font-size:10px;color:#B87333">+ ${fmtMoneyPDF(acAmt + acVatAmt, o.currency)}</td></tr>`;
+          }).join("")}
           <tr style="background:#C9A96120;border-top:2px solid #C9A961">
             <td colspan="5" class="right" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">${lang === "en" ? "Grand Total" : "Genel Toplam"}</td>
             <td class="right text-mono" style="font-size:11px;font-weight:700">${fmtMoneyPDF(totals.total, o.currency)}</td>
@@ -4967,15 +4969,18 @@ function OrdersCalendarView({ orders, customers, rates, payments, onView, onEdit
                                   <td className="px-3 py-1 text-right tabular-nums font-bold text-[10px]">{fmtMoney(totals.subtotal, o.currency)}</td>
                                 </tr>
                               )}
-                              {!sh && totals.discount > 0 && (
-                                <tr><td colSpan="5" className="px-3 py-1 text-right text-[10px] font-semibold" style={{ color: TOKENS.copper }}>İskonto</td><td className="px-3 py-1 text-right tabular-nums font-bold text-[10px]" style={{ color: TOKENS.copper }}>− {fmtMoney(totals.discount, o.currency)}</td></tr>
+                              {!sh && totals.discount > 0 && (\n                                <tr><td colSpan="5" className="px-3 py-1 text-right text-[10px] font-semibold" style={{ color: TOKENS.copper }}>İskonto</td><td className="px-3 py-1 text-right tabular-nums font-bold text-[10px]" style={{ color: TOKENS.copper }}>− {fmtMoney(totals.discount, o.currency)}</td></tr>
                               )}
-                              {!sh && (o.additionalCosts || []).map((c, ix) => (
-                                <tr key={c.id || ix}><td colSpan="5" className="px-3 py-1 text-right text-[10px] font-semibold" style={{ color: TOKENS.copper }}>+ {c.description || "İlave Maliyet"}</td><td className="px-3 py-1 text-right tabular-nums font-bold text-[10px]" style={{ color: TOKENS.copper }}>+ {fmtMoney(c.amount, o.currency)}</td></tr>
-                              ))}
                               {!sh && totals.vatRate > 0 && (
                                 <tr><td colSpan="5" className="px-3 py-1 text-right text-[10px] font-semibold" style={{ color: TOKENS.muted }}>KDV (%{totals.vatRate})</td><td className="px-3 py-1 text-right tabular-nums font-bold text-[10px]">+ {fmtMoney(totals.vatAmount, o.currency)}</td></tr>
                               )}
+                              {!sh && (o.additionalCosts || []).map((c, ix) => {
+                                const acAmt = Number(c.amount) || 0;
+                                const acVat = acAmt * (Number(c.vatRate) || 0) / 100;
+                                return (
+                                <tr key={c.id || ix}><td colSpan="5" className="px-3 py-1 text-right text-[10px] font-semibold" style={{ color: TOKENS.copper }}>+ {c.description || "İlave Maliyet"}{c.vatRate > 0 ? ` (+%${c.vatRate} KDV)` : ""}</td><td className="px-3 py-1 text-right tabular-nums font-bold text-[10px]" style={{ color: TOKENS.copper }}>+ {fmtMoney(acAmt + acVat, o.currency)}</td></tr>
+                                );
+                              })}
                               {!sh && (
                                 <tr style={{ background: TOKENS.gold + "20", borderTop: `2px solid ${TOKENS.gold}` }}>
                                   <td colSpan="5" className="px-3 py-1.5 text-right font-bold text-[11px] uppercase tracking-wider" style={{ color: TOKENS.ink }}>Genel Toplam</td>
@@ -5133,6 +5138,34 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
       });
     }
 
+    // İlave maliyetler varsa — en son vadeli tarihe vadeli olarak eklenir
+    const additionalCostsList = editing.additionalCosts || [];
+    if (additionalCostsList.length > 0) {
+      // En son vadeyi bul (plan içindeki en geç tarih veya shipDate+vade)
+      const lastDueDate = plan.reduce((latest, p) => {
+        if (!p.dueDate) return latest;
+        return p.dueDate > latest ? p.dueDate : latest;
+      }, addDays(shipDate, vade));
+
+      additionalCostsList.forEach((ac) => {
+        const amt = Number(ac.amount) || 0;
+        if (amt <= 0) return;
+        const vatAmt = amt * (Number(ac.vatRate) || 0) / 100;
+        const totalAmt = +(amt + vatAmt).toFixed(2);
+        const desc = ac.description || "İlave Maliyet";
+        plan.push({
+          id: uid(),
+          type: "deferred",
+          percentage: 0,
+          amount: totalAmt,
+          method,
+          dueDate: lastDueDate,
+          notes: desc,
+          _additionalCostId: ac.id,
+        });
+      });
+    }
+
     setEditing({ ...editing, paymentPlan: plan });
   };
 
@@ -5281,12 +5314,12 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
             <div className="text-[11px] uppercase tracking-widest font-bold" style={{ color: TOKENS.copper }}>
               İlave Maliyetler
               <span className="ml-2 normal-case font-normal text-[10px]" style={{ color: TOKENS.muted }}>
-                · palet, paketleme, navlun vb. KDV'ye dahil edilir
+                · palet, paketleme, navlun vb. · KDV matrahına dahil edilmez · Genel toplamda ayrıca gösterilir
               </span>
             </div>
             <Btn variant="secondary" size="xs" icon={Plus} onClick={() => {
               const cur = editing.additionalCosts || [];
-              setEditing({ ...editing, additionalCosts: [...cur, { id: uid(), description: "", amount: 0 }] });
+              setEditing({ ...editing, additionalCosts: [...cur, { id: uid(), description: "", amount: 0, vatRate: 0 }] });
             }}>Maliyet Ekle</Btn>
           </div>
 
@@ -5300,19 +5333,27 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
                 <thead style={{ background: TOKENS.cream }}>
                   <tr>
                     <th className="text-left px-3 py-2 text-[10px] uppercase tracking-wider font-bold">Açıklama</th>
-                    <th className="text-right px-3 py-2 text-[10px] uppercase tracking-wider font-bold w-40">Tutar ({editing.currency})</th>
+                    <th className="text-right px-3 py-2 text-[10px] uppercase tracking-wider font-bold w-36">Tutar ({editing.currency})</th>
+                    <th className="text-center px-3 py-2 text-[10px] uppercase tracking-wider font-bold w-24">KDV</th>
+                    <th className="text-right px-3 py-2 text-[10px] uppercase tracking-wider font-bold w-28">KDV Tutarı</th>
                     <th className="w-10"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(editing.additionalCosts || []).map((c, idx) => (
+                  {(editing.additionalCosts || []).map((c, idx) => {
+                    const vatAmt = (Number(c.amount) || 0) * (Number(c.vatRate) || 0) / 100;
+                    return (
                     <tr key={c.id || idx} style={{ borderTop: `1px solid ${TOKENS.border}` }}>
                       <td className="px-3 py-1.5">
                         <Input value={c.description}
                           onChange={(e) => {
                             const arr = [...(editing.additionalCosts || [])];
                             arr[idx] = { ...arr[idx], description: e.target.value };
-                            setEditing({ ...editing, additionalCosts: arr });
+                            // Eğer ödeme planında bu ilave maliyete ait bir kalem varsa açıklamayı güncelle
+                            const updatedPlan = (editing.paymentPlan || []).map((p) =>
+                              p._additionalCostId === c.id ? { ...p, notes: e.target.value } : p
+                            );
+                            setEditing({ ...editing, additionalCosts: arr, paymentPlan: updatedPlan });
                           }}
                           placeholder="Örn: Palet, Paketleme, Navlun..." />
                       </td>
@@ -5325,6 +5366,40 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
                           }}
                           className="text-right tabular-nums" />
                       </td>
+                      <td className="px-3 py-1.5">
+                        <div className="flex items-center gap-1 justify-center">
+                          {Number(c.vatRate) > 0 ? (
+                            <div className="flex items-center gap-1">
+                              <Input type="number" step="1" min="0" max="100" value={c.vatRate ?? 0}
+                                onChange={(e) => {
+                                  const arr = [...(editing.additionalCosts || [])];
+                                  arr[idx] = { ...arr[idx], vatRate: parseNumber(e.target.value) };
+                                  setEditing({ ...editing, additionalCosts: arr });
+                                }}
+                                className="text-right tabular-nums w-14" />
+                              <span className="text-[10px] font-bold" style={{ color: TOKENS.muted }}>%</span>
+                              <button onClick={() => {
+                                const arr = [...(editing.additionalCosts || [])];
+                                arr[idx] = { ...arr[idx], vatRate: 0 };
+                                setEditing({ ...editing, additionalCosts: arr });
+                              }} className="p-0.5 rounded" style={{ color: TOKENS.muted, background: "transparent", border: "none", cursor: "pointer" }} title="KDV kaldır">
+                                <Trash2 size={10} />
+                              </button>
+                            </div>
+                          ) : (
+                            <button onClick={() => {
+                              const arr = [...(editing.additionalCosts || [])];
+                              arr[idx] = { ...arr[idx], vatRate: 18 };
+                              setEditing({ ...editing, additionalCosts: arr });
+                            }} className="px-2 py-0.5 text-[10px] font-bold rounded" style={{ background: TOKENS.copper + "15", color: TOKENS.copper, border: `1px solid ${TOKENS.copper}30`, cursor: "pointer" }}>
+                              + KDV Ekle
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-[11px]" style={{ color: vatAmt > 0 ? TOKENS.copper : TOKENS.muted }}>
+                        {vatAmt > 0 ? fmtMoney(vatAmt, editing.currency) : "—"}
+                      </td>
                       <td className="px-2">
                         <button onClick={() => {
                           const arr = (editing.additionalCosts || []).filter((_, i) => i !== idx);
@@ -5336,16 +5411,23 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
                 <tfoot>
-                  <tr style={{ background: TOKENS.copper + "10", borderTop: `1px solid ${TOKENS.copper}40` }}>
-                    <td className="px-3 py-2 text-right text-[11px] font-bold" style={{ color: TOKENS.ink }}>İlave Maliyet Toplamı</td>
-                    <td className="px-3 py-2 text-right tabular-nums font-bold" style={{ color: TOKENS.copper }}>
-                      {fmtMoney((editing.additionalCosts || []).reduce((s, c) => s + (Number(c.amount) || 0), 0), editing.currency)}
-                    </td>
-                    <td></td>
-                  </tr>
+                  {(() => {
+                    const acTotal = (editing.additionalCosts || []).reduce((s, c) => s + (Number(c.amount) || 0), 0);
+                    const acVatTotal = (editing.additionalCosts || []).reduce((s, c) => s + (Number(c.amount) || 0) * (Number(c.vatRate) || 0) / 100, 0);
+                    return (
+                      <tr style={{ background: TOKENS.copper + "10", borderTop: `1px solid ${TOKENS.copper}40` }}>
+                        <td className="px-3 py-2 text-right text-[11px] font-bold" style={{ color: TOKENS.ink }}>İlave Maliyet Toplamı</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-bold" style={{ color: TOKENS.copper }}>{fmtMoney(acTotal, editing.currency)}</td>
+                        <td></td>
+                        <td className="px-3 py-2 text-right tabular-nums font-bold" style={{ color: acVatTotal > 0 ? TOKENS.copper : TOKENS.muted }}>{acVatTotal > 0 ? fmtMoney(acVatTotal, editing.currency) : "—"}</td>
+                        <td></td>
+                      </tr>
+                    );
+                  })()}
                 </tfoot>
               </table>
             </div>
@@ -5584,6 +5666,75 @@ function CustomerPicker({ customers, value, onChange }) {
   );
 }
 
+// Kalem satırı — sevkiyat seçimi + adet bazında bölme
+function SplitItemRow({ it, totalQty, shipments, updateItemShipment, splitItem }) {
+  const [splitQty, setSplitQty] = useState("");
+  const [splitTarget, setSplitTarget] = useState(shipments.find((s) => s.no !== (it.shipmentNo || 1))?.no || shipments[0]?.no || 1);
+  const canSplit = totalQty >= 2;
+  const sq = Math.floor(Number(splitQty) || 0);
+  const valid = sq > 0 && sq < totalQty;
+
+  return (
+    <tr style={{ borderTop: `1px solid ${TOKENS.border}` }}>
+      <td className="px-3 py-1.5 font-mono font-bold text-[11px]" style={{ color: TOKENS.navy }}>{it.productCode || "—"}</td>
+      <td className="px-3 py-1.5 text-[11px]">{it.nameTr || "—"}</td>
+      <td className="px-3 py-1.5 text-right tabular-nums text-[11px] font-bold">{totalQty} {it.unit}</td>
+      <td className="px-3 py-1.5">
+        <Select value={it.shipmentNo || 1} onChange={(e) => updateItemShipment(it.id, e.target.value)} className="text-[11px] py-1">
+          {shipments.map((sh) => <option key={sh.id} value={sh.no}>{sh.name}</option>)}
+        </Select>
+      </td>
+      <td className="px-3 py-1.5">
+        {canSplit ? (
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              min="1"
+              max={totalQty - 1}
+              step="1"
+              value={splitQty}
+              onChange={(e) => setSplitQty(e.target.value)}
+              placeholder="Adet"
+              className="w-16 px-2 py-1 text-[11px] text-right tabular-nums rounded font-bold"
+              style={{ border: `1px solid ${valid ? TOKENS.gold : TOKENS.border}`, background: "white" }}
+            />
+            <span className="text-[10px]" style={{ color: TOKENS.muted }}>→</span>
+            <select
+              value={splitTarget}
+              onChange={(e) => setSplitTarget(Number(e.target.value))}
+              className="text-[11px] py-1 rounded px-1 font-semibold"
+              style={{ border: `1px solid ${TOKENS.border}`, background: "white", color: TOKENS.ink }}
+            >
+              {shipments.map((sh) => <option key={sh.id} value={sh.no}>{sh.name}</option>)}
+            </select>
+            <button
+              onClick={() => { splitItem(it.id, splitTarget, splitQty); setSplitQty(""); }}
+              disabled={!valid}
+              className="px-2 py-1 text-[10px] font-bold rounded"
+              style={{
+                background: valid ? TOKENS.navy : TOKENS.border,
+                color: valid ? "white" : TOKENS.muted,
+                border: "none",
+                cursor: valid ? "pointer" : "not-allowed",
+                opacity: valid ? 1 : 0.6,
+              }}
+            >
+              Böl
+            </button>
+            {splitQty && valid && (
+              <span className="text-[10px]" style={{ color: TOKENS.muted }}>
+                ({totalQty - sq} + {sq})
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="text-[10px]" style={{ color: TOKENS.muted }}>— tek adet</span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
 // ============================================================================
 // SEVKİYATLAR BÖLÜMÜ — sipariş kalemleri birden fazla sevkiyata bölünebilir
 // Geriye uyumluluk: shipments[] yoksa tek sevkiyat olarak çalışır
@@ -5650,6 +5801,25 @@ function ShipmentsSection({ editing, setEditing }) {
     setEditing({ ...editing, items: newItems });
   };
 
+  // Kalemi adet bazında böl — orijinal kalem güncellenir, yeni satır eklenir
+  const splitItem = (itemId, shipmentNo, splitQty) => {
+    const item = items.find((it) => it.id === itemId);
+    if (!item) return;
+    const totalQty = Math.floor(Number(item.quantity) || 0);
+    const sq = Math.max(1, Math.min(Math.floor(Number(splitQty) || 0), totalQty - 1));
+    if (sq <= 0 || sq >= totalQty) return;
+    const remaining = totalQty - sq;
+    const newItems = items.map((it) =>
+      it.id === itemId ? { ...it, quantity: remaining } : it
+    );
+    newItems.splice(
+      newItems.findIndex((it) => it.id === itemId) + 1,
+      0,
+      { ...item, id: uid(), quantity: sq, shipmentNo: Number(shipmentNo) }
+    );
+    setEditing({ ...editing, items: newItems });
+  };
+
   // Hiç sevkiyat yoksa sadece "Sevkiyat Ekle" butonu göster
   if (shipments.length === 0) {
     return (
@@ -5662,12 +5832,12 @@ function ShipmentsSection({ editing, setEditing }) {
             </span>
           </div>
           {items.length > 0 && (
-            <Btn variant="secondary" size="xs" icon={Plus} onClick={addShipment}>İkinci Sevkiyat Ekle</Btn>
+            <Btn variant="secondary" size="xs" icon={Plus} onClick={addShipment}>Sevkiyat Ekle</Btn>
           )}
         </div>
         <div className="text-[11px] rounded-md p-3" style={{ background: TOKENS.cream, color: TOKENS.muted, border: `1px dashed ${TOKENS.border}` }}>
           ℹ️ Tüm kalemler tek sevkiyatta gönderilir (sipariş üst kısmındaki "Planlanan Sevk" ve "Fiili Sevk" tarihleri kullanılır).
-          Birden fazla parti hâlinde sevk etmek istersen "İkinci Sevkiyat Ekle" tuşuna bas.
+          Birden fazla parti hâlinde sevk etmek istersen "Sevkiyat Ekle" tuşuna bas.
         </div>
       </div>
     );
@@ -5763,7 +5933,7 @@ function ShipmentsSection({ editing, setEditing }) {
         {items.length > 0 && (
           <div className="rounded-md overflow-hidden mt-3" style={{ border: `1px solid ${TOKENS.border}` }}>
             <div className="px-3 py-2 text-[10px] uppercase tracking-wider font-bold" style={{ background: TOKENS.cream, color: TOKENS.muted }}>
-              Kalem-Sevkiyat Eşleştirme · Her kalem hangi sevkiyata gidecek?
+              Kalem-Sevkiyat Eşleştirme · Her kalem hangi sevkiyata gidecek? · Adet bazında bölmek için "Böl" butonunu kullan
             </div>
             <table className="w-full text-xs">
               <thead style={{ background: TOKENS.cream + "80" }}>
@@ -5772,21 +5942,23 @@ function ShipmentsSection({ editing, setEditing }) {
                   <th className="text-left px-3 py-1.5 text-[10px] font-bold">İsim</th>
                   <th className="text-right px-3 py-1.5 text-[10px] font-bold">Adet</th>
                   <th className="text-center px-3 py-1.5 text-[10px] font-bold w-32">Sevkiyat</th>
+                  <th className="text-center px-3 py-1.5 text-[10px] font-bold w-48">Adet Bazında Böl</th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((it) => (
-                  <tr key={it.id} style={{ borderTop: `1px solid ${TOKENS.border}` }}>
-                    <td className="px-3 py-1.5 font-mono font-bold text-[11px]" style={{ color: TOKENS.navy }}>{it.productCode || "—"}</td>
-                    <td className="px-3 py-1.5 text-[11px]">{it.nameTr || "—"}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums text-[11px]">{fmtNum(it.quantity)} {it.unit}</td>
-                    <td className="px-3 py-1.5">
-                      <Select value={it.shipmentNo || 1} onChange={(e) => updateItemShipment(it.id, e.target.value)} className="text-[11px] py-1">
-                        {shipments.map((sh) => <option key={sh.id} value={sh.no}>{sh.name}</option>)}
-                      </Select>
-                    </td>
-                  </tr>
-                ))}
+                {items.map((it) => {
+                  const totalQty = Math.floor(Number(it.quantity) || 0);
+                  return (
+                  <SplitItemRow
+                    key={it.id}
+                    it={it}
+                    totalQty={totalQty}
+                    shipments={shipments}
+                    updateItemShipment={updateItemShipment}
+                    splitItem={splitItem}
+                  />
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -6130,9 +6302,10 @@ function OrderItemsSection({ editing, setEditing, products, itemsTotal, addItem,
                     <td className="px-1 py-1">
                       <input
                         type="number"
-                        step="0.01"
+                        step="1"
+                        min="1"
                         value={item.quantity}
-                        onChange={(e) => updateItem(idx, { quantity: e.target.value })}
+                        onChange={(e) => updateItem(idx, { quantity: Math.max(1, Math.floor(Number(e.target.value) || 1)) })}
                         onPaste={onColumnPaste(idx, "quantity")}
                         className="w-full px-2 py-1.5 text-xs text-right font-bold tabular-nums rounded"
                         style={{ border: `1px solid ${TOKENS.border}`, background: "white" }}
@@ -6228,6 +6401,28 @@ function OrderItemsSection({ editing, setEditing, products, itemsTotal, addItem,
                         </td>
                         <td className="px-2 py-1.5 text-right text-[12px] font-bold tabular-nums" style={{ color: TOKENS.ink }}>
                           + {fmtMoney(totals.vatAmount, editing.currency)}
+                        </td>
+                        <td></td>
+                      </tr>
+                    )}
+                    {totals.additionalCosts > 0 && (
+                      <tr style={{ background: TOKENS.cream + "30" }}>
+                        <td colSpan="7" className="px-3 py-1.5 text-right text-[11px] font-semibold" style={{ color: TOKENS.copper }}>
+                          İlave Maliyetler
+                        </td>
+                        <td className="px-2 py-1.5 text-right text-[12px] font-bold tabular-nums" style={{ color: TOKENS.copper }}>
+                          + {fmtMoney(totals.additionalCosts, editing.currency)}
+                        </td>
+                        <td></td>
+                      </tr>
+                    )}
+                    {totals.additionalCostsVat > 0 && (
+                      <tr style={{ background: TOKENS.cream + "30" }}>
+                        <td colSpan="7" className="px-3 py-1.5 text-right text-[11px] font-semibold" style={{ color: TOKENS.copper }}>
+                          İlave Maliyet KDV
+                        </td>
+                        <td className="px-2 py-1.5 text-right text-[12px] font-bold tabular-nums" style={{ color: TOKENS.copper }}>
+                          + {fmtMoney(totals.additionalCostsVat, editing.currency)}
                         </td>
                         <td></td>
                       </tr>
@@ -6377,8 +6572,8 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
         <tfoot>
           ${totals.discount > 0 || totals.vatRate > 0 || (order.additionalCosts || []).length > 0 ? `<tr><td colspan="6" class="right" style="font-weight:700;color:#7A736A">Ara Toplam</td><td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(totals.subtotal, order.currency)}</td></tr>` : ""}
           ${totals.discount > 0 ? `<tr><td colspan="6" class="right text-warning">Sipariş İskontosu (${order.discountType === "percentage" ? "%" + order.discountValue : "tutar"})</td><td class="right text-mono text-warning">− ${fmtMoneyPDF(totals.discount, order.currency)}</td></tr>` : ""}
-          ${(order.additionalCosts || []).map((c) => `<tr><td colspan="6" class="right" style="color:#B87333">+ ${htmlEscape(c.description || "İlave Maliyet")}</td><td class="right text-mono" style="color:#B87333;font-weight:700">+ ${fmtMoneyPDF(c.amount, order.currency)}</td></tr>`).join("")}
           ${totals.vatRate > 0 ? `<tr><td colspan="6" class="right" style="font-weight:700;color:#7A736A">KDV (%${totals.vatRate})</td><td class="right text-mono" style="font-weight:700">+ ${fmtMoneyPDF(totals.vatAmount, order.currency)}</td></tr>` : ""}
+          ${(order.additionalCosts || []).map((c) => { const acAmt = Number(c.amount)||0; const acVat = acAmt*(Number(c.vatRate)||0)/100; return `<tr><td colspan="6" class="right" style="color:#B87333">+ ${htmlEscape(c.description || "İlave Maliyet")}${c.vatRate > 0 ? ` (+%${c.vatRate} KDV)` : ""}</td><td class="right text-mono" style="color:#B87333;font-weight:700">+ ${fmtMoneyPDF(acAmt + acVat, order.currency)}</td></tr>`; }).join("")}
           <tr style="background:#C9A96120;border-top:2px solid #C9A961">
             <td colspan="6" class="right" style="font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:0.05em">Genel Toplam</td>
             <td class="right text-mono" style="font-weight:700;font-size:13px">${fmtMoneyPDF(totals.total, order.currency)}</td>
@@ -6589,20 +6784,24 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
                         <td className="px-3 py-1.5 text-right tabular-nums font-bold" style={{ color: TOKENS.copper }}>− {fmtMoney(totals.discount, order.currency)}</td>
                       </tr>
                     )}
-                    {(order.additionalCosts || []).map((c, ix) => (
-                      <tr key={c.id || ix} style={{ background: TOKENS.cream + "60" }}>
-                        <td colSpan="5" className="px-3 py-1.5 text-right text-[11px] font-semibold" style={{ color: TOKENS.copper }}>
-                          + {c.description || "İlave Maliyet"}
-                        </td>
-                        <td className="px-3 py-1.5 text-right tabular-nums font-bold" style={{ color: TOKENS.copper }}>+ {fmtMoney(c.amount, order.currency)}</td>
-                      </tr>
-                    ))}
                     {totals.vatRate > 0 && (
                       <tr style={{ background: TOKENS.cream + "60" }}>
                         <td colSpan="5" className="px-3 py-1.5 text-right text-[11px] font-semibold" style={{ color: TOKENS.muted }}>KDV (%{totals.vatRate})</td>
                         <td className="px-3 py-1.5 text-right tabular-nums font-bold">+ {fmtMoney(totals.vatAmount, order.currency)}</td>
                       </tr>
                     )}
+                    {(order.additionalCosts || []).map((c, ix) => {
+                      const acAmt = Number(c.amount) || 0;
+                      const acVat = acAmt * (Number(c.vatRate) || 0) / 100;
+                      return (
+                      <tr key={c.id || ix} style={{ background: TOKENS.cream + "60" }}>
+                        <td colSpan="5" className="px-3 py-1.5 text-right text-[11px] font-semibold" style={{ color: TOKENS.copper }}>
+                          + {c.description || "İlave Maliyet"}{c.vatRate > 0 ? ` (+%${c.vatRate} KDV)` : ""}
+                        </td>
+                        <td className="px-3 py-1.5 text-right tabular-nums font-bold" style={{ color: TOKENS.copper }}>+ {fmtMoney(acAmt + acVat, order.currency)}</td>
+                      </tr>
+                      );
+                    })}
                     <tr style={{ background: TOKENS.gold + "15", borderTop: `2px solid ${TOKENS.gold}` }}>
                       <td colSpan="5" className="px-3 py-2 text-right font-bold uppercase text-[11px] tracking-wider" style={{ color: TOKENS.ink }}>Genel Toplam</td>
                       <td className="px-3 py-2 text-right tabular-nums font-bold text-base" style={{ color: TOKENS.ink }}>{fmtMoney(totals.total, order.currency)}</td>
@@ -7350,7 +7549,7 @@ function CashFlowView({ orders, customers, payments, rates, setView, t = (k) => 
 
   // Nakit akışı PDF
   const printList = () => {
-    if (!filteredPayments.length) return alert("Yazdırılacak ödeme yok");
+    if (!filteredPayments.length) { alert(lang === "en" ? "No payments to print." : "Yazdırılacak ödeme yok."); return; }
 
     // Ödeme satırları (vadeye göre sıralı)
     const sorted = [...filteredPayments].sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""));

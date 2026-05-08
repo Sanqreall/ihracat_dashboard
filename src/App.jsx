@@ -1018,7 +1018,7 @@ function printPDF({ title, subtitle, contentHtml, orientation = "portrait", lang
     ${t("pdfFooter")} · ${fmtDateLong(todayISO())}
   </div>
   <script>
-    window.addEventListener('load', () => setTimeout(() => window.print(), 500));
+    // Otomatik yazdırma kaldırıldı — kullanıcı 'Yazdır / PDF Kaydet' butonuna basarak başlatır
   </script>
 </body>
 </html>`;
@@ -3154,19 +3154,34 @@ function CustomerDetailModal({ customer, onClose, orders, payments, bankAccounts
     const w = window.open("", "_blank", "width=900,height=700");
     if (!w) { alert("Popup engellendi. Tarayıcı ayarlarından bu site için popup'a izin ver."); return; }
 
+    // Para birimi bazında ödeme detayları (gecikmiş, toplam vs)
+    // overduePayments: status=overdue olan ödemelerin müşteriye ait olanları
+    const overdueByCurrency = {};
+    custPayments.forEach((p) => {
+      if (p.status === "overdue") {
+        if (!overdueByCurrency[p.currency]) overdueByCurrency[p.currency] = 0;
+        overdueByCurrency[p.currency] += Number(p.amount) || 0;
+      }
+    });
+
     // Para birimi bazında özet
     const curRows = Object.keys(customer.totalsByCurrency || {}).map((cur) => {
       const total = customer.totalsByCurrency[cur] || 0;
       const paid = customer.paidByCurrency?.[cur] || 0;
       const open = customer.openByCurrency?.[cur] || 0;
+      const overdue = overdueByCurrency[cur] || 0;
       return `
         <tr>
           <td style="padding:8px;border:1px solid #ccc;font-weight:bold">${cur}</td>
           <td style="padding:8px;border:1px solid #ccc;text-align:right">${total.toLocaleString("tr-TR", {minimumFractionDigits:2,maximumFractionDigits:2})}</td>
           <td style="padding:8px;border:1px solid #ccc;text-align:right;color:#3E7D5A">${paid.toLocaleString("tr-TR", {minimumFractionDigits:2,maximumFractionDigits:2})}</td>
           <td style="padding:8px;border:1px solid #ccc;text-align:right;color:#B87333;font-weight:bold">${open.toLocaleString("tr-TR", {minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="padding:8px;border:1px solid #ccc;text-align:right;color:${overdue > 0 ? '#A6383D' : '#7A736A'};font-weight:${overdue > 0 ? 'bold' : 'normal'}">${overdue > 0 ? overdue.toLocaleString("tr-TR", {minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}</td>
         </tr>`;
     }).join("");
+
+    // Toplam gecikmiş USD karşılığı
+    const totalOverdueUSD = Object.entries(overdueByCurrency).reduce((s, [cur, amt]) => s + toUSD(amt, cur, rates), 0);
 
     // Sipariş listesi
     const orderRows = custOrders.map((o) => {
@@ -3261,6 +3276,7 @@ function CustomerDetailModal({ customer, onClose, orders, payments, bankAccounts
         <th style="text-align:right">Toplam Ciro</th>
         <th style="text-align:right">Tahsil Edilen</th>
         <th style="text-align:right">Açık Bakiye (Alacak)</th>
+        <th style="text-align:right">Gecikmiş Bakiye</th>
       </tr>
     </thead>
     <tbody>${curRows}</tbody>
@@ -3268,13 +3284,22 @@ function CustomerDetailModal({ customer, onClose, orders, payments, bankAccounts
   ` : '<div style="color:#7A736A;font-style:italic">Bu müşteri için henüz işlem yok.</div>'}
 
   <div class="summary-card">
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px">
+      <div style="flex:1">
         <div class="label">Toplam Açık Bakiye (USD karşılığı)</div>
         <div style="font-size:20px;font-weight:bold;color:${customer.openBalance > 0 ? "#B87333" : "#3E7D5A"};margin-top:4px">
           ${customer.openBalance > 0 ? "ALACAK" : "BAKİYE YOK"}: $${(customer.openBalance || 0).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}
         </div>
       </div>
+      ${totalOverdueUSD > 0 ? `
+      <div style="flex:1;border-left:1px solid #ddd;padding-left:16px">
+        <div class="label" style="color:#A6383D">⚠ Gecikmiş Toplam Bakiye (USD)</div>
+        <div style="font-size:20px;font-weight:bold;color:#A6383D;margin-top:4px">
+          $${totalOverdueUSD.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}
+        </div>
+        <div style="font-size:10px;color:#7A736A;margin-top:2px">${custPayments.filter(p => p.status === "overdue").length} gecikmiş ödeme</div>
+      </div>
+      ` : ""}
       <div style="text-align:right;font-size:10px;color:#7A736A">
         <div>Toplam Sipariş: <strong style="color:#0F1A2E">${custOrders.length}</strong></div>
         <div>Toplam Ciro (USD): <strong style="color:#0F1A2E">$${(customer.totalUSD || 0).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div>
@@ -3328,7 +3353,7 @@ function CustomerDetailModal({ customer, onClose, orders, payments, bankAccounts
 
   <script>
     // Sayfa yüklenince yazdırma diyalogunu otomatik aç
-    window.addEventListener('load', () => setTimeout(() => window.print(), 500));
+    // Otomatik yazdırma kaldırıldı — kullanıcı 'Yazdır / PDF Kaydet' butonuna basarak başlatır
   </script>
 </body>
 </html>`;
@@ -4126,10 +4151,169 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
     `;
 
     printPDF({
-      title: "Sipariş Listesi",
-      subtitle: `${filtered.length} sipariş${filters.length ? " · filtreli" : ""}`,
+      title: lang === "en" ? "Order List" : "Sipariş Listesi",
+      subtitle: `${filtered.length} ${lang === "en" ? "orders" : "sipariş"}${filters.length ? (lang === "en" ? " · filtered" : " · filtreli") : ""}`,
       contentHtml: content,
       orientation: "landscape",
+      lang,
+    });
+  };
+
+  // Ay/Hafta görünümü için PDF — accordion mantığında
+  // Aylar başlık, içlerinde sipariş satırları + altlarında kalemler
+  const printCalendar = () => {
+    if (!filtered.length) return showToast(lang === "en" ? "No orders to print" : "Yazdırılacak sipariş yok", "error");
+
+    // Ay bazında grupla — sevk tarihine göre (calendar view ile aynı mantık)
+    const grouped = {};
+    filtered.forEach((o) => {
+      const d = o.actualShipmentDate || o.shipmentDate || o.orderDate || o.createdAt;
+      if (!d) return;
+      const key = d.slice(0, 7);
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(o);
+    });
+    Object.keys(grouped).forEach((k) => grouped[k].sort((a, b) => {
+      const da = a.actualShipmentDate || a.shipmentDate || a.orderDate || "";
+      const db = b.actualShipmentDate || b.shipmentDate || b.orderDate || "";
+      return db.localeCompare(da);
+    }));
+    const sortedMonths = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+
+    const monthLabel = (key) => {
+      const [y, m] = key.split("-");
+      const d = new Date(Number(y), Number(m) - 1, 1);
+      return d.toLocaleDateString(lang === "en" ? "en-US" : "tr-TR", { month: "long", year: "numeric" }).toUpperCase();
+    };
+
+    const monthBlocks = sortedMonths.map((monthKey) => {
+      const monthOrders = grouped[monthKey];
+      const monthTotal = monthOrders.reduce((s, o) => s + orderTotalUSD(o, rates), 0);
+      const shippedCount = monthOrders.filter((o) => o.actualShipmentDate).length;
+
+      const orderBlocks = monthOrders.map((o) => {
+        const c = customers.find((x) => x.id === o.customerId);
+        const t = orderTotal(o);
+        const paid = orderPaidAmount(o, payments);
+        const remaining = t - paid;
+        const totals = calcOrderTotals(o);
+        const st = ORDER_STATUSES.find((s) => s.key === o.status);
+        const isShipped = !!o.actualShipmentDate;
+
+        const itemRows = (o.items || []).map((it) => {
+          const baseT = (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0);
+          const lineDisc = Number(it.discount) || 0;
+          const lineT = baseT * (1 - lineDisc / 100);
+          return `
+            <tr>
+              <td class="text-mono" style="font-size:10px;font-weight:700;color:#1E3A5F">${htmlEscape(it.productCode)}</td>
+              <td style="font-size:10px"><strong>${htmlEscape(it.nameTr || "—")}</strong>${it.nameEn ? `<br/><span style="color:#7A736A;font-style:italic;font-size:9px">${htmlEscape(it.nameEn)}</span>` : ""}</td>
+              <td class="right text-mono" style="font-size:10px">${fmtNum(it.quantity)} ${it.unit || ""}</td>
+              <td class="right text-mono" style="font-size:10px">${fmtMoneyPDF(it.unitPrice, o.currency)}</td>
+              <td class="right" style="font-size:10px;color:${lineDisc > 0 ? '#B87333' : '#7A736A'}">${lineDisc > 0 ? "%" + lineDisc : "—"}</td>
+              <td class="right text-mono" style="font-size:10px;font-weight:700">${fmtMoneyPDF(lineT, o.currency)}</td>
+            </tr>`;
+        }).join("");
+
+        const totalsRows = `
+          ${totals.discount > 0 || totals.vatRate > 0 || (o.additionalCosts || []).length > 0 ? `<tr><td colspan="5" class="right" style="font-size:10px;color:#7A736A">${lang === "en" ? "Subtotal" : "Ara Toplam"}</td><td class="right text-mono" style="font-size:10px;font-weight:700">${fmtMoneyPDF(totals.subtotal, o.currency)}</td></tr>` : ""}
+          ${totals.discount > 0 ? `<tr><td colspan="5" class="right" style="font-size:10px;color:#B87333">${lang === "en" ? "Discount" : "İskonto"}</td><td class="right text-mono" style="font-size:10px;color:#B87333">− ${fmtMoneyPDF(totals.discount, o.currency)}</td></tr>` : ""}
+          ${(o.additionalCosts || []).map((cc) => `<tr><td colspan="5" class="right" style="font-size:10px;color:#B87333">+ ${htmlEscape(cc.description || "İlave")}</td><td class="right text-mono" style="font-size:10px;color:#B87333">+ ${fmtMoneyPDF(cc.amount, o.currency)}</td></tr>`).join("")}
+          ${totals.vatRate > 0 ? `<tr><td colspan="5" class="right" style="font-size:10px;color:#7A736A">${lang === "en" ? "VAT" : "KDV"} (%${totals.vatRate})</td><td class="right text-mono" style="font-size:10px">+ ${fmtMoneyPDF(totals.vatAmount, o.currency)}</td></tr>` : ""}
+          <tr style="background:#C9A96120;border-top:2px solid #C9A961">
+            <td colspan="5" class="right" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">${lang === "en" ? "Grand Total" : "Genel Toplam"}</td>
+            <td class="right text-mono" style="font-size:11px;font-weight:700">${fmtMoneyPDF(totals.total, o.currency)}</td>
+          </tr>
+        `;
+
+        return `
+          <div style="margin-bottom:14px;page-break-inside:avoid;border:1px solid #E8E2D6;border-radius:6px;overflow:hidden;${isShipped ? 'background:#3E7D5A0A' : 'background:white'}">
+            <div style="padding:8px 12px;background:${isShipped ? '#3E7D5A15' : '#F8F5EE'};border-bottom:1px solid #E8E2D6;display:flex;justify-content:space-between;align-items:center;gap:12px">
+              <div style="display:flex;align-items:center;gap:12px;flex:1">
+                <strong style="font-family:'Courier New',monospace;color:#1E3A5F;font-size:11px">${htmlEscape(o.orderNumber)}</strong>
+                <div>
+                  <div style="font-weight:700;font-size:11px">${htmlEscape(c?.name || "—")}</div>
+                  <div style="font-size:9px;color:#7A736A">
+                    ${fmtDate(o.orderDate)} · W${getISOWeek(o.orderDate) || "—"}
+                    ${o.shipmentDate ? ` · ${lang === "en" ? "Plan. Ship" : "Plan. Sevk"}: ${fmtDate(o.shipmentDate)}` : ""}
+                    ${o.actualShipmentDate ? ` · <span style="color:#3E7D5A;font-weight:700">${lang === "en" ? "Actual Ship" : "Fiili Sevk"}: ${fmtDate(o.actualShipmentDate)}</span>` : ""}
+                  </div>
+                </div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:11px;font-weight:700">${fmtMoneyPDF(t, o.currency)}</div>
+                ${paid > 0 ? `<div style="font-size:9px;color:#3E7D5A">✓ ${fmtMoneyPDF(paid, o.currency)}</div>` : ""}
+                <div style="font-size:9px;color:#7A736A">${st?.label || o.status}</div>
+              </div>
+            </div>
+            ${(o.items || []).length > 0 ? `
+              <table style="margin:0;border:none;font-size:10px">
+                <thead style="background:#F8F5EE">
+                  <tr>
+                    <th style="font-size:9px;padding:5px 8px">${lang === "en" ? "Code" : "Kod"}</th>
+                    <th style="font-size:9px;padding:5px 8px">${lang === "en" ? "Product" : "Ürün"}</th>
+                    <th class="right" style="font-size:9px;padding:5px 8px">${lang === "en" ? "Qty" : "Adet"}</th>
+                    <th class="right" style="font-size:9px;padding:5px 8px">${lang === "en" ? "Unit Price" : "Birim Fiyat"}</th>
+                    <th class="right" style="font-size:9px;padding:5px 8px">${lang === "en" ? "Disc" : "İsk"}</th>
+                    <th class="right" style="font-size:9px;padding:5px 8px">${lang === "en" ? "Line Total" : "Toplam"}</th>
+                  </tr>
+                </thead>
+                <tbody>${itemRows}</tbody>
+                <tfoot>${totalsRows}</tfoot>
+              </table>
+            ` : `<div style="padding:10px;text-align:center;color:#7A736A;font-style:italic;font-size:10px">${lang === "en" ? "No items" : "Kalem yok"}</div>`}
+          </div>
+        `;
+      }).join("");
+
+      return `
+        <div style="margin-bottom:24px;page-break-inside:avoid">
+          <div style="background:#0F1A2E;color:white;padding:10px 14px;border-radius:6px 6px 0 0;display:flex;justify-content:space-between;align-items:center">
+            <div style="display:flex;align-items:center;gap:10px">
+              <strong style="font-size:13px;letter-spacing:0.05em">${monthLabel(monthKey)}</strong>
+              <span style="font-size:10px;background:#C9A96130;color:#C9A961;padding:2px 8px;border-radius:3px;font-weight:700">
+                ${monthOrders.length} ${lang === "en" ? "orders" : "sipariş"}
+              </span>
+              ${shippedCount > 0 ? `<span style="font-size:10px;background:#3E7D5A30;color:#86efac;padding:2px 8px;border-radius:3px;font-weight:700">${shippedCount} ${lang === "en" ? "shipped" : "sevk edildi"}</span>` : ""}
+            </div>
+            <div style="font-size:12px;color:#C9A961;font-weight:700">
+              $${monthTotal.toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </div>
+          </div>
+          <div style="padding:8px 8px 0">
+            ${orderBlocks}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    // Filtre özeti
+    const filterParts = [];
+    if (search) filterParts.push(`${lang === "en" ? "Search" : "Arama"}: "${search}"`);
+    if (statusFilter.length > 0) filterParts.push(`${t("status")}: ${statusFilter.map((s) => ORDER_STATUSES.find((x) => x.key === s)?.label || s).join(", ")}`);
+    if (customerFilter.length > 0) filterParts.push(`${t("customer")}: ${customerFilter.map((id) => customers.find((c) => c.id === id)?.name || id).join(", ")}`);
+    if (curFilter.length > 0) filterParts.push(`${lang === "en" ? "Currency" : "Para Birimi"}: ${curFilter.join(", ")}`);
+
+    const totalRevenue = filtered.reduce((s, o) => s + orderTotalUSD(o, rates), 0);
+    const totalShipped = filtered.filter((o) => o.actualShipmentDate).length;
+
+    const content = `
+      ${filterParts.length > 0 ? `<div style="font-size:10px;padding:6px 10px;background:#FFF8E7;border-left:3px solid #C9A961;margin-bottom:10px"><strong>${lang === "en" ? "Filters" : "Filtreler"}:</strong> ${filterParts.join(" · ")}</div>` : ""}
+      <div class="kpi-grid">
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Total Orders" : "Toplam Sipariş"}</div><div class="kpi-value">${filtered.length}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Shipped" : "Sevk Edilen"}</div><div class="kpi-value" style="color:#3E7D5A">${totalShipped}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Months" : "Ay Sayısı"}</div><div class="kpi-value">${sortedMonths.length}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Total Volume (USD)" : "Toplam Hacim (USD)"}</div><div class="kpi-value">$${totalRevenue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+      </div>
+      ${monthBlocks}
+    `;
+
+    printPDF({
+      title: lang === "en" ? "Order List · Month/Week View" : "Sipariş Listesi · Ay/Hafta Görünümü",
+      subtitle: `${filtered.length} ${lang === "en" ? "orders" : "sipariş"} · ${sortedMonths.length} ${lang === "en" ? "months" : "ay"}${filterParts.length ? (lang === "en" ? " · filtered" : " · filtreli") : ""}`,
+      contentHtml: content,
+      orientation: "portrait",
+      lang,
     });
   };
 
@@ -4310,10 +4494,11 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
       <PageHeader title={t("orders")} subtitle={`${orders.length} ${t("ordersSubtitle")}`}>
         <input id="order-import" type="file" accept=".xlsx,.xls" onChange={(e) => { handleImport(e.target.files[0]); e.target.value = ""; }} className="hidden" />
         <div className="flex gap-1 rounded-md p-0.5" style={{ background: TOKENS.cream, border: `1px solid ${TOKENS.border}` }}>
-          <button onClick={() => setViewMode("list")} className="px-3 py-1.5 text-xs font-bold rounded transition" style={{ background: viewMode === "list" ? "white" : "transparent", color: viewMode === "list" ? TOKENS.ink : TOKENS.muted, boxShadow: viewMode === "list" ? "0 1px 2px rgba(0,0,0,0.05)" : "none" }}>{t("listView")}</button>
-          <button onClick={() => setViewMode("calendar")} className="px-3 py-1.5 text-xs font-bold rounded transition" style={{ background: viewMode === "calendar" ? "white" : "transparent", color: viewMode === "calendar" ? TOKENS.ink : TOKENS.muted, boxShadow: viewMode === "calendar" ? "0 1px 2px rgba(0,0,0,0.05)" : "none" }}>{t("calendarView")}</button>
+          <button onClick={() => setViewMode("list")} className="px-3 py-1.5 text-xs font-bold rounded transition" style={{ background: viewMode === "list" ? "white" : "transparent", color: viewMode === "list" ? TOKENS.ink : TOKENS.muted, boxShadow: viewMode === "list" ? "0 1px 2px rgba(0,0,0,0.05)" : "none" }}>{t("list")}</button>
+          <button onClick={() => setViewMode("calendar")} className="px-3 py-1.5 text-xs font-bold rounded transition" style={{ background: viewMode === "calendar" ? "white" : "transparent", color: viewMode === "calendar" ? TOKENS.ink : TOKENS.muted, boxShadow: viewMode === "calendar" ? "0 1px 2px rgba(0,0,0,0.05)" : "none" }}>{t("monthWeek")}</button>
         </div>
-        <Btn variant="ghost" size="sm" icon={FileDown} onClick={printList}>PDF</Btn>
+        <Btn variant="ghost" size="sm" icon={FileDown} onClick={printList}>PDF {lang === "en" ? "List" : "Liste"}</Btn>
+        <Btn variant="ghost" size="sm" icon={FileDown} onClick={printCalendar}>PDF {lang === "en" ? "Month/Week" : "Ay/Hafta"}</Btn>
         <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>{t("export")}</Btn>
         {canEdit && <>
           <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>{t("template")}</Btn>
@@ -4387,6 +4572,8 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
                 onView={(o) => setViewing(o)}
                 onEdit={canEdit ? (o) => openEdit(o) : null}
                 onDelete={canEdit ? (id) => remove(id) : null}
+                t={t}
+                lang={lang}
               />
             )}
           </>
@@ -4464,7 +4651,7 @@ function syncPaymentsFromPlan(order, currentPayments, setPayments) {
 // Mayıs ayı altında o ayın siparişleri (sipariş no), her sipariş genişletilince
 // kalemleri görünür. Salt görüntüleme için ek bir mod.
 
-function OrdersCalendarView({ orders, customers, rates, payments, onView, onEdit, onDelete }) {
+function OrdersCalendarView({ orders, customers, rates, payments, onView, onEdit, onDelete, t = (k) => k, lang = "tr" }) {
   const [openMonths, setOpenMonths] = useState({}); // { "2026-05": true }
   const [openOrders, setOpenOrders] = useState({}); // { orderId: true }
 
@@ -4472,30 +4659,38 @@ function OrdersCalendarView({ orders, customers, rates, payments, onView, onEdit
   const grouped = useMemo(() => {
     const m = {};
     orders.forEach((o) => {
-      // Sevk edilmişse → fiili sevk tarihinin ayı
-      // Sevk edilmemişse → planlanan sevk tarihi (varsa)
-      // Hiçbiri yoksa → sipariş tarihi
       const d = o.actualShipmentDate || o.shipmentDate || o.orderDate || o.createdAt;
       if (!d) return;
-      const key = d.slice(0, 7); // "2026-05"
+      const key = d.slice(0, 7);
       if (!m[key]) m[key] = [];
       m[key].push(o);
     });
-    // Her ay içinde sevk tarihine göre sırala (yeni → eski)
     Object.keys(m).forEach((k) => m[k].sort((a, b) => {
       const da = a.actualShipmentDate || a.shipmentDate || a.orderDate || "";
       const db = b.actualShipmentDate || b.shipmentDate || b.orderDate || "";
       return db.localeCompare(da);
     }));
-    // Aylar yeni → eski
     return Object.entries(m).sort(([a], [b]) => b.localeCompare(a));
   }, [orders]);
+
+  // Tümünü açık mı? (varsayılan açık olduğu için: hiçbiri false değilse açık sayılır)
+  const allOpen = grouped.length > 0 && grouped.every(([k]) => openMonths[k] !== false);
+  const expandAll = () => {
+    const obj = {};
+    grouped.forEach(([k]) => { obj[k] = true; });
+    setOpenMonths(obj);
+  };
+  const collapseAll = () => {
+    const obj = {};
+    grouped.forEach(([k]) => { obj[k] = false; });
+    setOpenMonths(obj);
+  };
 
   if (grouped.length === 0) {
     return (
       <Card>
         <div className="text-center py-12 text-sm" style={{ color: TOKENS.muted }}>
-          Filtreyle eşleşen sipariş yok
+          {lang === "en" ? "No orders match the filter" : "Filtreyle eşleşen sipariş yok"}
         </div>
       </Card>
     );
@@ -4507,11 +4702,28 @@ function OrdersCalendarView({ orders, customers, rates, payments, onView, onEdit
   const monthLabel = (key) => {
     const [y, m] = key.split("-");
     const d = new Date(Number(y), Number(m) - 1, 1);
-    return d.toLocaleDateString("tr-TR", { month: "long", year: "numeric" }).toUpperCase();
+    return d.toLocaleDateString(lang === "en" ? "en-US" : "tr-TR", { month: "long", year: "numeric" }).toUpperCase();
   };
 
   return (
     <div className="space-y-2">
+      {/* Toplu aç/kapat butonu */}
+      <div className="flex justify-end">
+        <button
+          onClick={allOpen ? collapseAll : expandAll}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded transition"
+          style={{ background: "white", color: TOKENS.ink, border: `1px solid ${TOKENS.border}` }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = TOKENS.cream)}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "white")}
+          title={allOpen ? (lang === "en" ? "Collapse all months" : "Tüm ayları kapat") : (lang === "en" ? "Expand all months" : "Tüm ayları aç")}
+        >
+          {allOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          {allOpen
+            ? (lang === "en" ? "Collapse All" : "Tümünü Kapat")
+            : (lang === "en" ? "Expand All" : "Tümünü Aç")}
+        </button>
+      </div>
+
       {grouped.map(([monthKey, monthOrders]) => {
         const isMonthOpen = openMonths[monthKey] !== false; // varsayılan açık
         const monthTotal = monthOrders.reduce((s, o) => s + orderTotalUSD(o, rates), 0);

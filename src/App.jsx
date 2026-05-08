@@ -4969,7 +4969,8 @@ function OrdersCalendarView({ orders, customers, rates, payments, onView, onEdit
                                   <td className="px-3 py-1 text-right tabular-nums font-bold text-[10px]">{fmtMoney(totals.subtotal, o.currency)}</td>
                                 </tr>
                               )}
-                              {!sh && totals.discount > 0 && (\n                                <tr><td colSpan="5" className="px-3 py-1 text-right text-[10px] font-semibold" style={{ color: TOKENS.copper }}>İskonto</td><td className="px-3 py-1 text-right tabular-nums font-bold text-[10px]" style={{ color: TOKENS.copper }}>− {fmtMoney(totals.discount, o.currency)}</td></tr>
+                              {!sh && totals.discount > 0 && (
+                                <tr><td colSpan="5" className="px-3 py-1 text-right text-[10px] font-semibold" style={{ color: TOKENS.copper }}>İskonto</td><td className="px-3 py-1 text-right tabular-nums font-bold text-[10px]" style={{ color: TOKENS.copper }}>− {fmtMoney(totals.discount, o.currency)}</td></tr>
                               )}
                               {!sh && totals.vatRate > 0 && (
                                 <tr><td colSpan="5" className="px-3 py-1 text-right text-[10px] font-semibold" style={{ color: TOKENS.muted }}>KDV (%{totals.vatRate})</td><td className="px-3 py-1 text-right tabular-nums font-bold text-[10px]">+ {fmtMoney(totals.vatAmount, o.currency)}</td></tr>

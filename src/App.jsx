@@ -11,7 +11,7 @@
  *   orders        → Siparişler (müşteriye bağlı, kalemler ve ödeme planı içerir)
  *   payments      → Ödeme kayıtları (sipariş + plan kalemine bağlı)
  *   rates         → Manuel döviz kurları (USD bazında, raporlar için)
- *
+ *a
  * STORAGE: İki mod destekler:
  *   1. Yerel mod (localStorage): tek kullanıcı, tarayıcı yerel
  *   2. Bulut mod (Supabase):    paylaşımlı, çoklu kullanıcı, gerçek zamanlı
@@ -2790,10 +2790,17 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
       if (!paidByCurrency[p.currency]) paidByCurrency[p.currency] = 0;
       paidByCurrency[p.currency] += Number(p.amount) || 0;
     });
+    // Gecikmiş bakiye — döviz cinsi bazlı
+    const overdueByCurrency = {};
+    payments.filter((p) => {
+      const o = orders.find((x) => x.id === p.orderId);
+      return o?.customerId === c.id && p.status === "overdue";
+    }).forEach((p) => {
+      if (!overdueByCurrency[p.currency]) overdueByCurrency[p.currency] = 0;
+      overdueByCurrency[p.currency] += Number(p.amount) || 0;
+    });
 
-
-
-    return { ...c, totalUSD, openBalance, overdueBalance, orderCount: custOrders.length, totalsByCurrency, openByCurrency, paidByCurrency };
+    return { ...c, totalUSD, openBalance, overdueBalance, orderCount: custOrders.length, totalsByCurrency, openByCurrency, paidByCurrency, overdueByCurrency };
   }), [customers, orders, payments, rates]);
 
   const countries = useMemo(() => [...new Set(customers.map((c) => c.country).filter(Boolean))].sort(), [customers]);
@@ -2880,15 +2887,33 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
     });
 
     const rows = filteredList.map((c) => {
+      // Toplam ciro - döviz cinsi bazlı
+      const totalsCurStr = Object.entries(c.totalsByCurrency || {})
+        .filter(([, v]) => Math.abs(v) > 0.01)
+        .map(([cur, v]) => `${cur} ${v.toLocaleString("tr-TR", {minimumFractionDigits:0, maximumFractionDigits:0})}`)
+        .join("<br/>");
+      // Açık bakiye - döviz cinsi bazlı
+      const openCurStr = Object.entries(c.openByCurrency || {})
+        .filter(([, v]) => Math.abs(v) > 0.01)
+        .map(([cur, v]) => `${cur} ${v.toLocaleString("tr-TR", {minimumFractionDigits:0, maximumFractionDigits:0})}`)
+        .join("<br/>");
+      // Gecikmiş - döviz cinsi bazlı
+      const overdueCurStr = Object.entries(c.overdueByCurrency || {})
+        .filter(([, v]) => Math.abs(v) > 0.01)
+        .map(([cur, v]) => `${cur} ${v.toLocaleString("tr-TR", {minimumFractionDigits:0, maximumFractionDigits:0})}`)
+        .join("<br/>");
       return `
         <tr>
           <td class="text-mono">${htmlEscape(c.code)}</td>
           <td><div style="font-weight:700">${htmlEscape(c.name)}</div>${c.contactPerson ? `<div style="font-size:9px;color:#7A736A">${htmlEscape(c.contactPerson)}</div>` : ""}</td>
           <td>${htmlEscape(c.country || "—")}</td>
           <td class="center">${c.orderCount}</td>
-          <td class="right text-mono">$${(c.totalUSD || 0).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
-          <td class="right text-mono ${c.openBalance > 0 ? 'text-warning' : 'text-success'}">${c.openBalance > 0 ? `$${c.openBalance.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}` : "✓"}</td>
-          <td class="right text-mono ${c.overdueBalance > 0 ? 'text-danger' : ''}" style="font-weight:${c.overdueBalance > 0 ? '700' : '400'}">${c.overdueBalance > 0 ? `$${c.overdueBalance.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}` : "—"}</td>
+          <td class="right text-mono" style="font-size:9px">${totalsCurStr || "—"}</td>
+          <td class="right text-mono" style="color:#7A736A">$${(c.totalUSD || 0).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+          <td class="right text-mono ${c.openBalance > 0 ? 'text-warning' : ''}" style="font-size:9px;font-weight:700">${openCurStr || "✓"}</td>
+          <td class="right text-mono ${c.openBalance > 0 ? 'text-warning' : 'text-success'}" style="color:#7A736A">${c.openBalance > 0.01 ? `$${c.openBalance.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}` : "✓"}</td>
+          <td class="right text-mono ${c.overdueBalance > 0 ? 'text-danger' : ''}" style="font-size:9px;font-weight:700">${overdueCurStr || "—"}</td>
+          <td class="right text-mono ${c.overdueBalance > 0 ? 'text-danger' : ''}" style="color:#7A736A">${c.overdueBalance > 0.01 ? `$${c.overdueBalance.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}` : "—"}</td>
         </tr>`;
     }).join("");
 
@@ -2900,22 +2925,25 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
 
     const content = `
       <div class="kpi-grid">
-        <div class="kpi"><div class="kpi-label">Toplam Müşteri</div><div class="kpi-value">${filteredList.length}</div></div>
-        <div class="kpi"><div class="kpi-label">Toplam Ciro (USD)</div><div class="kpi-value">$${totalUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-        <div class="kpi"><div class="kpi-label">Toplam Alacak (USD)</div><div class="kpi-value" style="color:#B87333">$${totalOpen.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-        <div class="kpi"><div class="kpi-label">Gecikmiş Alacak (USD)</div><div class="kpi-value" style="color:#A6383D">$${totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Total Customers" : "Toplam Müşteri"}</div><div class="kpi-value">${filteredList.length}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Total Revenue (USD)" : "Toplam Ciro (USD)"}</div><div class="kpi-value">$${totalUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Total Receivable (USD)" : "Toplam Alacak (USD)"}</div><div class="kpi-value" style="color:#B87333">$${totalOpen.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Overdue Receivable (USD)" : "Gecikmiş Alacak (USD)"}</div><div class="kpi-value" style="color:#A6383D">$${totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
       </div>
-      ${overdueCount > 0 ? `<div style="font-size:10px;padding:6px 10px;background:#A6383D15;border-left:3px solid #A6383D;margin-bottom:8px"><strong style="color:#A6383D">⚠ ${overdueCount} müşteride gecikmiş alacak var. Toplam gecikmiş tutar: $${totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</strong></div>` : ""}
+      ${overdueCount > 0 ? `<div style="font-size:10px;padding:6px 10px;background:#A6383D15;border-left:3px solid #A6383D;margin-bottom:8px"><strong style="color:#A6383D">⚠ ${overdueCount} ${lang === "en" ? `customer(s) have overdue receivables. Total overdue` : `müşteride gecikmiş alacak var. Toplam gecikmiş tutar`}: $${totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</strong></div>` : ""}
       <table>
         <thead>
           <tr>
-            <th>Kod</th>
-            <th>Müşteri</th>
-            <th>Ülke</th>
-            <th class="center">Sipariş</th>
-            <th class="right">Ciro (USD)</th>
-            <th class="right">Açık Bakiye</th>
-            <th class="right">Gecikmiş Toplam Bakiye</th>
+            <th>${lang === "en" ? "Code" : "Kod"}</th>
+            <th>${lang === "en" ? "Customer" : "Müşteri"}</th>
+            <th>${lang === "en" ? "Country" : "Ülke"}</th>
+            <th class="center">${lang === "en" ? "Orders" : "Sipariş"}</th>
+            <th class="right">${lang === "en" ? "Revenue (Currency)" : "Ciro (Döviz)"}</th>
+            <th class="right">${lang === "en" ? "Revenue USD" : "Ciro USD"}</th>
+            <th class="right">${lang === "en" ? "Open Balance (Currency)" : "Açık Bakiye (Döviz)"}</th>
+            <th class="right">${lang === "en" ? "Open USD" : "Açık USD"}</th>
+            <th class="right">${lang === "en" ? "Overdue (Currency)" : "Gecikmiş (Döviz)"}</th>
+            <th class="right">${lang === "en" ? "Overdue USD" : "Gecikmiş USD"}</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -2923,10 +2951,11 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
     `;
 
     printPDF({
-      title: "Müşteri Listesi · Alacak/Verecek Özeti",
-      subtitle: `${filteredList.length} müşteri${search ? ` · arama: "${search}"` : ""}`,
+      title: lang === "en" ? "Customer List · Receivables Summary" : "Müşteri Listesi · Alacak/Verecek Özeti",
+      subtitle: `${filteredList.length} ${lang === "en" ? "customers" : "müşteri"}${search ? (lang === "en" ? ` · search: "${search}"` : ` · arama: "${search}"`) : ""}`,
       contentHtml: content,
       orientation: "landscape",
+      lang,
     });
   };
 
@@ -2990,15 +3019,58 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
         {r.contactPerson && <div className="text-[11px]" style={{ color: TOKENS.muted }}>{r.contactPerson}</div>}
       </div>
     )},
-    { key: "country", label: "Ülke", render: (r) => r.country ? <span className="text-xs">📍 {r.country}</span> : "—" },
-    { key: "orderCount", label: "Sipariş", align: "right", render: (r) => <span className="text-sm">{r.orderCount}</span> },
-    { key: "totalUSD", label: "Toplam Ciro", align: "right", sortValue: (r) => r.totalUSD, render: (r) => <span className="text-sm tabular-nums">{fmtMoney(r.totalUSD, "USD", { compact: true })}</span> },
-    { key: "openBalance", label: "Açık Bakiye", align: "right", sortValue: (r) => r.openBalance, render: (r) => (
-      <div className="text-right">
-        <div className="text-sm tabular-nums" style={{ color: r.openBalance > 0 ? TOKENS.copper : TOKENS.muted }}>{fmtMoney(r.openBalance, "USD", { compact: true })}</div>
-        {r.overdueBalance > 0 && <div className="text-[10px] tabular-nums" style={{ color: TOKENS.oxblood }}>{fmtMoney(r.overdueBalance)} geç</div>}
-      </div>
-    )},
+    { key: "country", label: lang === "en" ? "Country" : "Ülke", render: (r) => r.country ? <span className="text-xs">📍 {r.country}</span> : "—" },
+    { key: "orderCount", label: lang === "en" ? "Orders" : "Sipariş", align: "right", render: (r) => <span className="text-sm">{r.orderCount}</span> },
+    { key: "totalUSD", label: lang === "en" ? "Total Revenue" : "Toplam Ciro", align: "right", sortValue: (r) => r.totalUSD, render: (r) => {
+      // Her döviz cinsinden ayrı + USD karşılığı
+      const currencies = Object.keys(r.totalsByCurrency || {});
+      return (
+        <div className="text-right">
+          {currencies.length === 0 ? (
+            <span className="text-xs" style={{ color: TOKENS.muted }}>—</span>
+          ) : (
+            <>
+              {currencies.slice(0, 2).map((cur) => (
+                <div key={cur} className="text-[11px] font-semibold tabular-nums" style={{ color: TOKENS.ink }}>
+                  {fmtMoney(r.totalsByCurrency[cur], cur, { compact: true })}
+                </div>
+              ))}
+              {currencies.length > 2 && <div className="text-[9px]" style={{ color: TOKENS.muted }}>+{currencies.length - 2} {lang === "en" ? "more" : "daha"}</div>}
+              <div className="text-[10px] tabular-nums mt-0.5" style={{ color: TOKENS.muted }}>
+                ≈ {fmtMoney(r.totalUSD, "USD", { compact: true })}
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }},
+    { key: "openBalance", label: lang === "en" ? "Open Balance" : "Açık Bakiye", align: "right", sortValue: (r) => r.openBalance, render: (r) => {
+      const currencies = Object.keys(r.openByCurrency || {}).filter((cur) => (r.openByCurrency[cur] || 0) > 0.01);
+      return (
+        <div className="text-right">
+          {r.openBalance < 0.01 ? (
+            <span className="text-xs" style={{ color: TOKENS.muted }}>✓</span>
+          ) : (
+            <>
+              {currencies.slice(0, 2).map((cur) => (
+                <div key={cur} className="text-[11px] font-semibold tabular-nums" style={{ color: TOKENS.copper }}>
+                  {fmtMoney(r.openByCurrency[cur], cur, { compact: true })}
+                </div>
+              ))}
+              {currencies.length > 2 && <div className="text-[9px]" style={{ color: TOKENS.muted }}>+{currencies.length - 2}</div>}
+              <div className="text-[10px] tabular-nums" style={{ color: TOKENS.muted }}>
+                ≈ {fmtMoney(r.openBalance, "USD", { compact: true })}
+              </div>
+              {r.overdueBalance > 0 && (
+                <div className="text-[10px] tabular-nums mt-0.5" style={{ color: TOKENS.oxblood, fontWeight: 700 }}>
+                  ⚠ {fmtMoney(r.overdueBalance, "USD", { compact: true })} {lang === "en" ? "overdue" : "geç"}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      );
+    }},
   ];
 
   return (
@@ -3286,23 +3358,34 @@ function CustomerDetailModal({ customer, onClose, orders, payments, bankAccounts
   <div class="summary-card">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px">
       <div style="flex:1">
-        <div class="label">Toplam Açık Bakiye (USD karşılığı)</div>
-        <div style="font-size:20px;font-weight:bold;color:${customer.openBalance > 0 ? "#B87333" : "#3E7D5A"};margin-top:4px">
-          ${customer.openBalance > 0 ? "ALACAK" : "BAKİYE YOK"}: $${(customer.openBalance || 0).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}
+        <div class="label">${lang === "en" ? "Total Open Balance" : "Toplam Açık Bakiye"}</div>
+        ${Object.entries(customer.openByCurrency || {}).filter(([, v]) => v > 0.01).map(([cur, v]) => `
+          <div style="font-size:14px;font-weight:bold;color:#B87333;margin-top:2px">
+            ${cur} ${v.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}
+          </div>
+        `).join("")}
+        <div style="font-size:11px;color:#7A736A;margin-top:6px;padding-top:4px;border-top:1px dashed #ccc">
+          ${lang === "en" ? "USD equivalent" : "USD karşılığı"}: <strong style="color:${customer.openBalance > 0 ? '#B87333' : '#3E7D5A'};font-size:13px">$${(customer.openBalance || 0).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}</strong>
         </div>
+        ${customer.openBalance < 0.01 ? `<div style="font-size:14px;font-weight:bold;color:#3E7D5A;margin-top:4px">${lang === "en" ? "NO BALANCE" : "BAKİYE YOK"}</div>` : ""}
       </div>
       ${totalOverdueUSD > 0 ? `
       <div style="flex:1;border-left:1px solid #ddd;padding-left:16px">
-        <div class="label" style="color:#A6383D">⚠ Gecikmiş Toplam Bakiye (USD)</div>
-        <div style="font-size:20px;font-weight:bold;color:#A6383D;margin-top:4px">
-          $${totalOverdueUSD.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}
+        <div class="label" style="color:#A6383D">⚠ ${lang === "en" ? "Overdue Total Balance" : "Gecikmiş Toplam Bakiye"}</div>
+        ${Object.entries(overdueByCurrency).filter(([, v]) => v > 0.01).map(([cur, v]) => `
+          <div style="font-size:14px;font-weight:bold;color:#A6383D;margin-top:2px">
+            ${cur} ${v.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}
+          </div>
+        `).join("")}
+        <div style="font-size:11px;color:#7A736A;margin-top:6px;padding-top:4px;border-top:1px dashed #ccc">
+          ${lang === "en" ? "USD equivalent" : "USD karşılığı"}: <strong style="color:#A6383D;font-size:13px">$${totalOverdueUSD.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}</strong>
         </div>
-        <div style="font-size:10px;color:#7A736A;margin-top:2px">${custPayments.filter(p => p.status === "overdue").length} gecikmiş ödeme</div>
+        <div style="font-size:10px;color:#7A736A;margin-top:2px">${custPayments.filter(p => p.status === "overdue").length} ${lang === "en" ? "overdue payment(s)" : "gecikmiş ödeme"}</div>
       </div>
       ` : ""}
       <div style="text-align:right;font-size:10px;color:#7A736A">
-        <div>Toplam Sipariş: <strong style="color:#0F1A2E">${custOrders.length}</strong></div>
-        <div>Toplam Ciro (USD): <strong style="color:#0F1A2E">$${(customer.totalUSD || 0).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div>
+        <div>${lang === "en" ? "Total Orders" : "Toplam Sipariş"}: <strong style="color:#0F1A2E">${custOrders.length}</strong></div>
+        <div>${lang === "en" ? "Total Revenue (USD)" : "Toplam Ciro (USD)"}: <strong style="color:#0F1A2E">$${(customer.totalUSD || 0).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div>
       </div>
     </div>
   </div>
@@ -3635,7 +3718,7 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
 
   // Ürün katalog PDF
   const printList = () => {
-    if (!enrichedProducts.length) return showToast("Yazdırılacak ürün yok", "error");
+    if (!enrichedProducts.length) return showToast(lang === "en" ? "No products to print" : "Yazdırılacak ürün yok", "error");
 
     const list = enrichedProducts.filter((p) => {
       if (!search) return true;
@@ -3664,22 +3747,22 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
 
     const content = `
       <div class="kpi-grid">
-        <div class="kpi"><div class="kpi-label">Toplam Ürün</div><div class="kpi-value">${list.length}</div></div>
-        <div class="kpi"><div class="kpi-label">Kategori</div><div class="kpi-value">${cats}</div></div>
-        <div class="kpi"><div class="kpi-label">Toplam Ciro (USD)</div><div class="kpi-value">$${totalCiro.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-        <div class="kpi"><div class="kpi-label">Aktif Ürün</div><div class="kpi-value">${list.filter((p) => p.totalQty > 0).length}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Total Products" : "Toplam Ürün"}</div><div class="kpi-value">${list.length}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Categories" : "Kategori"}</div><div class="kpi-value">${cats}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Total Revenue (USD)" : "Toplam Ciro (USD)"}</div><div class="kpi-value">$${totalCiro.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Active Products" : "Aktif Ürün"}</div><div class="kpi-value">${list.filter((p) => p.totalQty > 0).length}</div></div>
       </div>
       <table>
         <thead>
           <tr>
-            <th>Ürün Kodu</th>
-            <th>Mamul Kodu</th>
-            <th>İsim</th>
-            <th>Kategori</th>
-            <th class="center">Birim</th>
-            <th class="right">Fiyat</th>
-            <th class="right">Toplam Satış</th>
-            <th class="right">Ciro (USD)</th>
+            <th>${lang === "en" ? "Product Code" : "Ürün Kodu"}</th>
+            <th>${lang === "en" ? "Mfg Code" : "Mamul Kodu"}</th>
+            <th>${lang === "en" ? "Name" : "İsim"}</th>
+            <th>${lang === "en" ? "Category" : "Kategori"}</th>
+            <th class="center">${lang === "en" ? "Unit" : "Birim"}</th>
+            <th class="right">${lang === "en" ? "Price" : "Fiyat"}</th>
+            <th class="right">${lang === "en" ? "Total Sold" : "Toplam Satış"}</th>
+            <th class="right">${lang === "en" ? "Revenue (USD)" : "Ciro (USD)"}</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -3687,10 +3770,11 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
     `;
 
     printPDF({
-      title: "Ürün Kataloğu",
-      subtitle: `${list.length} ürün${search ? ` · arama: "${search}"` : ""}`,
+      title: lang === "en" ? "Product Catalog" : "Ürün Kataloğu",
+      subtitle: `${list.length} ${lang === "en" ? "products" : "ürün"}${search ? (lang === "en" ? ` · search: "${search}"` : ` · arama: "${search}"`) : ""}`,
       contentHtml: content,
       orientation: "landscape",
+      lang,
     });
   };
 
@@ -4655,19 +4739,43 @@ function OrdersCalendarView({ orders, customers, rates, payments, onView, onEdit
   const [openMonths, setOpenMonths] = useState({}); // { "2026-05": true }
   const [openOrders, setOpenOrders] = useState({}); // { orderId: true }
 
-  // Ay bazında grupla — fiili sevk varsa ona, yoksa planlanan sevk, o da yoksa sipariş tarihine göre
+  // Ay bazında grupla — eğer siparişin shipments[] varsa her sevkiyatın kendi ayına dağıtılır
+  // Aksi halde order'ın aktif tarihi (fiili sevk > planlanan > sipariş) kullanılır
   const grouped = useMemo(() => {
     const m = {};
     orders.forEach((o) => {
-      const d = o.actualShipmentDate || o.shipmentDate || o.orderDate || o.createdAt;
-      if (!d) return;
-      const key = d.slice(0, 7);
-      if (!m[key]) m[key] = [];
-      m[key].push(o);
+      const shipments = o.shipments || [];
+      if (shipments.length > 0) {
+        // Birden fazla sevkiyat varsa her birini ayrı satır olarak ekle
+        shipments.forEach((sh) => {
+          const d = sh.actualShipmentDate || sh.shipmentDate;
+          if (!d) {
+            // Sevkiyat tarihi yoksa sipariş tarihine fall back
+            const fallback = o.orderDate || o.createdAt;
+            if (!fallback) return;
+            const key = fallback.slice(0, 7);
+            if (!m[key]) m[key] = [];
+            m[key].push({ ...o, _shipment: sh });
+            return;
+          }
+          const key = d.slice(0, 7);
+          if (!m[key]) m[key] = [];
+          m[key].push({ ...o, _shipment: sh });
+        });
+      } else {
+        // Tek sevkiyatlı eski format
+        const d = o.actualShipmentDate || o.shipmentDate || o.orderDate || o.createdAt;
+        if (!d) return;
+        const key = d.slice(0, 7);
+        if (!m[key]) m[key] = [];
+        m[key].push({ ...o, _shipment: null });
+      }
     });
     Object.keys(m).forEach((k) => m[k].sort((a, b) => {
-      const da = a.actualShipmentDate || a.shipmentDate || a.orderDate || "";
-      const db = b.actualShipmentDate || b.shipmentDate || b.orderDate || "";
+      const sa = a._shipment;
+      const sb = b._shipment;
+      const da = (sa ? (sa.actualShipmentDate || sa.shipmentDate) : null) || a.actualShipmentDate || a.shipmentDate || a.orderDate || "";
+      const db = (sb ? (sb.actualShipmentDate || sb.shipmentDate) : null) || b.actualShipmentDate || b.shipmentDate || b.orderDate || "";
       return db.localeCompare(da);
     }));
     return Object.entries(m).sort(([a], [b]) => b.localeCompare(a));
@@ -4759,38 +4867,56 @@ function OrdersCalendarView({ orders, customers, rates, payments, onView, onEdit
             {isMonthOpen && (
               <div>
                 {monthOrders.map((o) => {
-                  const isOpen = openOrders[o.id];
+                  const isOpen = openOrders[o._shipment ? `${o.id}-${o._shipment.id}` : o.id];
                   const c = customers.find((x) => x.id === o.customerId);
                   const t = orderTotal(o);
                   const paid = orderPaidAmount(o, payments);
                   const remaining = t - paid;
                   const totals = calcOrderTotals(o);
                   const st = ORDER_STATUSES.find((s) => s.key === o.status);
-                  const isShipped = !!o.actualShipmentDate;
+                  const sh = o._shipment;
+                  // Sevkiyat varsa onu kullan, yoksa order seviyesini
+                  const effectiveShipDate = sh ? sh.shipmentDate : o.shipmentDate;
+                  const effectiveActualDate = sh ? sh.actualShipmentDate : o.actualShipmentDate;
+                  const isShipped = !!effectiveActualDate;
+                  // Sevkiyatla ilgili kalemler
+                  const shipItems = sh ? (o.items || []).filter((it) => (it.shipmentNo || 1) === sh.no) : (o.items || []);
+                  const shipTotal = sh ? shipItems.reduce((s, it) => s + ((Number(it.quantity) || 0) * (Number(it.unitPrice) || 0)) * (1 - (Number(it.discount) || 0) / 100), 0) : t;
                   return (
-                    <div key={o.id} style={{ borderTop: `1px solid ${TOKENS.border}` }}>
-                      {/* SİPARİŞ SATIRI */}
+                    <div key={sh ? `${o.id}-${sh.id}` : o.id} style={{ borderTop: `1px solid ${TOKENS.border}` }}>
+                      {/* SİPARİŞ / SEVKİYAT SATIRI */}
                       <div
                         className="px-4 py-2.5 flex items-center gap-3 transition cursor-pointer"
                         style={{ background: isShipped ? "#3E7D5A14" : "white" }}
-                        onClick={() => toggleOrder(o.id)}
+                        onClick={() => toggleOrder(sh ? `${o.id}-${sh.id}` : o.id)}
                         onMouseEnter={(e) => (e.currentTarget.style.background = isShipped ? "#3E7D5A22" : TOKENS.cream)}
                         onMouseLeave={(e) => (e.currentTarget.style.background = isShipped ? "#3E7D5A14" : "white")}
                       >
                         {isOpen ? <ChevronDown size={14} style={{ color: TOKENS.gold }} /> : <ChevronRight size={14} style={{ color: TOKENS.muted }} />}
-                        <div className="font-mono text-xs font-bold w-32 flex-shrink-0" style={{ color: TOKENS.navy }}>{o.orderNumber}</div>
+                        <div className="font-mono text-xs font-bold w-32 flex-shrink-0" style={{ color: TOKENS.navy }}>
+                          {o.orderNumber}
+                          {sh && <div className="text-[9px] font-semibold flex items-center gap-1 mt-0.5" style={{ color: TOKENS.goldDark }}>
+                            <Truck size={9} /> {sh.name}
+                          </div>}
+                        </div>
                         <div className="flex-1 min-w-0">
                           <div className="text-xs font-bold truncate" style={{ color: TOKENS.ink }}>{c?.name || "—"}</div>
                           <div className="text-[10px] font-semibold" style={{ color: TOKENS.muted }}>
                             {fmtDate(o.orderDate)} · W{getISOWeek(o.orderDate) || "—"}
-                            {o.shipmentDate && ` · Plan. Sevk: W${getISOWeek(o.shipmentDate)}`}
-                            {o.actualShipmentDate && <span style={{ color: TOKENS.forest }}> · Fiili Sevk: W{getISOWeek(o.actualShipmentDate)}</span>}
+                            {effectiveShipDate && ` · Plan. Sevk: W${getISOWeek(effectiveShipDate)}`}
+                            {effectiveActualDate && <span style={{ color: TOKENS.forest }}> · Fiili Sevk: W{getISOWeek(effectiveActualDate)}</span>}
                           </div>
                         </div>
                         <div className="w-24 text-right">
-                          <div className="text-xs font-bold tabular-nums">{fmtMoney(t, o.currency)}</div>
-                          {paid > 0 && <div className="text-[10px] font-semibold tabular-nums" style={{ color: TOKENS.forest }}>✓ {fmtMoney(paid, o.currency)}</div>}
-                          {remaining > 0.01 && paid > 0 && <div className="text-[10px] font-semibold tabular-nums" style={{ color: TOKENS.copper }}>{fmtMoney(remaining, o.currency)}</div>}
+                          <div className="text-xs font-bold tabular-nums">{fmtMoney(sh ? shipTotal : t, o.currency)}</div>
+                          {sh ? (
+                            <div className="text-[10px] font-semibold" style={{ color: TOKENS.muted }}>{shipItems.length} kalem</div>
+                          ) : (
+                            <>
+                              {paid > 0 && <div className="text-[10px] font-semibold tabular-nums" style={{ color: TOKENS.forest }}>✓ {fmtMoney(paid, o.currency)}</div>}
+                              {remaining > 0.01 && paid > 0 && <div className="text-[10px] font-semibold tabular-nums" style={{ color: TOKENS.copper }}>{fmtMoney(remaining, o.currency)}</div>}
+                            </>
+                          )}
                         </div>
                         <div className="w-20 text-right">
                           <Badge color={st?.color}>{st?.label}</Badge>
@@ -4817,9 +4943,9 @@ function OrdersCalendarView({ orders, customers, rates, payments, onView, onEdit
                               </tr>
                             </thead>
                             <tbody>
-                              {(o.items || []).length === 0 ? (
-                                <tr><td colSpan="6" className="px-3 py-3 text-center text-[11px] italic" style={{ color: TOKENS.muted }}>Bu siparişte kalem yok</td></tr>
-                              ) : (o.items || []).map((it) => {
+                              {(() => { const displayItems = sh ? (o.items || []).filter((it) => (it.shipmentNo || 1) === sh.no) : (o.items || []); return displayItems.length === 0 ? (
+                                <tr><td colSpan="6" className="px-3 py-3 text-center text-[11px] italic" style={{ color: TOKENS.muted }}>{sh ? "Bu sevkiyatta kalem yok" : "Bu siparişte kalem yok"}</td></tr>
+                              ) : displayItems.map((it) => {
                                 const baseT = (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0);
                                 const lineDisc = Number(it.discount) || 0;
                                 const lineT = baseT * (1 - lineDisc / 100);
@@ -4833,27 +4959,29 @@ function OrdersCalendarView({ orders, customers, rates, payments, onView, onEdit
                                     <td className="px-3 py-1.5 text-right tabular-nums font-bold text-[11px]">{fmtMoney(lineT, o.currency)}</td>
                                   </tr>
                                 );
-                              })}
-                              {/* Totals */}
-                              {(totals.discount > 0 || totals.vatRate > 0 || (o.additionalCosts || []).length > 0) && (
+                              }); })()}
+                              {/* Totals - sadece tek sevkiyat / sevkiyatsız siparişlerde göster */}
+                              {!sh && (totals.discount > 0 || totals.vatRate > 0 || (o.additionalCosts || []).length > 0) && (
                                 <tr style={{ borderTop: `1px solid ${TOKENS.border}` }}>
                                   <td colSpan="5" className="px-3 py-1 text-right text-[10px] font-semibold" style={{ color: TOKENS.muted }}>Ara Toplam</td>
                                   <td className="px-3 py-1 text-right tabular-nums font-bold text-[10px]">{fmtMoney(totals.subtotal, o.currency)}</td>
                                 </tr>
                               )}
-                              {totals.discount > 0 && (
+                              {!sh && totals.discount > 0 && (
                                 <tr><td colSpan="5" className="px-3 py-1 text-right text-[10px] font-semibold" style={{ color: TOKENS.copper }}>İskonto</td><td className="px-3 py-1 text-right tabular-nums font-bold text-[10px]" style={{ color: TOKENS.copper }}>− {fmtMoney(totals.discount, o.currency)}</td></tr>
                               )}
-                              {(o.additionalCosts || []).map((c, ix) => (
+                              {!sh && (o.additionalCosts || []).map((c, ix) => (
                                 <tr key={c.id || ix}><td colSpan="5" className="px-3 py-1 text-right text-[10px] font-semibold" style={{ color: TOKENS.copper }}>+ {c.description || "İlave Maliyet"}</td><td className="px-3 py-1 text-right tabular-nums font-bold text-[10px]" style={{ color: TOKENS.copper }}>+ {fmtMoney(c.amount, o.currency)}</td></tr>
                               ))}
-                              {totals.vatRate > 0 && (
+                              {!sh && totals.vatRate > 0 && (
                                 <tr><td colSpan="5" className="px-3 py-1 text-right text-[10px] font-semibold" style={{ color: TOKENS.muted }}>KDV (%{totals.vatRate})</td><td className="px-3 py-1 text-right tabular-nums font-bold text-[10px]">+ {fmtMoney(totals.vatAmount, o.currency)}</td></tr>
                               )}
-                              <tr style={{ background: TOKENS.gold + "20", borderTop: `2px solid ${TOKENS.gold}` }}>
-                                <td colSpan="5" className="px-3 py-1.5 text-right font-bold text-[11px] uppercase tracking-wider" style={{ color: TOKENS.ink }}>Genel Toplam</td>
-                                <td className="px-3 py-1.5 text-right tabular-nums font-bold text-xs" style={{ color: TOKENS.ink }}>{fmtMoney(totals.total, o.currency)}</td>
-                              </tr>
+                              {!sh && (
+                                <tr style={{ background: TOKENS.gold + "20", borderTop: `2px solid ${TOKENS.gold}` }}>
+                                  <td colSpan="5" className="px-3 py-1.5 text-right font-bold text-[11px] uppercase tracking-wider" style={{ color: TOKENS.ink }}>Genel Toplam</td>
+                                  <td className="px-3 py-1.5 text-right tabular-nums font-bold text-xs" style={{ color: TOKENS.ink }}>{fmtMoney(totals.total, o.currency)}</td>
+                                </tr>
+                              )}
                             </tbody>
                           </table>
                         </div>
@@ -5139,6 +5267,12 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
           removeItem={removeItem}
           updateItem={updateItem}
           pickProduct={pickProduct}
+        />
+
+        {/* SEVKİYATLAR — kalemleri sevkiyatlara böl */}
+        <ShipmentsSection
+          editing={editing}
+          setEditing={setEditing}
         />
 
         {/* İLAVE MALİYETLER (palet, paket, navlun vb) */}
@@ -5446,6 +5580,218 @@ function CustomerPicker({ customers, value, onChange }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================================
+// SEVKİYATLAR BÖLÜMÜ — sipariş kalemleri birden fazla sevkiyata bölünebilir
+// Geriye uyumluluk: shipments[] yoksa tek sevkiyat olarak çalışır
+// Item.shipmentNo (1, 2, 3...) hangi sevkiyata ait olduğunu belirtir
+// ============================================================================
+
+function ShipmentsSection({ editing, setEditing }) {
+  const shipments = editing.shipments || [];
+  const items = editing.items || [];
+
+  // Hiç sevkiyat yoksa otomatik #1 oluştur (sipariş seviyesi shipmentDate/actualShipmentDate'i kullanarak)
+  // Bu UI'da görünmez, sadece "Sevkiyat Ekle" butonuyla birlikte aktive olur
+
+  const addShipment = () => {
+    const nextNo = (shipments.length === 0 ? 2 : Math.max(...shipments.map((s) => s.no)) + 1);
+    // İlk eklenirken: order'ın eski tek sevk tarihlerini #1 sevkiyata aktar, sonra #2'yi ekle
+    if (shipments.length === 0) {
+      const firstShipment = {
+        id: uid(), no: 1, name: "1. Sevkiyat",
+        shipmentDate: editing.shipmentDate || "",
+        actualShipmentDate: editing.actualShipmentDate || "",
+        notes: "",
+      };
+      const newShipment = {
+        id: uid(), no: 2, name: "2. Sevkiyat",
+        shipmentDate: "", actualShipmentDate: "", notes: "",
+      };
+      // Mevcut tüm kalemleri 1. sevkiyata ata
+      const updatedItems = items.map((it) => ({ ...it, shipmentNo: it.shipmentNo || 1 }));
+      setEditing({ ...editing, shipments: [firstShipment, newShipment], items: updatedItems });
+    } else {
+      setEditing({ ...editing, shipments: [...shipments, { id: uid(), no: nextNo, name: `${nextNo}. Sevkiyat`, shipmentDate: "", actualShipmentDate: "", notes: "" }] });
+    }
+  };
+
+  const updateShipment = (idx, patch) => {
+    const arr = [...shipments];
+    arr[idx] = { ...arr[idx], ...patch };
+    // Eğer #1 sevkiyatın tarihleri değiştiyse order seviyesindeki shipmentDate/actualShipmentDate'i de senkronize et
+    const update = { ...editing, shipments: arr };
+    if (arr[idx].no === 1) {
+      if (patch.shipmentDate !== undefined) update.shipmentDate = patch.shipmentDate;
+      if (patch.actualShipmentDate !== undefined) update.actualShipmentDate = patch.actualShipmentDate;
+    }
+    setEditing(update);
+  };
+
+  const removeShipment = (idx) => {
+    if (!confirm(`${shipments[idx].name} silinecek. Bu sevkiyattaki kalemler 1. sevkiyata taşınacak. Onaylıyor musun?`)) return;
+    const removedNo = shipments[idx].no;
+    const arr = shipments.filter((_, i) => i !== idx);
+    // Bu sevkiyattaki kalemleri 1. sevkiyata aktar
+    const updatedItems = items.map((it) => it.shipmentNo === removedNo ? { ...it, shipmentNo: 1 } : it);
+    if (arr.length === 1) {
+      // Tek sevkiyata düştü → eski sisteme geri (shipments yok say)
+      setEditing({ ...editing, shipments: [], items: updatedItems.map((it) => ({ ...it, shipmentNo: undefined })), shipmentDate: arr[0].shipmentDate, actualShipmentDate: arr[0].actualShipmentDate });
+    } else {
+      setEditing({ ...editing, shipments: arr, items: updatedItems });
+    }
+  };
+
+  const updateItemShipment = (itemId, shipmentNo) => {
+    const newItems = items.map((it) => it.id === itemId ? { ...it, shipmentNo: Number(shipmentNo) } : it);
+    setEditing({ ...editing, items: newItems });
+  };
+
+  // Hiç sevkiyat yoksa sadece "Sevkiyat Ekle" butonu göster
+  if (shipments.length === 0) {
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-3 pb-2" style={{ borderBottom: `1px solid ${TOKENS.border}` }}>
+          <div className="text-[11px] uppercase tracking-widest font-bold" style={{ color: TOKENS.gold }}>
+            Sevkiyatlar
+            <span className="ml-2 normal-case font-normal text-[10px]" style={{ color: TOKENS.muted }}>
+              · Şu an tek sevkiyat — kalemleri birden fazla parti hâlinde sevk etmek için bölebilirsin
+            </span>
+          </div>
+          {items.length > 0 && (
+            <Btn variant="secondary" size="xs" icon={Plus} onClick={addShipment}>İkinci Sevkiyat Ekle</Btn>
+          )}
+        </div>
+        <div className="text-[11px] rounded-md p-3" style={{ background: TOKENS.cream, color: TOKENS.muted, border: `1px dashed ${TOKENS.border}` }}>
+          ℹ️ Tüm kalemler tek sevkiyatta gönderilir (sipariş üst kısmındaki "Planlanan Sevk" ve "Fiili Sevk" tarihleri kullanılır).
+          Birden fazla parti hâlinde sevk etmek istersen "İkinci Sevkiyat Ekle" tuşuna bas.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3 pb-2" style={{ borderBottom: `1px solid ${TOKENS.border}` }}>
+        <div className="text-[11px] uppercase tracking-widest font-bold" style={{ color: TOKENS.gold }}>
+          Sevkiyatlar
+          <span className="ml-2 normal-case font-normal text-[10px]" style={{ color: TOKENS.muted }}>
+            · {shipments.length} parti · Ödeme planı tüm siparişin tamamı üzerinden ortak takip edilir
+          </span>
+        </div>
+        <Btn variant="secondary" size="xs" icon={Plus} onClick={addShipment}>Sevkiyat Ekle</Btn>
+      </div>
+
+      <div className="space-y-3">
+        {shipments.map((sh, idx) => {
+          const shipmentItems = items.filter((it) => (it.shipmentNo || 1) === sh.no);
+          const itemsTotal = shipmentItems.reduce((s, it) => s + ((Number(it.quantity) || 0) * (Number(it.unitPrice) || 0)) * (1 - (Number(it.discount) || 0) / 100), 0);
+
+          return (
+            <div key={sh.id} className="rounded-md overflow-hidden" style={{ border: `1px solid ${TOKENS.border}`, background: "white" }}>
+              {/* Sevkiyat başlığı */}
+              <div className="px-3 py-2 flex items-center gap-3" style={{ background: TOKENS.gold + "15", borderBottom: `1px solid ${TOKENS.gold}40` }}>
+                <Truck size={14} style={{ color: TOKENS.goldDark }} />
+                <Input
+                  value={sh.name}
+                  onChange={(e) => updateShipment(idx, { name: e.target.value })}
+                  className="font-bold"
+                  style={{ width: "180px", fontSize: "12px" }}
+                />
+                <span className="text-[10px] font-bold" style={{ color: TOKENS.muted }}>
+                  {shipmentItems.length} kalem · {fmtMoney(itemsTotal, editing.currency)}
+                </span>
+                <div className="flex-1" />
+                {sh.no !== 1 && (
+                  <button onClick={() => removeShipment(idx)} className="p-1 rounded transition" style={{ color: TOKENS.muted, background: "transparent", border: "none" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}
+                    title="Sevkiyatı sil">
+                    <Trash2 size={12} />
+                  </button>
+                )}
+              </div>
+
+              {/* Sevkiyat tarihleri */}
+              <div className="grid grid-cols-3 gap-3 p-3" style={{ background: TOKENS.cream + "60" }}>
+                <div>
+                  <Label hint="Plan tarihi">Planlanan Sevk Tarihi</Label>
+                  <Input type="date" value={sh.shipmentDate || ""}
+                    onChange={(e) => updateShipment(idx, { shipmentDate: e.target.value })} />
+                </div>
+                <div>
+                  <Label hint="Sevk gerçekleşince doldur">Fiili Sevk Tarihi</Label>
+                  <Input type="date" value={sh.actualShipmentDate || ""}
+                    onChange={(e) => updateShipment(idx, { actualShipmentDate: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Sevkiyat Notu</Label>
+                  <Input value={sh.notes || ""}
+                    onChange={(e) => updateShipment(idx, { notes: e.target.value })}
+                    placeholder="Konşimento, palet sayısı, özel not..." />
+                </div>
+              </div>
+
+              {/* Bu sevkiyattaki kalemler */}
+              <div className="px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wider font-bold mb-1.5" style={{ color: TOKENS.muted }}>Bu Sevkiyattaki Kalemler</div>
+                {shipmentItems.length === 0 ? (
+                  <div className="text-[11px] py-2 text-center" style={{ color: TOKENS.muted }}>
+                    Henüz kalem yok. Aşağıdaki "Tüm Kalemler" listesinden bu sevkiyata ekle.
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {shipmentItems.map((it) => (
+                      <div key={it.id} className="flex items-center gap-2 px-2 py-1 text-[11px] rounded" style={{ background: TOKENS.cream }}>
+                        <span className="font-mono font-bold" style={{ color: TOKENS.navy, minWidth: "70px" }}>{it.productCode || "—"}</span>
+                        <span className="flex-1 font-bold truncate">{it.nameTr || "—"}</span>
+                        <span className="tabular-nums" style={{ color: TOKENS.muted }}>{fmtNum(it.quantity)} {it.unit}</span>
+                        <span className="tabular-nums font-bold">{fmtMoney(((Number(it.quantity) || 0) * (Number(it.unitPrice) || 0)) * (1 - (Number(it.discount) || 0) / 100), editing.currency)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Tüm kalemleri ve sevkiyat seçimini göster */}
+        {items.length > 0 && (
+          <div className="rounded-md overflow-hidden mt-3" style={{ border: `1px solid ${TOKENS.border}` }}>
+            <div className="px-3 py-2 text-[10px] uppercase tracking-wider font-bold" style={{ background: TOKENS.cream, color: TOKENS.muted }}>
+              Kalem-Sevkiyat Eşleştirme · Her kalem hangi sevkiyata gidecek?
+            </div>
+            <table className="w-full text-xs">
+              <thead style={{ background: TOKENS.cream + "80" }}>
+                <tr>
+                  <th className="text-left px-3 py-1.5 text-[10px] font-bold">Ürün</th>
+                  <th className="text-left px-3 py-1.5 text-[10px] font-bold">İsim</th>
+                  <th className="text-right px-3 py-1.5 text-[10px] font-bold">Adet</th>
+                  <th className="text-center px-3 py-1.5 text-[10px] font-bold w-32">Sevkiyat</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((it) => (
+                  <tr key={it.id} style={{ borderTop: `1px solid ${TOKENS.border}` }}>
+                    <td className="px-3 py-1.5 font-mono font-bold text-[11px]" style={{ color: TOKENS.navy }}>{it.productCode || "—"}</td>
+                    <td className="px-3 py-1.5 text-[11px]">{it.nameTr || "—"}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums text-[11px]">{fmtNum(it.quantity)} {it.unit}</td>
+                    <td className="px-3 py-1.5">
+                      <Select value={it.shipmentNo || 1} onChange={(e) => updateItemShipment(it.id, e.target.value)} className="text-[11px] py-1">
+                        {shipments.map((sh) => <option key={sh.id} value={sh.no}>{sh.name}</option>)}
+                      </Select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -6147,6 +6493,42 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
           </div>
         </Card>
 
+        {/* SEVKİYATLAR — birden fazla varsa göster */}
+        {(order.shipments || []).length > 0 && (
+          <Card title={`Sevkiyatlar (${order.shipments.length})`} subtitle="Bu sipariş birden fazla parti hâlinde sevk ediliyor — ödeme planı ortak takip edilir" noPadding>
+            <div className="divide-y" style={{ borderColor: TOKENS.border }}>
+              {order.shipments.map((sh, idx) => {
+                const shipItems = (order.items || []).filter((it) => (it.shipmentNo || 1) === sh.no);
+                const shipTotal = shipItems.reduce((s, it) => s + ((Number(it.quantity) || 0) * (Number(it.unitPrice) || 0)) * (1 - (Number(it.discount) || 0) / 100), 0);
+                const isShipped = !!sh.actualShipmentDate;
+                return (
+                  <div key={sh.id} className="px-4 py-3 flex items-start gap-3" style={{ background: isShipped ? "#3E7D5A0A" : "white", borderTop: idx > 0 ? `1px solid ${TOKENS.border}` : "none" }}>
+                    <div className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: (isShipped ? TOKENS.forest : TOKENS.gold) + "20" }}>
+                      <Truck size={16} style={{ color: isShipped ? TOKENS.forest : TOKENS.goldDark }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-bold" style={{ color: TOKENS.ink }}>{sh.name}</span>
+                        <Badge color={isShipped ? "forest" : "gold"}>{isShipped ? "Sevk Edildi" : "Bekliyor"}</Badge>
+                        <span className="text-[10px] font-bold" style={{ color: TOKENS.muted }}>{shipItems.length} kalem</span>
+                      </div>
+                      <div className="flex items-center gap-4 mt-1 text-[11px]" style={{ color: TOKENS.muted }}>
+                        {sh.shipmentDate && <span><strong>Plan:</strong> {fmtDate(sh.shipmentDate)} · W{getISOWeek(sh.shipmentDate)}</span>}
+                        {sh.actualShipmentDate && <span style={{ color: TOKENS.forest, fontWeight: 700 }}>Fiili: {fmtDate(sh.actualShipmentDate)} · W{getISOWeek(sh.actualShipmentDate)}</span>}
+                      </div>
+                      {sh.notes && <div className="text-[11px] italic mt-1" style={{ color: TOKENS.muted }}>"{sh.notes}"</div>}
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-sm font-bold tabular-nums">{fmtMoney(shipTotal, order.currency)}</div>
+                      <div className="text-[10px]" style={{ color: TOKENS.muted }}>{shipItems.length === 0 ? "kalem yok" : `${shipItems.length} kalem`}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+
         <Card title={`Kalemler (${order.items?.length || 0})`} noPadding>
           <table className="w-full text-xs">
             <thead style={{ background: TOKENS.cream }}>
@@ -6157,6 +6539,7 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
                 <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider font-bold">Birim Fiyat</th>
                 <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider font-bold">İsk %</th>
                 <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider font-bold">Toplam</th>
+                {(order.shipments || []).length > 0 && <th className="px-3 py-2 text-center text-[10px] uppercase tracking-wider font-bold">Sevk</th>}
               </tr>
             </thead>
             <tbody>
@@ -6164,6 +6547,8 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
                 const baseTotal = (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0);
                 const lineDisc = Number(i.discount) || 0;
                 const lineTotal = baseTotal * (1 - lineDisc / 100);
+                const shipNo = i.shipmentNo || 1;
+                const shipment = (order.shipments || []).find((s) => s.no === shipNo);
                 return (
                   <tr key={i.id} style={{ borderTop: `1px solid ${TOKENS.border}` }}>
                     <td className="px-3 py-2"><div className="font-mono font-bold" style={{ color: TOKENS.navy }}>{i.productCode}</div>{i.manufacturingCode && <div className="font-mono text-[10px]" style={{ color: TOKENS.muted }}>{i.manufacturingCode}</div>}</td>
@@ -6175,6 +6560,14 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
                       {lineDisc > 0 && (<div className="text-[9px] line-through font-normal" style={{ color: TOKENS.muted }}>{fmtMoney(baseTotal, order.currency)}</div>)}
                       {fmtMoney(lineTotal, order.currency)}
                     </td>
+                    {(order.shipments || []).length > 0 && (
+                      <td className="px-3 py-2 text-center text-[10px] font-bold" style={{ color: shipment?.actualShipmentDate ? TOKENS.forest : TOKENS.gold }}>
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded" style={{ background: (shipment?.actualShipmentDate ? TOKENS.forest : TOKENS.gold) + "15" }}>
+                          <Truck size={10} />
+                          #{shipNo}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -6277,6 +6670,8 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
   const [statusFilter, setStatusFilter] = useState([]);
   const [methodFilter, setMethodFilter] = useState([]);
   const [typeFilter, setTypeFilter] = useState([]);
+  const [customerFilter, setCustomerFilter] = useState([]); // multi-select müşteri
+  const [orderFilter, setOrderFilter] = useState([]); // multi-select sipariş no
   const [viewMode, setViewMode] = useState("by-order");
   const [marking, setMarking] = useState(null);
 
@@ -6293,10 +6688,12 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
       if (statusFilter.length > 0 && !statusFilter.includes(p.status)) return false;
       if (methodFilter.length > 0 && !methodFilter.includes(p.method)) return false;
       if (typeFilter.length > 0 && !typeFilter.includes(p.type)) return false;
+      if (customerFilter.length > 0 && !customerFilter.includes(p.customer?.id)) return false;
+      if (orderFilter.length > 0 && !orderFilter.includes(p.order?.id)) return false;
       if (!q) return true;
       return [p.order?.orderNumber, p.customer?.name, p.referenceNumber, p.notes].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
     });
-  }, [enriched, search, statusFilter, methodFilter, typeFilter]);
+  }, [enriched, search, statusFilter, methodFilter, typeFilter, customerFilter, orderFilter]);
 
   // Toplam istatistikler
   const stats = useMemo(() => {
@@ -6478,6 +6875,8 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
     if (statusFilter.length > 0) filters.push(`${t("status")}: ${statusFilter.map((s) => PAYMENT_STATUSES.find((x) => x.key === s)?.label || s).join(", ")}`);
     if (typeFilter.length > 0) filters.push(`${lang === "en" ? "Type" : "Tip"}: ${typeFilter.map((tp) => PAYMENT_PLAN_TYPES.find((x) => x.key === tp)?.label || tp).join(", ")}`);
     if (methodFilter.length > 0) filters.push(`${lang === "en" ? "Method" : "Yöntem"}: ${methodFilter.map((m) => PAYMENT_METHODS.find((x) => x.key === m)?.label || m).join(", ")}`);
+    if (customerFilter.length > 0) filters.push(`${t("customer")}: ${customerFilter.map((id) => customers.find((c) => c.id === id)?.name || id).join(", ")}`);
+    if (orderFilter.length > 0) filters.push(`${t("orderNumber")}: ${orderFilter.map((id) => orders.find((o) => o.id === id)?.orderNumber || id).join(", ")}`);
 
     const content = `
       <div class="kpi-grid">
@@ -6569,7 +6968,26 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
 
         <FilterBar>
           <SearchInput value={search} onChange={setSearch} placeholder={lang === "en" ? "Order, customer, reference..." : "Sipariş, müşteri, referans no..."} />
-          <div className="w-44"><Label>{t("status")}</Label>
+          <div className="w-52"><Label>{t("customer")}</Label>
+            <MultiSelect
+              values={customerFilter}
+              onChange={setCustomerFilter}
+              options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.code }))}
+              placeholder={t("all")}
+            />
+          </div>
+          <div className="w-48"><Label>{t("orderNumber")}</Label>
+            <MultiSelect
+              values={orderFilter}
+              onChange={setOrderFilter}
+              options={orders.map((o) => {
+                const c = customers.find((x) => x.id === o.customerId);
+                return { value: o.id, label: o.orderNumber, sub: c?.name || "" };
+              })}
+              placeholder={t("all")}
+            />
+          </div>
+          <div className="w-40"><Label>{t("status")}</Label>
             <MultiSelect
               values={statusFilter}
               onChange={setStatusFilter}
@@ -6577,7 +6995,7 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
               placeholder={t("all")}
             />
           </div>
-          <div className="w-48"><Label>{lang === "en" ? "Method" : "Yöntem"}</Label>
+          <div className="w-44"><Label>{lang === "en" ? "Method" : "Yöntem"}</Label>
             <MultiSelect
               values={methodFilter}
               onChange={setMethodFilter}
@@ -6585,7 +7003,7 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
               placeholder={t("all")}
             />
           </div>
-          <div className="w-40"><Label>{lang === "en" ? "Type" : "Tip"}</Label>
+          <div className="w-36"><Label>{lang === "en" ? "Type" : "Tip"}</Label>
             <MultiSelect
               values={typeFilter}
               onChange={setTypeFilter}
@@ -6593,7 +7011,7 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
               placeholder={t("all")}
             />
           </div>
-          {(search || statusFilter.length > 0 || methodFilter.length > 0 || typeFilter.length > 0) && <Btn variant="ghost" size="sm" icon={X} onClick={() => { setSearch(""); setStatusFilter([]); setMethodFilter([]); setTypeFilter([]); }}>{t("clear")}</Btn>}
+          {(search || statusFilter.length > 0 || methodFilter.length > 0 || typeFilter.length > 0 || customerFilter.length > 0 || orderFilter.length > 0) && <Btn variant="ghost" size="sm" icon={X} onClick={() => { setSearch(""); setStatusFilter([]); setMethodFilter([]); setTypeFilter([]); setCustomerFilter([]); setOrderFilter([]); }}>{t("clear")}</Btn>}
         </FilterBar>
 
         {payments.length === 0 ? (
@@ -6977,40 +7395,40 @@ function CashFlowView({ orders, customers, payments, rates, setView, t = (k) => 
 
     const content = `
       <div class="kpi-grid">
-        <div class="kpi"><div class="kpi-label">Önümüzdeki ${period} Gün</div><div class="kpi-value">${filteredPayments.length} ödeme</div></div>
-        <div class="kpi"><div class="kpi-label">Toplam (USD)</div><div class="kpi-value">$${stats.total.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-        <div class="kpi"><div class="kpi-label">7 Gün İçinde</div><div class="kpi-value" style="color:#3E7D5A">$${stats.next7.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-        <div class="kpi"><div class="kpi-label">Gecikmiş</div><div class="kpi-value" style="color:#A6383D">$${stats.totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? `Next ${period} Days` : `Önümüzdeki ${period} Gün`}</div><div class="kpi-value">${filteredPayments.length} ${lang === "en" ? "payments" : "ödeme"}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Total (USD)" : "Toplam (USD)"}</div><div class="kpi-value">$${stats.total.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Within 7 Days" : "7 Gün İçinde"}</div><div class="kpi-value" style="color:#3E7D5A">$${stats.next7.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Overdue" : "Gecikmiş"}</div><div class="kpi-value" style="color:#A6383D">$${stats.totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
       </div>
-      ${filters.length ? `<div style="font-size:10px;padding:6px 10px;background:#F8F5EE;border-radius:3px;margin-bottom:8px"><strong>Filtreler:</strong> ${filters.join(" · ")}</div>` : ""}
+      ${filters.length ? `<div style="font-size:10px;padding:6px 10px;background:#F8F5EE;border-radius:3px;margin-bottom:8px"><strong>${lang === "en" ? "Filters" : "Filtreler"}:</strong> ${filters.join(" · ")}</div>` : ""}
 
       ${monthlyRows ? `
-      <h2>Aylık Tahsilat Projeksiyonu</h2>
+      <h2>${lang === "en" ? "Monthly Collection Projection" : "Aylık Tahsilat Projeksiyonu"}</h2>
       <table>
         <thead>
           <tr>
-            <th>Ay</th>
-            <th class="right">Beklenen (USD)</th>
-            <th class="right">Gecikmiş (USD)</th>
-            <th class="right">Toplam (USD)</th>
+            <th>${lang === "en" ? "Month" : "Ay"}</th>
+            <th class="right">${lang === "en" ? "Expected (USD)" : "Beklenen (USD)"}</th>
+            <th class="right">${lang === "en" ? "Overdue (USD)" : "Gecikmiş (USD)"}</th>
+            <th class="right">${lang === "en" ? "Total (USD)" : "Toplam (USD)"}</th>
           </tr>
         </thead>
         <tbody>${monthlyRows}</tbody>
       </table>
       ` : ""}
 
-      <h2>Detaylı Liste (Vade Tarihine Göre)</h2>
+      <h2>${lang === "en" ? "Detailed List (by Due Date)" : "Detaylı Liste (Vade Tarihine Göre)"}</h2>
       <table>
         <thead>
           <tr>
-            <th>Vade</th>
-            <th>Sipariş</th>
-            <th>Müşteri</th>
-            <th>Tip</th>
-            <th class="right">Tutar</th>
+            <th>${lang === "en" ? "Due" : "Vade"}</th>
+            <th>${lang === "en" ? "Order" : "Sipariş"}</th>
+            <th>${lang === "en" ? "Customer" : "Müşteri"}</th>
+            <th>${lang === "en" ? "Type" : "Tip"}</th>
+            <th class="right">${lang === "en" ? "Amount" : "Tutar"}</th>
             <th class="right">USD</th>
-            <th>Yöntem</th>
-            <th>Durum</th>
+            <th>${lang === "en" ? "Method" : "Yöntem"}</th>
+            <th>${lang === "en" ? "Status" : "Durum"}</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -7018,10 +7436,11 @@ function CashFlowView({ orders, customers, payments, rates, setView, t = (k) => 
     `;
 
     printPDF({
-      title: "Nakit Akışı Projeksiyonu",
-      subtitle: `Önümüzdeki ${period} gün${filters.length ? " · filtreli" : ""}`,
+      title: lang === "en" ? "Cash Flow Projection" : "Nakit Akışı Projeksiyonu",
+      subtitle: `${lang === "en" ? `Next ${period} days` : `Önümüzdeki ${period} gün`}${filters.length ? (lang === "en" ? " · filtered" : " · filtreli") : ""}`,
       contentHtml: content,
       orientation: "landscape",
+      lang,
     });
   };
 

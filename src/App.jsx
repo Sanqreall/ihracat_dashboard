@@ -7596,7 +7596,7 @@ function CashFlowView({ orders, customers, payments, rates, setView, t = (k) => 
     const content = `
       <div class="kpi-grid">
         <div class="kpi"><div class="kpi-label">${lang === "en" ? `Next ${period} Days` : `Önümüzdeki ${period} Gün`}</div><div class="kpi-value">${filteredPayments.length} ${lang === "en" ? "payments" : "ödeme"}</div></div>
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Total (USD)" : "Toplam (USD)"}</div><div class="kpi-value">$${stats.total.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Total (USD)" : "Toplam (USD)"}</div><div class="kpi-value">$${stats.totalExpected.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
         <div class="kpi"><div class="kpi-label">${lang === "en" ? "Within 7 Days" : "7 Gün İçinde"}</div><div class="kpi-value" style="color:#3E7D5A">$${stats.next7.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
         <div class="kpi"><div class="kpi-label">${lang === "en" ? "Overdue" : "Gecikmiş"}</div><div class="kpi-value" style="color:#A6383D">$${stats.totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
       </div>

@@ -199,10 +199,132 @@ const TRANSLATIONS = {
     today: "bugün",
     waiting: "Bekliyor",
     collected: "Tahsil",
+    // Sipariş durumları
+    statusDraft: "Taslak",
+    statusConfirmed: "Onaylı",
+    statusProduction: "Üretimde",
+    statusReady: "Sevke Hazır",
+    statusShipped: "Sevk Edildi",
+    statusDelivered: "Teslim Edildi",
+    statusCompleted: "Tamamlandı",
+    statusCancelled: "İptal",
+    // Ödeme durumları
+    payStatusPending: "Bekliyor",
+    payStatusPartial: "Kısmi Ödendi",
+    payStatusPaid: "Ödendi",
+    payStatusOverdue: "Gecikmiş",
+    payStatusCancelled: "İptal",
+    // Ödeme planı tipleri
+    payTypePrepayment: "Ön Ödeme",
+    payTypePreShipment: "Sevk Öncesi",
+    payTypeDeferred: "Vadeli",
+    payTypeVat: "KDV",
+    // Ödeme yöntemleri
+    methodBankTransfer: "Banka Havalesi / SWIFT",
+    methodLC: "Akreditif (L/C)",
+    methodCAD: "Vesaik Mukabili (CAD)",
+    methodCash: "Peşin",
+    methodOpenAccount: "Açık Hesap",
+    methodCheck: "Çek",
+    methodCreditCard: "Kredi Kartı",
+    methodConsignment: "Konsinye",
+    methodOther: "Diğer",
+    // PageHeader subtitle vb
+    customersSubtitle: "müşteri kaydı · Açık bakiye otomatik hesaplanır",
+    productsSubtitle: "ürün · Sipariş kalemlerinde otomatik tamamlama yapar",
+    ordersSubtitle: "sipariş · Sipariş içinde kalemler ve ödeme planı birlikte yönetilir",
+    paymentsSubtitle: "ödeme kaydı · Sipariş ödeme planından otomatik oluşur",
+    cashflowSubtitle: "Yaklaşan tahsilatların net tarih listesi · Gecikmişler her zaman gösterilir",
+    // Buton metinleri
+    newCustomer: "Yeni Müşteri",
+    newProduct: "Yeni Ürün",
+    newOrder: "Yeni Sipariş",
+    newPayment: "Yeni Ödeme",
+    listView: "Liste",
+    calendarView: "Ay / Hafta",
+    // Filtre
+    allCustomers: "Tüm Müşteriler",
+    allCurrencies: "Tüm Para Birimleri",
+    allStatuses: "Tüm Durumlar",
+    show: "Göster",
+    onlyOverdue: "Sadece Gecikmiş",
+    onlyPending: "Sadece Bekleyen",
+    all: "Tümü",
+    clearFilters: "Filtreleri Temizle",
+    searchPlaceholder: "Ara...",
+    // Sipariş kart
+    weekShort: "W",
+    plannedShipment: "Plan. Sevk",
+    received: "Tahsil",
     // Diğer
     language: "Dil",
     turkish: "Türkçe",
     english: "İngilizce",
+    // Sayfa başlıkları (subtitle)
+    customersSubtitle: "müşteri kaydı · Açık bakiye otomatik hesaplanır",
+    productsSubtitle: "ürün · Sipariş kalemlerinde otomatik tamamlama yapar",
+    ordersSubtitle: "sipariş · Sipariş içinde kalemler ve ödeme planı birlikte yönetilir",
+    paymentsSubtitle: "ödeme kaydı · Sipariş ödeme planından otomatik oluşur",
+    cashflowSubtitle: "Yaklaşan tahsilatların net tarih listesi · Gecikmişler her zaman gösterilir",
+    bankAccountsSubtitle: "Tahsilatların geleceği hesaplar — akreditif ve havale takibi için",
+    reportsSubtitle: "Tarih aralığı, müşteri, ülke, ürün ve durum bazlı analizler",
+    // Yeni X butonları
+    newCustomer: "Yeni Müşteri",
+    newProduct: "Yeni Ürün",
+    newOrder: "Yeni Sipariş",
+    newAccount: "Yeni Hesap",
+    // Sipariş durumları
+    statusDraft: "Taslak",
+    statusConfirmed: "Onaylandı",
+    statusInProduction: "Üretimde",
+    statusReadyToShip: "Sevke Hazır",
+    statusShipped: "Sevk Edildi",
+    statusDelivered: "Teslim Edildi",
+    statusCompleted: "Tamamlandı",
+    statusCancelled: "İptal",
+    // Görünüm modu
+    list: "Liste",
+    monthWeek: "Ay / Hafta",
+    byOrder: "Sipariş Bazlı",
+    // Ortak
+    showing: "Göster",
+    all: "Tümü",
+    onlyOverdue: "Sadece Gecikmiş",
+    onlyPending: "Sadece Bekleyen",
+    allCustomers: "Tüm Müşteriler",
+    searchOrderNo: "Sipariş no ara...",
+    clearFilters: "Filtreleri Temizle",
+    days: "gün",
+    year: "yıl",
+    months30: "30 gün",
+    months60: "60 gün",
+    months90: "90 gün",
+    months180: "180 gün",
+    year1: "1 yıl",
+    daily: "Gün bazlı",
+    weekly: "Hafta bazlı",
+    monthly: "Ay bazlı",
+    period: "Dönem",
+    // Tablo başlıkları
+    tableItems: "Klm",
+    tableTotalPaid: "Tutar / Ödenen",
+    tableUSD: "USD",
+    tableCollect: "Tahsil",
+    // Sayfa subtitle ek
+    upcoming: "Yaklaşan",
+    upcomingPayments: "Yaklaşan Tahsilatlar",
+    nextMonth: "Önümüzdeki",
+    addCost: "Maliyet Ekle",
+    additionalCostsSubtitle: "palet, paketleme, navlun vb. KDV'ye dahil edilir",
+    noAdditionalCosts: "Henüz ek maliyet yok. \"Maliyet Ekle\" ile ekle.",
+    description: "Açıklama",
+    additionalCostTotal: "İlave Maliyet Toplamı",
+    // KDV/iskonto
+    orderDiscount: "Sipariş İskontosu",
+    customerInfo: "Müşteri Bilgileri",
+    shippingInfo: "Sevkiyat Bilgileri",
+    orderItems: "Sipariş Kalemleri",
+    paymentMovements: "Tahsilat Hareketi",
   },
   en: {
     dashboard: "Dashboard",
@@ -341,9 +463,122 @@ const TRANSLATIONS = {
     today: "today",
     waiting: "Waiting",
     collected: "Paid",
+    // Order statuses
+    statusDraft: "Draft",
+    statusConfirmed: "Confirmed",
+    statusProduction: "In Production",
+    statusReady: "Ready to Ship",
+    statusShipped: "Shipped",
+    statusDelivered: "Delivered",
+    statusCompleted: "Completed",
+    statusCancelled: "Cancelled",
+    // Payment statuses
+    payStatusPending: "Pending",
+    payStatusPartial: "Partially Paid",
+    payStatusPaid: "Paid",
+    payStatusOverdue: "Overdue",
+    payStatusCancelled: "Cancelled",
+    // Payment plan types
+    payTypePrepayment: "Down Payment",
+    payTypePreShipment: "Pre-Shipment",
+    payTypeDeferred: "Deferred",
+    payTypeVat: "VAT",
+    // Payment methods
+    methodBankTransfer: "Bank Transfer / SWIFT",
+    methodLC: "Letter of Credit (L/C)",
+    methodCAD: "Cash Against Documents (CAD)",
+    methodCash: "Cash",
+    methodOpenAccount: "Open Account",
+    methodCheck: "Check",
+    methodCreditCard: "Credit Card",
+    methodConsignment: "Consignment",
+    methodOther: "Other",
+    // PageHeader subtitles
+    customersSubtitle: "customer records · Open balances calculated automatically",
+    productsSubtitle: "products · Auto-complete in order items",
+    ordersSubtitle: "orders · Items and payment plan managed together",
+    paymentsSubtitle: "payment records · Auto-generated from order payment plans",
+    cashflowSubtitle: "Net date list of upcoming receivables · Overdue always shown",
+    // Buttons
+    newCustomer: "New Customer",
+    newProduct: "New Product",
+    newOrder: "New Order",
+    newPayment: "New Payment",
+    listView: "List",
+    calendarView: "Month / Week",
+    // Filters
+    allCustomers: "All Customers",
+    allCurrencies: "All Currencies",
+    allStatuses: "All Statuses",
+    show: "Show",
+    onlyOverdue: "Overdue Only",
+    onlyPending: "Pending Only",
+    all: "All",
+    clearFilters: "Clear Filters",
+    searchPlaceholder: "Search...",
+    weekShort: "W",
+    plannedShipment: "Planned Ship.",
+    received: "Received",
     language: "Language",
     turkish: "Turkish",
     english: "English",
+    customersSubtitle: "customer records · Open balance is calculated automatically",
+    productsSubtitle: "products · Auto-complete in order line items",
+    ordersSubtitle: "orders · Items and payment plan managed together",
+    paymentsSubtitle: "payment records · Auto-created from order payment plan",
+    cashflowSubtitle: "Net date list of upcoming receivables · Overdue always shown",
+    bankAccountsSubtitle: "Accounts where receivables go — for L/C and wire tracking",
+    reportsSubtitle: "Date range, customer, country, product and status analyses",
+    newCustomer: "New Customer",
+    newProduct: "New Product",
+    newOrder: "New Order",
+    newAccount: "New Account",
+    statusDraft: "Draft",
+    statusConfirmed: "Confirmed",
+    statusInProduction: "In Production",
+    statusReadyToShip: "Ready to Ship",
+    statusShipped: "Shipped",
+    statusDelivered: "Delivered",
+    statusCompleted: "Completed",
+    statusCancelled: "Cancelled",
+    list: "List",
+    monthWeek: "Month / Week",
+    byOrder: "By Order",
+    showing: "Show",
+    all: "All",
+    onlyOverdue: "Overdue Only",
+    onlyPending: "Pending Only",
+    allCustomers: "All Customers",
+    searchOrderNo: "Search order no...",
+    clearFilters: "Clear Filters",
+    days: "days",
+    year: "year",
+    months30: "30 days",
+    months60: "60 days",
+    months90: "90 days",
+    months180: "180 days",
+    year1: "1 year",
+    daily: "By day",
+    weekly: "By week",
+    monthly: "By month",
+    period: "Period",
+    tableItems: "Itm",
+    tableTotalPaid: "Total / Paid",
+    tableUSD: "USD",
+    tableCollect: "Paid %",
+    upcoming: "Upcoming",
+    upcomingPayments: "Upcoming Payments",
+    nextMonth: "Next",
+    addCost: "Add Cost",
+    additionalCostsSubtitle: "pallet, packaging, freight etc. — included in VAT base",
+    noAdditionalCosts: "No additional costs yet. Click \"Add Cost\" to add.",
+    description: "Description",
+    additionalCostTotal: "Additional Costs Total",
+    orderDiscount: "Order Discount",
+    customerInfo: "Customer Information",
+    shippingInfo: "Shipping Information",
+    orderItems: "Order Items",
+    paymentMovements: "Payment Movements",
   },
 };
 
@@ -362,6 +597,24 @@ function setStoredLang(l) {
 // Çeviri fonksiyonu — fallback Türkçe'ye
 function tr(lang, key) {
   return TRANSLATIONS[lang]?.[key] || TRANSLATIONS.tr[key] || key;
+}
+
+// Status / tip etiketlerini dile göre döndüren helper'lar
+function getOrderStatusLabel(key, lang) {
+  const map = { draft: "statusDraft", confirmed: "statusConfirmed", production: "statusProduction", ready: "statusReady", shipped: "statusShipped", delivered: "statusDelivered", completed: "statusCompleted", cancelled: "statusCancelled" };
+  return tr(lang, map[key] || key);
+}
+function getPayStatusLabel(key, lang) {
+  const map = { pending: "payStatusPending", partial: "payStatusPartial", paid: "payStatusPaid", overdue: "payStatusOverdue", cancelled: "payStatusCancelled" };
+  return tr(lang, map[key] || key);
+}
+function getPayTypeLabel(key, lang) {
+  const map = { prepayment: "payTypePrepayment", preShipment: "payTypePreShipment", deferred: "payTypeDeferred", vat: "payTypeVat" };
+  return tr(lang, map[key] || key);
+}
+function getPayMethodLabel(key, lang) {
+  const map = { bank_transfer: "methodBankTransfer", letter_of_credit: "methodLC", cad: "methodCAD", cash: "methodCash", open_account: "methodOpenAccount", check: "methodCheck", credit_card: "methodCreditCard", consignment: "methodConsignment", other: "methodOther" };
+  return tr(lang, map[key] || key);
 }
 
 
@@ -1334,6 +1587,109 @@ function FilterBar({ children }) {
   );
 }
 
+// MULTI-SELECT — birden fazla değer seçilebilen dropdown
+// values: array of string (seçili değerler)
+// onChange: (newArray) => void
+// options: [{ value, label, sub? }]
+function MultiSelect({ values = [], onChange, options = [], placeholder = "Tümü", className = "", maxLabels = 2 }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const toggle = (v) => {
+    if (values.includes(v)) {
+      onChange(values.filter((x) => x !== v));
+    } else {
+      onChange([...values, v]);
+    }
+  };
+
+  const clearAll = (e) => { e.stopPropagation(); onChange([]); };
+
+  // Görünen etiket
+  let displayLabel;
+  if (values.length === 0) {
+    displayLabel = placeholder;
+  } else if (values.length <= maxLabels) {
+    displayLabel = values
+      .map((v) => options.find((o) => o.value === v)?.label || v)
+      .join(", ");
+  } else {
+    displayLabel = `${values.length} seçili`;
+  }
+
+  return (
+    <div ref={ref} className={`relative ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full px-3 py-2 text-xs font-bold rounded-md text-left flex items-center justify-between gap-2 transition"
+        style={{
+          background: "white",
+          border: `1px solid ${values.length > 0 ? TOKENS.gold : TOKENS.border}`,
+          color: values.length > 0 ? TOKENS.ink : TOKENS.muted,
+          minHeight: "36px",
+        }}
+      >
+        <span className="truncate flex-1">{displayLabel}</span>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {values.length > 0 && (
+            <span
+              role="button"
+              onClick={clearAll}
+              className="p-0.5 rounded transition flex items-center justify-center"
+              style={{ color: TOKENS.muted, cursor: "pointer" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}
+              title="Temizle"
+            >
+              <X size={12} />
+            </span>
+          )}
+          <ChevronDown size={12} style={{ color: TOKENS.muted, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+        </div>
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 max-h-64 overflow-auto rounded-md shadow-lg" style={{ background: "white", border: `1px solid ${TOKENS.border}`, minWidth: "100%" }}>
+          {options.length === 0 ? (
+            <div className="px-3 py-2 text-xs" style={{ color: TOKENS.muted }}>Seçenek yok</div>
+          ) : (
+            options.map((opt) => {
+              const checked = values.includes(opt.value);
+              return (
+                <div
+                  key={opt.value}
+                  onClick={() => toggle(opt.value)}
+                  className="px-3 py-2 text-xs cursor-pointer flex items-center gap-2 transition"
+                  style={{ background: checked ? TOKENS.gold + "12" : "transparent" }}
+                  onMouseEnter={(e) => { if (!checked) e.currentTarget.style.background = TOKENS.cream; }}
+                  onMouseLeave={(e) => { if (!checked) e.currentTarget.style.background = "transparent"; }}
+                >
+                  <div className="w-3.5 h-3.5 rounded flex items-center justify-center flex-shrink-0" style={{ background: checked ? TOKENS.gold : "white", border: `1px solid ${checked ? TOKENS.gold : TOKENS.border}` }}>
+                    {checked && <Check size={10} style={{ color: TOKENS.ink }} strokeWidth={3} />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold truncate" style={{ color: TOKENS.ink }}>{opt.label}</div>
+                    {opt.sub && <div className="text-[10px] truncate" style={{ color: TOKENS.muted }}>{opt.sub}</div>}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SearchInput({ value, onChange, placeholder = "Ara..." }) {
   return (
     <div className="relative flex-1 min-w-[220px]">
@@ -1835,7 +2191,7 @@ function Toast({ toast, onDismiss }) {
 // GÖSTERGE PANELİ — özet, KPI'lar, grafikler, önemli listeler
 // ============================================================================
 
-function DashboardView({ customers, products, orders, payments, rates, setView }) {
+function DashboardView({ customers, products, orders, payments, rates, setView, t = (k) => k, lang = "tr" }) {
   const [kpiDetail, setKpiDetail] = useState(null); // null | "orders" | "paid" | "pending" | "overdue"
   // Tüm hesaplamalar burada yapılır, alt bileşenlere geçilir
   const stats = useMemo(() => {
@@ -1957,15 +2313,15 @@ function DashboardView({ customers, products, orders, payments, rates, setView }
 
         {/* KPI KARTLARI — tıklanabilir */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard icon={DollarSign}    label="Toplam Sipariş Hacmi" value={fmtMoney(stats.totalOrdersUSD, "USD", { compact: true })} sub={`${orders.length} sipariş`}                       accent={TOKENS.navy}    onClick={() => setKpiDetail("orders")} />
-          <KPICard icon={CheckCircle2}  label="Tahsil Edilen"        value={fmtMoney(stats.paidUSD, "USD", { compact: true })}        sub={`${payments.filter(p => p.status === "paid").length} ödeme`}    accent={TOKENS.forest}  onClick={() => setKpiDetail("paid")} />
-          <KPICard icon={Clock}         label="Bekleyen Tahsilat"    value={fmtMoney(stats.pendingUSD, "USD", { compact: true })}     sub={`${payments.filter(p => p.status === "pending").length} kayıt`} accent={TOKENS.gold}    onClick={() => setKpiDetail("pending")} />
-          <KPICard icon={AlertTriangle} label="Gecikmiş"             value={fmtMoney(stats.overdueUSD, "USD", { compact: true })}     sub={`${payments.filter(p => p.status === "overdue").length} kayıt`} accent={TOKENS.oxblood} onClick={() => setKpiDetail("overdue")} />
+          <KPICard icon={DollarSign}    label={t("totalOrderVolume")} value={fmtMoney(stats.totalOrdersUSD, "USD", { compact: true })} sub={`${orders.length} ${t("orders").toLowerCase()}`}                   accent={TOKENS.navy}    onClick={() => setKpiDetail("orders")} />
+          <KPICard icon={CheckCircle2}  label={t("totalReceived")}    value={fmtMoney(stats.paidUSD, "USD", { compact: true })}        sub={`${payments.filter(p => p.status === "paid").length} ${t("payments").toLowerCase()}`}    accent={TOKENS.forest}  onClick={() => setKpiDetail("paid")} />
+          <KPICard icon={Clock}         label={t("pendingPayments")}  value={fmtMoney(stats.pendingUSD, "USD", { compact: true })}     sub={`${payments.filter(p => p.status === "pending").length}`} accent={TOKENS.gold}    onClick={() => setKpiDetail("pending")} />
+          <KPICard icon={AlertTriangle} label={t("overduePayments")}  value={fmtMoney(stats.overdueUSD, "USD", { compact: true })}     sub={`${payments.filter(p => p.status === "overdue").length}`} accent={TOKENS.oxblood} onClick={() => setKpiDetail("overdue")} />
         </div>
 
         {/* GRAFİKLER */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card title="Aylık Tahsilat" subtitle="Son 12 ay · Tahsil edilen ödemeler · USD" className="lg:col-span-2">
+          <Card title={t("monthlyCollection")} subtitle={`${t("last12Months")} · ${t("paid")} · USD`} className="lg:col-span-2">
             <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={monthlyRevenue} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                 <defs>
@@ -1989,8 +2345,8 @@ function DashboardView({ customers, products, orders, payments, rates, setView }
                     return (
                       <div style={{ background: "white", border: `1px solid ${TOKENS.border}`, borderRadius: 6, padding: "8px 12px", fontSize: 13, fontWeight: 600 }}>
                         <div style={{ color: TOKENS.ink, marginBottom: 4 }}>{label}</div>
-                        <div style={{ color: TOKENS.forest }}>Tahsil edilen: {fmtMoney(v)}</div>
-                        <div style={{ color: TOKENS.muted, marginTop: 3, fontWeight: 400, fontSize: 11 }}>{c} ödeme</div>
+                        <div style={{ color: TOKENS.forest }}>{t("paid")}: {fmtMoney(v)}</div>
+                        <div style={{ color: TOKENS.muted, marginTop: 3, fontWeight: 400, fontSize: 11 }}>{c} {t("payments").toLowerCase()}</div>
                       </div>
                     );
                   }}
@@ -2097,37 +2453,39 @@ function DashboardView({ customers, products, orders, payments, rates, setView }
         payments={payments}
         rates={rates}
         setView={setView}
+        t={t}
+        lang={lang}
       />
     </div>
   );
 }
 
 // KPI detay modali — Toplam Sipariş / Tahsil / Bekleyen / Gecikmiş kartlarına basınca
-function KPIDetailModal({ kind, onClose, orders, customers, payments, rates, setView }) {
+function KPIDetailModal({ kind, onClose, orders, customers, payments, rates, setView, t = (k) => k, lang = "tr" }) {
   if (!kind) return null;
 
   const config = {
     orders: {
-      title: "Toplam Sipariş Hacmi",
-      subtitle: `${orders.length} sipariş · USD karşılığı`,
+      title: t("totalOrderVolume"),
+      subtitle: `${orders.length} ${t("orders").toLowerCase()} · ${lang === "en" ? "USD equivalent" : "USD karşılığı"}`,
       color: TOKENS.navy,
       icon: DollarSign,
     },
     paid: {
-      title: "Tahsil Edilen Ödemeler",
-      subtitle: `${payments.filter(p => p.status === "paid").length} kayıt`,
+      title: lang === "en" ? "Paid Payments" : "Tahsil Edilen Ödemeler",
+      subtitle: `${payments.filter(p => p.status === "paid").length} ${lang === "en" ? "records" : "kayıt"}`,
       color: TOKENS.forest,
       icon: CheckCircle2,
     },
     pending: {
-      title: "Bekleyen Tahsilat",
-      subtitle: `${payments.filter(p => p.status === "pending").length} kayıt`,
+      title: t("pendingPayments"),
+      subtitle: `${payments.filter(p => p.status === "pending").length} ${lang === "en" ? "records" : "kayıt"}`,
       color: TOKENS.gold,
       icon: Clock,
     },
     overdue: {
-      title: "Gecikmiş Tahsilat",
-      subtitle: `${payments.filter(p => p.status === "overdue").length} kayıt`,
+      title: lang === "en" ? "Overdue Payments" : "Gecikmiş Tahsilat",
+      subtitle: `${payments.filter(p => p.status === "overdue").length} ${lang === "en" ? "records" : "kayıt"}`,
       color: TOKENS.oxblood,
       icon: AlertTriangle,
     },
@@ -2187,9 +2545,102 @@ function KPIDetailModal({ kind, onClose, orders, customers, payments, rates, set
     });
   }
 
+  // PDF yazdırma
+  const printPDFList = () => {
+    const isOrders = kind === "orders";
+    let tableHtml;
+    if (isOrders) {
+      const sorted = [...orders].sort((a, b) => (b.orderDate || "").localeCompare(a.orderDate || ""));
+      tableHtml = `
+        <table>
+          <thead>
+            <tr>
+              <th>${t("orderNumber")}</th>
+              <th>${t("customer")}</th>
+              <th>${t("orderDate")}</th>
+              <th class="right">${t("amount")}</th>
+              <th class="right">USD</th>
+              <th>${t("status")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sorted.map((o) => {
+              const c = customers.find((x) => x.id === o.customerId);
+              const ot = orderTotal(o);
+              const usd = orderTotalUSD(o, rates);
+              const st = ORDER_STATUSES.find((s) => s.key === o.status);
+              return `
+                <tr>
+                  <td class="text-mono">${htmlEscape(o.orderNumber)}</td>
+                  <td><div style="font-weight:700">${htmlEscape(c?.name || "—")}</div><div style="font-size:9px;color:#7A736A">${htmlEscape(c?.country || "")}</div></td>
+                  <td>${fmtDate(o.orderDate)}</td>
+                  <td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(ot, o.currency)}</td>
+                  <td class="right text-mono" style="color:#7A736A">$${(usd || 0).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+                  <td>${st?.label || o.status}</td>
+                </tr>`;
+            }).join("")}
+          </tbody>
+        </table>`;
+    } else {
+      const filtered = payments.filter((p) => p.status === kind);
+      const sorted = [...filtered].sort((a, b) => (b.dueDate || "").localeCompare(a.dueDate || ""));
+      tableHtml = `
+        <table>
+          <thead>
+            <tr>
+              <th>${t("orderNumber")}</th>
+              <th>${t("customer")}</th>
+              <th>${t("paymentType")}</th>
+              <th class="right">${t("amount")}</th>
+              <th class="right">USD</th>
+              <th>${t("dueDate")}</th>
+              ${kind === "paid" ? `<th>${t("paidDate")}</th>` : ""}
+            </tr>
+          </thead>
+          <tbody>
+            ${sorted.map((p) => {
+              const order = orders.find((o) => o.id === p.orderId);
+              const cust = customers.find((c) => c.id === order?.customerId);
+              const tp = PAYMENT_PLAN_TYPES.find((x) => x.key === p.type);
+              const usd = toUSD(Number(p.amount) || 0, p.currency, rates);
+              return `
+                <tr>
+                  <td class="text-mono">${htmlEscape(order?.orderNumber || "—")}</td>
+                  <td><div style="font-weight:700">${htmlEscape(cust?.name || "—")}</div><div style="font-size:9px;color:#7A736A">${htmlEscape(cust?.country || "")}</div></td>
+                  <td>${tp?.label || p.type}</td>
+                  <td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(p.amount, p.currency)}</td>
+                  <td class="right text-mono" style="color:#7A736A">$${usd.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+                  <td>${p.dueDate ? fmtDate(p.dueDate) : "—"}</td>
+                  ${kind === "paid" ? `<td class="text-success">${p.paidDate ? fmtDate(p.paidDate) : "—"}</td>` : ""}
+                </tr>`;
+            }).join("")}
+          </tbody>
+        </table>`;
+    }
+
+    const content = `
+      <div class="kpi-grid">
+        <div class="kpi"><div class="kpi-label">${cfg.title}</div><div class="kpi-value" style="color:${cfg.color}">$${total.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Records" : "Kayıt"}</div><div class="kpi-value">${rows.length}</div></div>
+      </div>
+      ${tableHtml}
+    `;
+
+    printPDF({
+      title: cfg.title,
+      subtitle: cfg.subtitle,
+      contentHtml: content,
+      orientation: "landscape",
+      lang,
+    });
+  };
+
   return (
     <Modal open={!!kind} onClose={onClose} title={cfg.title} subtitle={cfg.subtitle} size="2xl"
-      footer={<Btn variant="ghost" size="sm" onClick={onClose}>Kapat</Btn>}>
+      footer={<>
+        {rows.length > 0 && <Btn variant="secondary" size="sm" icon={FileDown} onClick={printPDFList}>{t("pdf")}</Btn>}
+        <Btn variant="ghost" size="sm" onClick={onClose}>{t("close")}</Btn>
+      </>}>
       <div className="space-y-4">
         <div className="rounded-md p-4 flex items-center justify-between" style={{ background: cfg.color + "10", border: `1px solid ${cfg.color}40` }}>
           <div className="flex items-center gap-3">
@@ -2197,17 +2648,17 @@ function KPIDetailModal({ kind, onClose, orders, customers, payments, rates, set
               <cfg.icon size={20} style={{ color: cfg.color }} />
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wider font-bold" style={{ color: TOKENS.muted }}>Toplam (USD)</div>
+              <div className="text-[10px] uppercase tracking-wider font-bold" style={{ color: TOKENS.muted }}>{lang === "en" ? "Total (USD)" : "Toplam (USD)"}</div>
               <div className="text-xl font-bold tabular-nums" style={{ color: cfg.color }}>{fmtMoney(total, "USD")}</div>
             </div>
           </div>
           <div className="text-xs" style={{ color: TOKENS.muted }}>
-            {rows.length === 0 ? "Kayıt yok" : `${rows.length} kayıt · Tıklayarak detaya git`}
+            {rows.length === 0 ? (lang === "en" ? "No records" : "Kayıt yok") : `${rows.length} ${lang === "en" ? "records · click to view detail" : "kayıt · Tıklayarak detaya git"}`}
           </div>
         </div>
 
         {rows.length === 0 ? (
-          <div className="text-center py-8 text-sm" style={{ color: TOKENS.muted }}>Bu kategoride kayıt bulunmuyor.</div>
+          <div className="text-center py-8 text-sm" style={{ color: TOKENS.muted }}>{lang === "en" ? "No records in this category." : "Bu kategoride kayıt bulunmuyor."}</div>
         ) : (
           <div className="rounded-md overflow-hidden" style={{ border: `1px solid ${TOKENS.border}`, maxHeight: "60vh", overflowY: "auto" }}>
             <table className="w-full text-xs">
@@ -2295,7 +2746,7 @@ function QuickStartCard({ icon: Icon, title, desc, cta, onClick }) {
 // hesap riskimiz var bilmek hayati. Bekleyen + gecikmiş ödemeleri toplayıp
 // kredi limitiyle karşılaştırırız.
 
-function CustomersView({ customers, setCustomers, orders, payments, bankAccounts, rates, canEdit, showToast, setView, setPendingOrderToOpen }) {
+function CustomersView({ customers, setCustomers, orders, payments, bankAccounts, rates, canEdit, showToast, setView, setPendingOrderToOpen, t = (k) => k, lang = "tr" }) {
   const [search, setSearch] = useState("");
   const [countryFilter, setCountryFilter] = useState("");
   const [open, setOpen] = useState(false);
@@ -2552,14 +3003,14 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
 
   return (
     <div>
-      <PageHeader title="Müşteriler" subtitle={`${customers.length} müşteri kaydı · Açık bakiye ve kredi kullanımı otomatik hesaplanır`}>
+      <PageHeader title={t("customers")} subtitle={`${customers.length} ${t("customersSubtitle")}`}>
         <input id="cust-import" type="file" accept=".xlsx,.xls" onChange={(e) => handleImport(e.target.files[0])} className="hidden" />
         <Btn variant="ghost" size="sm" icon={FileDown} onClick={printList}>PDF</Btn>
-        <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>Dışa Aktar</Btn>
+        <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>{t("export")}</Btn>
         {canEdit && <>
-          <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>Şablon</Btn>
-          <Btn variant="secondary" size="sm" icon={FileUp} onClick={() => document.getElementById("cust-import").click()}>İçe Aktar</Btn>
-          <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>Yeni Müşteri</Btn>
+          <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>{t("template")}</Btn>
+          <Btn variant="secondary" size="sm" icon={FileUp} onClick={() => document.getElementById("cust-import").click()}>{t("import")}</Btn>
+          <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>{t("newCustomer")}</Btn>
         </>}
       </PageHeader>
 
@@ -2688,12 +3139,12 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
       </Modal>
 
       {/* Detay görünüm */}
-      <CustomerDetailModal customer={viewing} onClose={() => setViewing(null)} orders={orders} payments={payments} bankAccounts={bankAccounts} rates={rates} setView={setView} setPendingOrderToOpen={setPendingOrderToOpen} />
+      <CustomerDetailModal customer={viewing} onClose={() => setViewing(null)} orders={orders} payments={payments} bankAccounts={bankAccounts} rates={rates} setView={setView} setPendingOrderToOpen={setPendingOrderToOpen} t={t} lang={lang} />
     </div>
   );
 }
 
-function CustomerDetailModal({ customer, onClose, orders, payments, bankAccounts, rates, setView, setPendingOrderToOpen }) {
+function CustomerDetailModal({ customer, onClose, orders, payments, bankAccounts, rates, setView, setPendingOrderToOpen, t = (k) => k, lang = "tr" }) {
   if (!customer) return null;
   const custOrders = orders.filter((o) => o.customerId === customer.id).sort((a, b) => (b.orderDate || "").localeCompare(a.orderDate || ""));
   const custPayments = payments.filter((p) => custOrders.some((o) => o.id === p.orderId));
@@ -3039,7 +3490,7 @@ function SectionTitle({ children }) {
 // ÜRÜNLER
 // ============================================================================
 
-function ProductsView({ products, setProducts, orders, rates, canEdit, showToast }) {
+function ProductsView({ products, setProducts, orders, rates, canEdit, showToast, t = (k) => k, lang = "tr" }) {
   const [search, setSearch] = useState("");
   const [curFilter, setCurFilter] = useState("");
   const [open, setOpen] = useState(false);
@@ -3220,14 +3671,14 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
 
   return (
     <div>
-      <PageHeader title="Ürünler" subtitle={`${products.length} ürün · Sipariş kalemlerinde otomatik tamamlama yapar`}>
+      <PageHeader title={t("products")} subtitle={`${products.length} ${t("productsSubtitle")}`}>
         <input id="prod-import" type="file" accept=".xlsx,.xls" onChange={(e) => handleImport(e.target.files[0])} className="hidden" />
         <Btn variant="ghost" size="sm" icon={FileDown} onClick={printList}>PDF</Btn>
-        <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>Dışa Aktar</Btn>
+        <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>{t("export")}</Btn>
         {canEdit && <>
-          <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>Şablon</Btn>
-          <Btn variant="secondary" size="sm" icon={FileUp} onClick={() => document.getElementById("prod-import").click()}>İçe Aktar</Btn>
-          <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>Yeni Ürün</Btn>
+          <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>{t("template")}</Btn>
+          <Btn variant="secondary" size="sm" icon={FileUp} onClick={() => document.getElementById("prod-import").click()}>{t("import")}</Btn>
+          <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>{t("newProduct")}</Btn>
         </>}
       </PageHeader>
 
@@ -3285,7 +3736,7 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
 // - Akreditif geliyorsa hangi banka olduğunu kayıt edebiliriz
 // - Hesap bazlı tahsilat raporu çıkar
 
-function BankAccountsView({ bankAccounts, setBankAccounts, payments, rates, canEdit, showToast }) {
+function BankAccountsView({ bankAccounts, setBankAccounts, payments, rates, canEdit, showToast, t = (k) => k, lang = "tr" }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
 
@@ -3363,13 +3814,13 @@ function BankAccountsView({ bankAccounts, setBankAccounts, payments, rates, canE
 
   return (
     <div>
-      <PageHeader title="Banka Hesapları" subtitle="Tahsilatların geleceği hesapları kaydet — akreditif ve havale takibi için kritik">
+      <PageHeader title={t("bankAccounts")} subtitle={t("bankAccountsSubtitle")}>
         <input id="bank-import" type="file" accept=".xlsx,.xls" onChange={(e) => { handleImport(e.target.files[0]); e.target.value = ""; }} className="hidden" />
-        <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>Dışa Aktar</Btn>
+        <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>{t("export")}</Btn>
         {canEdit && <>
-          <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>Şablon</Btn>
-          <Btn variant="secondary" size="sm" icon={FileUp} onClick={() => document.getElementById("bank-import").click()}>İçe Aktar</Btn>
-          <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>Yeni Hesap</Btn>
+          <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>{t("template")}</Btn>
+          <Btn variant="secondary" size="sm" icon={FileUp} onClick={() => document.getElementById("bank-import").click()}>{t("import")}</Btn>
+          <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>{t("new")}</Btn>
         </>}
       </PageHeader>
 
@@ -3451,16 +3902,16 @@ function BankAccountsView({ bankAccounts, setBankAccounts, payments, rates, canE
 // "Ödeme Planı" sipariş kaydında oluşturulur ve "Ödemeler" modülünde her
 // taksitin tahsilatı ayrı ayrı kaydedilir.
 
-function OrdersView({ customers, products, orders, setOrders, payments, setPayments, bankAccounts, rates, canEdit, showToast, setView, pendingOrderToOpen, setPendingOrderToOpen }) {
+function OrdersView({ customers, products, orders, setOrders, payments, setPayments, bankAccounts, rates, canEdit, showToast, setView, pendingOrderToOpen, setPendingOrderToOpen, t = (k) => k, lang = "tr" }) {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [customerFilter, setCustomerFilter] = useState("");
-  const [curFilter, setCurFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState([]); // multi-select
+  const [customerFilter, setCustomerFilter] = useState([]); // multi-select
+  const [curFilter, setCurFilter] = useState([]); // multi-select
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
-  const [viewMode, setViewMode] = useState("list"); // list | calendar (ay/hafta accordion)
+  const [viewMode, setViewMode] = useState("list");
 
   // Müşteri sayfasından "siparişi aç" yönlendirmesi geldiyse, otomatik aç
   useEffect(() => {
@@ -3474,9 +3925,9 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     return orders.filter((o) => {
-      if (statusFilter && o.status !== statusFilter) return false;
-      if (customerFilter && o.customerId !== customerFilter) return false;
-      if (curFilter && o.currency !== curFilter) return false;
+      if (statusFilter.length > 0 && !statusFilter.includes(o.status)) return false;
+      if (customerFilter.length > 0 && !customerFilter.includes(o.customerId)) return false;
+      if (curFilter.length > 0 && !curFilter.includes(o.currency)) return false;
       if (dateRange.from && (o.orderDate || "") < dateRange.from) return false;
       if (dateRange.to && (o.orderDate || "") > dateRange.to) return false;
       if (!q) return true;
@@ -3640,11 +4091,11 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
 
     // Filtre özeti
     const filters = [];
-    if (search) filters.push(`Arama: "${search}"`);
-    if (statusFilter) filters.push(`Durum: ${ORDER_STATUSES.find((s) => s.key === statusFilter)?.label}`);
-    if (customerFilter) filters.push(`Müşteri: ${customers.find((c) => c.id === customerFilter)?.name}`);
-    if (curFilter) filters.push(`Para Birimi: ${curFilter}`);
-    if (dateRange.from || dateRange.to) filters.push(`Tarih: ${dateRange.from || "..."} → ${dateRange.to || "..."}`);
+    if (search) filters.push(`${lang === "en" ? "Search" : "Arama"}: "${search}"`);
+    if (statusFilter.length > 0) filters.push(`${t("status")}: ${statusFilter.map((s) => ORDER_STATUSES.find((x) => x.key === s)?.label || s).join(", ")}`);
+    if (customerFilter.length > 0) filters.push(`${t("customer")}: ${customerFilter.map((id) => customers.find((c) => c.id === id)?.name || id).join(", ")}`);
+    if (curFilter.length > 0) filters.push(`${lang === "en" ? "Currency" : "Para Birimi"}: ${curFilter.join(", ")}`);
+    if (dateRange.from || dateRange.to) filters.push(`${lang === "en" ? "Date" : "Tarih"}: ${dateRange.from || "..."} → ${dateRange.to || "..."}`);
 
     const content = `
       <div class="kpi-grid">
@@ -3856,18 +4307,18 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
 
   return (
     <div>
-      <PageHeader title="Siparişler" subtitle={`${orders.length} sipariş · Sipariş içinde kalemler ve ödeme planı birlikte yönetilir`}>
+      <PageHeader title={t("orders")} subtitle={`${orders.length} ${t("ordersSubtitle")}`}>
         <input id="order-import" type="file" accept=".xlsx,.xls" onChange={(e) => { handleImport(e.target.files[0]); e.target.value = ""; }} className="hidden" />
         <div className="flex gap-1 rounded-md p-0.5" style={{ background: TOKENS.cream, border: `1px solid ${TOKENS.border}` }}>
-          <button onClick={() => setViewMode("list")} className="px-3 py-1.5 text-xs font-bold rounded transition" style={{ background: viewMode === "list" ? "white" : "transparent", color: viewMode === "list" ? TOKENS.ink : TOKENS.muted, boxShadow: viewMode === "list" ? "0 1px 2px rgba(0,0,0,0.05)" : "none" }}>Liste</button>
-          <button onClick={() => setViewMode("calendar")} className="px-3 py-1.5 text-xs font-bold rounded transition" style={{ background: viewMode === "calendar" ? "white" : "transparent", color: viewMode === "calendar" ? TOKENS.ink : TOKENS.muted, boxShadow: viewMode === "calendar" ? "0 1px 2px rgba(0,0,0,0.05)" : "none" }}>Ay / Hafta</button>
+          <button onClick={() => setViewMode("list")} className="px-3 py-1.5 text-xs font-bold rounded transition" style={{ background: viewMode === "list" ? "white" : "transparent", color: viewMode === "list" ? TOKENS.ink : TOKENS.muted, boxShadow: viewMode === "list" ? "0 1px 2px rgba(0,0,0,0.05)" : "none" }}>{t("listView")}</button>
+          <button onClick={() => setViewMode("calendar")} className="px-3 py-1.5 text-xs font-bold rounded transition" style={{ background: viewMode === "calendar" ? "white" : "transparent", color: viewMode === "calendar" ? TOKENS.ink : TOKENS.muted, boxShadow: viewMode === "calendar" ? "0 1px 2px rgba(0,0,0,0.05)" : "none" }}>{t("calendarView")}</button>
         </div>
         <Btn variant="ghost" size="sm" icon={FileDown} onClick={printList}>PDF</Btn>
-        <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>Dışa Aktar</Btn>
+        <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>{t("export")}</Btn>
         {canEdit && <>
-          <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>Şablon</Btn>
-          <Btn variant="secondary" size="sm" icon={FileUp} onClick={() => document.getElementById("order-import").click()}>İçe Aktar</Btn>
-          <Btn variant="primary" size="sm" icon={Plus} onClick={openNew} disabled={customers.length === 0}>Yeni Sipariş</Btn>
+          <Btn variant="ghost" size="sm" icon={FileDown} onClick={downloadTemplate}>{t("template")}</Btn>
+          <Btn variant="secondary" size="sm" icon={FileUp} onClick={() => document.getElementById("order-import").click()}>{t("import")}</Btn>
+          <Btn variant="primary" size="sm" icon={Plus} onClick={openNew} disabled={customers.length === 0}>{t("newOrder")}</Btn>
         </>}
       </PageHeader>
 
@@ -3879,27 +4330,34 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
         ) : (
           <>
             <FilterBar>
-              <SearchInput value={search} onChange={setSearch} placeholder="Sipariş no, müşteri, ürün, fatura no..." />
-              <div className="w-44"><Label>Durum</Label>
-                <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                  <option value="">Tümü</option>
-                  {ORDER_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-                </Select>
+              <SearchInput value={search} onChange={setSearch} placeholder={lang === "en" ? "Order no, customer, product, invoice..." : "Sipariş no, müşteri, ürün, fatura no..."} />
+              <div className="w-44"><Label>{t("status")}</Label>
+                <MultiSelect
+                  values={statusFilter}
+                  onChange={setStatusFilter}
+                  options={ORDER_STATUSES.map((s) => ({ value: s.key, label: s.label }))}
+                  placeholder={t("all")}
+                />
               </div>
-              <div className="w-48"><Label>Müşteri</Label>
-                <Select value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)}>
-                  <option value="">Tümü</option>
-                  {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </Select>
+              <div className="w-56"><Label>{t("customer")}</Label>
+                <MultiSelect
+                  values={customerFilter}
+                  onChange={setCustomerFilter}
+                  options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.code }))}
+                  placeholder={t("all")}
+                />
               </div>
-              <div className="w-28"><Label>Para Br.</Label>
-                <Select value={curFilter} onChange={(e) => setCurFilter(e.target.value)}>
-                  <option value="">Tümü</option>{CURRENCIES.map((c) => <option key={c}>{c}</option>)}
-                </Select>
+              <div className="w-28"><Label>{lang === "en" ? "Currency" : "Para Br."}</Label>
+                <MultiSelect
+                  values={curFilter}
+                  onChange={setCurFilter}
+                  options={CURRENCIES.map((c) => ({ value: c, label: c }))}
+                  placeholder={t("all")}
+                />
               </div>
               <DateRange from={dateRange.from} to={dateRange.to} onChange={setDateRange} />
-              {(search || statusFilter || customerFilter || curFilter || dateRange.from || dateRange.to) && (
-                <Btn variant="ghost" size="sm" icon={X} onClick={() => { setSearch(""); setStatusFilter(""); setCustomerFilter(""); setCurFilter(""); setDateRange({ from: "", to: "" }); }}>Temizle</Btn>
+              {(search || statusFilter.length > 0 || customerFilter.length > 0 || curFilter.length > 0 || dateRange.from || dateRange.to) && (
+                <Btn variant="ghost" size="sm" icon={X} onClick={() => { setSearch(""); setStatusFilter([]); setCustomerFilter([]); setCurFilter([]); setDateRange({ from: "", to: "" }); }}>{t("clear")}</Btn>
               )}
             </FilterBar>
 
@@ -3946,6 +4404,8 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
         setView={setView}
         canEdit={canEdit}
         onEdit={(o) => { setEditing({ ...o }); setOpen(true); }}
+        t={t}
+        lang={lang}
       />
     </div>
   );
@@ -4008,18 +4468,25 @@ function OrdersCalendarView({ orders, customers, rates, payments, onView, onEdit
   const [openMonths, setOpenMonths] = useState({}); // { "2026-05": true }
   const [openOrders, setOpenOrders] = useState({}); // { orderId: true }
 
-  // Ay bazında grupla — sipariş tarihine göre
+  // Ay bazında grupla — fiili sevk varsa ona, yoksa planlanan sevk, o da yoksa sipariş tarihine göre
   const grouped = useMemo(() => {
     const m = {};
     orders.forEach((o) => {
-      const d = o.orderDate || o.createdAt;
+      // Sevk edilmişse → fiili sevk tarihinin ayı
+      // Sevk edilmemişse → planlanan sevk tarihi (varsa)
+      // Hiçbiri yoksa → sipariş tarihi
+      const d = o.actualShipmentDate || o.shipmentDate || o.orderDate || o.createdAt;
       if (!d) return;
       const key = d.slice(0, 7); // "2026-05"
       if (!m[key]) m[key] = [];
       m[key].push(o);
     });
-    // Her ay içinde tarihe göre sırala (yeni → eski)
-    Object.keys(m).forEach((k) => m[k].sort((a, b) => (b.orderDate || "").localeCompare(a.orderDate || "")));
+    // Her ay içinde sevk tarihine göre sırala (yeni → eski)
+    Object.keys(m).forEach((k) => m[k].sort((a, b) => {
+      const da = a.actualShipmentDate || a.shipmentDate || a.orderDate || "";
+      const db = b.actualShipmentDate || b.shipmentDate || b.orderDate || "";
+      return db.localeCompare(da);
+    }));
     // Aylar yeni → eski
     return Object.entries(m).sort(([a], [b]) => b.localeCompare(a));
   }, [orders]);
@@ -5234,7 +5701,7 @@ function OrderItemsSection({ editing, setEditing, products, itemsTotal, addItem,
 // SİPARİŞ DETAY GÖRÜNÜMÜ
 // ============================================================================
 
-function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, rates, setView, onEdit, canEdit }) {
+function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, rates, setView, onEdit, canEdit, t = (k) => k, lang = "tr" }) {
   if (!order) return null;
   const customer = customers.find((c) => c.id === order.customerId);
   const orderPayments = payments.filter((p) => p.orderId === order.id);
@@ -5593,12 +6060,12 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
 // ÖDEMELER — tahsilat takibi
 // ============================================================================
 
-function PaymentsView({ orders, setOrders, customers, payments, setPayments, bankAccounts, rates, canEdit, showToast }) {
+function PaymentsView({ orders, setOrders, customers, payments, setPayments, bankAccounts, rates, canEdit, showToast, t = (k) => k, lang = "tr" }) {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [methodFilter, setMethodFilter] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
-  const [viewMode, setViewMode] = useState("by-order"); // by-order, list
+  const [statusFilter, setStatusFilter] = useState([]);
+  const [methodFilter, setMethodFilter] = useState([]);
+  const [typeFilter, setTypeFilter] = useState([]);
+  const [viewMode, setViewMode] = useState("by-order");
   const [marking, setMarking] = useState(null);
 
   const enriched = useMemo(() => payments.map((p) => {
@@ -5611,9 +6078,9 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     return enriched.filter((p) => {
-      if (statusFilter && p.status !== statusFilter) return false;
-      if (methodFilter && p.method !== methodFilter) return false;
-      if (typeFilter && p.type !== typeFilter) return false;
+      if (statusFilter.length > 0 && !statusFilter.includes(p.status)) return false;
+      if (methodFilter.length > 0 && !methodFilter.includes(p.method)) return false;
+      if (typeFilter.length > 0 && !typeFilter.includes(p.type)) return false;
       if (!q) return true;
       return [p.order?.orderNumber, p.customer?.name, p.referenceNumber, p.notes].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
     });
@@ -5795,9 +6262,10 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
     const totalOverdue = filtered.filter((p) => p.status === "overdue").reduce((s, p) => s + toUSD(Number(p.amount) || 0, p.currency, rates), 0);
 
     const filters = [];
-    if (search) filters.push(`Arama: "${search}"`);
-    if (statusFilter) filters.push(`Durum: ${PAYMENT_STATUSES.find((s) => s.key === statusFilter)?.label}`);
-    if (typeFilter) filters.push(`Tip: ${PAYMENT_PLAN_TYPES.find((t) => t.key === typeFilter)?.label}`);
+    if (search) filters.push(`${lang === "en" ? "Search" : "Arama"}: "${search}"`);
+    if (statusFilter.length > 0) filters.push(`${t("status")}: ${statusFilter.map((s) => PAYMENT_STATUSES.find((x) => x.key === s)?.label || s).join(", ")}`);
+    if (typeFilter.length > 0) filters.push(`${lang === "en" ? "Type" : "Tip"}: ${typeFilter.map((tp) => PAYMENT_PLAN_TYPES.find((x) => x.key === tp)?.label || tp).join(", ")}`);
+    if (methodFilter.length > 0) filters.push(`${lang === "en" ? "Method" : "Yöntem"}: ${methodFilter.map((m) => PAYMENT_METHODS.find((x) => x.key === m)?.label || m).join(", ")}`);
 
     const content = `
       <div class="kpi-grid">
@@ -5851,7 +6319,7 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
 
   return (
     <div>
-      <PageHeader title="Ödemeler" subtitle={`${payments.length} ödeme kaydı · Sipariş ödeme planından otomatik oluşur`}>
+      <PageHeader title={t("payments")} subtitle={`${payments.length} ${t("paymentsSubtitle")}`}>
         <div className="flex gap-1 rounded-md p-0.5" style={{ background: TOKENS.cream, border: `1px solid ${TOKENS.border}` }}>
           <button
             onClick={() => setViewMode("by-order")}
@@ -5877,37 +6345,43 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
           </button>
         </div>
         <Btn variant="ghost" size="sm" icon={FileDown} onClick={printList}>PDF</Btn>
-        <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>Dışa Aktar</Btn>
+        <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>{t("export")}</Btn>
       </PageHeader>
 
       <div className="p-8 space-y-4">
         <div className="grid grid-cols-3 gap-4">
-          <KPICard icon={CheckCircle2} label="Tahsil Edilen" value={fmtMoney(stats.paid, "USD", { compact: true })} sub={`${stats.paidCount} ödeme`} accent={TOKENS.forest} />
-          <KPICard icon={Clock} label="Bekleyen" value={fmtMoney(stats.pending, "USD", { compact: true })} sub={`${enriched.filter((p) => p.status === "pending").length} kayıt`} accent={TOKENS.gold} />
-          <KPICard icon={AlertTriangle} label="Gecikmiş" value={fmtMoney(stats.overdue, "USD", { compact: true })} sub={`${enriched.filter((p) => p.status === "overdue").length} kayıt`} accent={TOKENS.oxblood} />
+          <KPICard icon={CheckCircle2} label={t("totalReceived")} value={fmtMoney(stats.paid, "USD", { compact: true })} sub={`${stats.paidCount} ${t("payments").toLowerCase()}`} accent={TOKENS.forest} />
+          <KPICard icon={Clock} label={t("pending")} value={fmtMoney(stats.pending, "USD", { compact: true })} sub={`${enriched.filter((p) => p.status === "pending").length}`} accent={TOKENS.gold} />
+          <KPICard icon={AlertTriangle} label={t("overdue")} value={fmtMoney(stats.overdue, "USD", { compact: true })} sub={`${enriched.filter((p) => p.status === "overdue").length}`} accent={TOKENS.oxblood} />
         </div>
 
         <FilterBar>
-          <SearchInput value={search} onChange={setSearch} placeholder="Sipariş, müşteri, referans no..." />
-          <div className="w-36"><Label>Durum</Label>
-            <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="">Tümü</option>
-              {PAYMENT_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-            </Select>
+          <SearchInput value={search} onChange={setSearch} placeholder={lang === "en" ? "Order, customer, reference..." : "Sipariş, müşteri, referans no..."} />
+          <div className="w-44"><Label>{t("status")}</Label>
+            <MultiSelect
+              values={statusFilter}
+              onChange={setStatusFilter}
+              options={PAYMENT_STATUSES.map((s) => ({ value: s.key, label: s.label }))}
+              placeholder={t("all")}
+            />
           </div>
-          <div className="w-44"><Label>Yöntem</Label>
-            <Select value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)}>
-              <option value="">Tümü</option>
-              {PAYMENT_METHODS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
-            </Select>
+          <div className="w-48"><Label>{lang === "en" ? "Method" : "Yöntem"}</Label>
+            <MultiSelect
+              values={methodFilter}
+              onChange={setMethodFilter}
+              options={PAYMENT_METHODS.map((m) => ({ value: m.key, label: m.label }))}
+              placeholder={t("all")}
+            />
           </div>
-          <div className="w-32"><Label>Tip</Label>
-            <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-              <option value="">Tümü</option>
-              {PAYMENT_PLAN_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-            </Select>
+          <div className="w-40"><Label>{lang === "en" ? "Type" : "Tip"}</Label>
+            <MultiSelect
+              values={typeFilter}
+              onChange={setTypeFilter}
+              options={PAYMENT_PLAN_TYPES.map((tp) => ({ value: tp.key, label: tp.label }))}
+              placeholder={t("all")}
+            />
           </div>
-          {(search || statusFilter || methodFilter || typeFilter) && <Btn variant="ghost" size="sm" icon={X} onClick={() => { setSearch(""); setStatusFilter(""); setMethodFilter(""); setTypeFilter(""); }}>Temizle</Btn>}
+          {(search || statusFilter.length > 0 || methodFilter.length > 0 || typeFilter.length > 0) && <Btn variant="ghost" size="sm" icon={X} onClick={() => { setSearch(""); setStatusFilter([]); setMethodFilter([]); setTypeFilter([]); }}>{t("clear")}</Btn>}
         </FilterBar>
 
         {payments.length === 0 ? (
@@ -6151,12 +6625,12 @@ function PaymentsByOrder({ filtered, orders, customers, bankAccounts, rates, can
 // NAKİT AKIŞI — beklenen tahsilatların zaman çizelgesi
 // ============================================================================
 
-function CashFlowView({ orders, customers, payments, rates, setView }) {
+function CashFlowView({ orders, customers, payments, rates, setView, t = (k) => k, lang = "tr" }) {
   const [period, setPeriod] = useState("90"); // gün
   const [groupBy, setGroupBy] = useState("day"); // day, week, month
-  const [statusFilter, setStatusFilter] = useState("all"); // all, pending, overdue
-  const [customerFilter, setCustomerFilter] = useState(""); // müşteri ID
-  const [orderSearch, setOrderSearch] = useState(""); // PO arama (sipariş no)
+  const [statusFilter, setStatusFilter] = useState(["all"]); // multi: pending/overdue/all
+  const [customerFilter, setCustomerFilter] = useState([]); // multi
+  const [orderSearch, setOrderSearch] = useState("");
 
   // Filtreli ödemeler
   const filteredPayments = useMemo(() => {
@@ -6164,16 +6638,15 @@ function CashFlowView({ orders, customers, payments, rates, setView }) {
     const today = todayISO();
     const endDate = addDays(today, days);
     const orderQ = orderSearch.toLowerCase().trim();
+    const allMode = statusFilter.includes("all") || statusFilter.length === 0;
     return payments.filter((p) => {
       if (p.status === "paid" || p.status === "cancelled") return false;
       if (!p.dueDate) return false;
-      if (statusFilter === "overdue" && p.status !== "overdue") return false;
-      if (statusFilter === "pending" && p.status !== "pending") return false;
-      // Müşteri ve PO filtresi
+      // Status filter: birden fazla seçili olabilir (pending, overdue)
+      if (!allMode && !statusFilter.includes(p.status)) return false;
       const order = orders.find((o) => o.id === p.orderId);
-      if (customerFilter && order?.customerId !== customerFilter) return false;
+      if (customerFilter.length > 0 && !customerFilter.includes(order?.customerId)) return false;
       if (orderQ && !order?.orderNumber?.toLowerCase().includes(orderQ)) return false;
-      // Gecikmişler her zaman gösterilsin (period dahilinde olmasa bile)
       if (p.status === "overdue") return true;
       return p.dueDate <= endDate;
     });
@@ -6283,9 +6756,12 @@ function CashFlowView({ orders, customers, payments, rates, setView }) {
       </tr>`).join("");
 
     const filters = [];
-    if (statusFilter !== "all") filters.push(statusFilter === "pending" ? "Sadece Bekleyen" : "Sadece Gecikmiş");
-    if (customerFilter) filters.push(`Müşteri: ${customers.find((c) => c.id === customerFilter)?.name}`);
-    if (orderSearch) filters.push(`Sipariş: "${orderSearch}"`);
+    if (statusFilter.length > 0 && !statusFilter.includes("all")) {
+      const labels = statusFilter.map((s) => s === "pending" ? t("onlyPending") : s === "overdue" ? t("onlyOverdue") : s);
+      filters.push(labels.join(", "));
+    }
+    if (customerFilter.length > 0) filters.push(`${t("customer")}: ${customerFilter.map((id) => customers.find((c) => c.id === id)?.name || id).join(", ")}`);
+    if (orderSearch) filters.push(`${t("orderNumber")}: "${orderSearch}"`);
 
     const content = `
       <div class="kpi-grid">
@@ -6339,7 +6815,7 @@ function CashFlowView({ orders, customers, payments, rates, setView }) {
 
   return (
     <div>
-      <PageHeader title="Nakit Akışı" subtitle="Yaklaşan tahsilatların net tarih listesi · Gecikmişler her zaman gösterilir">
+      <PageHeader title={t("cashflow")} subtitle={t("cashflowSubtitle")}>
         <Select value={groupBy} onChange={(e) => setGroupBy(e.target.value)} className="w-32">
           <option value="day">Gün bazlı</option>
           <option value="week">Hafta bazlı</option>
@@ -6358,54 +6834,73 @@ function CashFlowView({ orders, customers, payments, rates, setView }) {
       <div className="p-8 space-y-4">
         {/* Üst KPI'lar */}
         <div className="grid grid-cols-4 gap-4">
-          <KPICard icon={Clock} label="7 Gün İçinde" value={fmtMoney(stats.next7, "USD", { compact: true })} sub="yaklaşan tahsilat" accent={TOKENS.terracotta} />
-          <KPICard icon={Calendar} label="30 Gün İçinde" value={fmtMoney(stats.next30, "USD", { compact: true })} sub="yaklaşan tahsilat" accent={TOKENS.gold} />
-          <KPICard icon={TrendingUp} label={`Toplam (${period} gün)`} value={fmtMoney(stats.totalExpected, "USD", { compact: true })} sub="bekleyen tahsilat" accent={TOKENS.navy} />
-          <KPICard icon={AlertTriangle} label="Gecikmiş" value={fmtMoney(stats.totalOverdue, "USD", { compact: true })} sub="acil takip" accent={TOKENS.oxblood} />
+          <KPICard icon={Clock} label={lang === "en" ? "Within 7 Days" : "7 Gün İçinde"} value={fmtMoney(stats.next7, "USD", { compact: true })} sub={t("upcoming").toLowerCase()} accent={TOKENS.terracotta} />
+          <KPICard icon={Calendar} label={lang === "en" ? "Within 30 Days" : "30 Gün İçinde"} value={fmtMoney(stats.next30, "USD", { compact: true })} sub={t("upcoming").toLowerCase()} accent={TOKENS.gold} />
+          <KPICard icon={TrendingUp} label={`${t("nextMonth")} (${period} ${t("days")})`} value={fmtMoney(stats.totalExpected, "USD", { compact: true })} sub={t("pending").toLowerCase()} accent={TOKENS.navy} />
+          <KPICard icon={AlertTriangle} label={t("overdue")} value={fmtMoney(stats.totalOverdue, "USD", { compact: true })} sub={lang === "en" ? "urgent" : "acil takip"} accent={TOKENS.oxblood} />
         </div>
 
         {/* Filtreler */}
         <FilterBar>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-bold" style={{ color: TOKENS.muted }}>GÖSTER:</span>
+            <span className="text-xs font-bold" style={{ color: TOKENS.muted }}>{t("showing").toUpperCase()}:</span>
             {[
-              { key: "all", label: "Tümü" },
-              { key: "overdue", label: "Sadece Gecikmiş" },
-              { key: "pending", label: "Sadece Bekleyen" },
-            ].map((f) => (
-              <button
-                key={f.key}
-                onClick={() => setStatusFilter(f.key)}
-                className="px-3 py-1.5 text-xs font-bold rounded-md transition"
-                style={{
-                  background: statusFilter === f.key ? TOKENS.navy : "white",
-                  color: statusFilter === f.key ? "white" : TOKENS.ink,
-                  border: `1px solid ${statusFilter === f.key ? TOKENS.navy : TOKENS.border}`,
-                }}
-              >
-                {f.label}
-              </button>
-            ))}
+              { key: "all", label: t("all") },
+              { key: "overdue", label: t("onlyOverdue") },
+              { key: "pending", label: t("onlyPending") },
+            ].map((f) => {
+              const isActive = f.key === "all"
+                ? (statusFilter.includes("all") || statusFilter.length === 0)
+                : (!statusFilter.includes("all") && statusFilter.includes(f.key));
+              return (
+                <button
+                  key={f.key}
+                  onClick={() => {
+                    if (f.key === "all") setStatusFilter(["all"]);
+                    else {
+                      // Toggle: pending/overdue çoklu seçim
+                      const cleaned = statusFilter.filter((x) => x !== "all");
+                      if (cleaned.includes(f.key)) {
+                        const next = cleaned.filter((x) => x !== f.key);
+                        setStatusFilter(next.length === 0 ? ["all"] : next);
+                      } else {
+                        setStatusFilter([...cleaned, f.key]);
+                      }
+                    }
+                  }}
+                  className="px-3 py-1.5 text-xs font-bold rounded-md transition"
+                  style={{
+                    background: isActive ? TOKENS.navy : "white",
+                    color: isActive ? "white" : TOKENS.ink,
+                    border: `1px solid ${isActive ? TOKENS.navy : TOKENS.border}`,
+                  }}
+                >
+                  {f.label}
+                </button>
+              );
+            })}
             <div className="h-6 w-px mx-1" style={{ background: TOKENS.border }} />
-            <Select value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} className="text-xs" style={{ minWidth: "180px" }}>
-              <option value="">Tüm Müşteriler</option>
-              {customers.map((c) => <option key={c.id} value={c.id}>{c.code} — {c.name}</option>)}
-            </Select>
+            <div style={{ minWidth: "220px" }}>
+              <MultiSelect
+                values={customerFilter}
+                onChange={setCustomerFilter}
+                options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.code }))}
+                placeholder={t("allCustomers")}
+              />
+            </div>
             <div className="relative">
               <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: TOKENS.muted }} />
               <input
                 type="text"
                 value={orderSearch}
                 onChange={(e) => setOrderSearch(e.target.value)}
-                placeholder="Sipariş no ara..."
+                placeholder={t("searchOrderNo")}
                 className="pl-7 pr-3 py-1.5 text-xs rounded-md font-semibold focus:outline-none"
                 style={{ border: `1px solid ${TOKENS.border}`, background: "white", width: "160px" }}
               />
             </div>
-            {(customerFilter || orderSearch) && (
-              <button onClick={() => { setCustomerFilter(""); setOrderSearch(""); }} className="text-[11px] font-bold underline" style={{ color: TOKENS.copper, background: "transparent", border: "none", cursor: "pointer" }}>
-                Filtreleri Temizle
-              </button>
+            {(customerFilter.length > 0 || orderSearch || (statusFilter.length > 0 && !statusFilter.includes("all"))) && (
+              <Btn variant="ghost" size="sm" icon={X} onClick={() => { setCustomerFilter([]); setOrderSearch(""); setStatusFilter(["all"]); }}>{t("clear")}</Btn>
             )}
           </div>
         </FilterBar>
@@ -6536,12 +7031,12 @@ function CashFlowView({ orders, customers, payments, rates, setView }) {
 // RAPORLAR
 // ============================================================================
 
-function ReportsView({ orders = [], customers = [], products = [], payments = [], rates = {} }) {
+function ReportsView({ orders = [], customers = [], products = [], payments = [], rates = {}, t = (k) => k, lang = "tr" }) {
   const [tab, setTab] = useState("summary");
 
   return (
     <div>
-      <PageHeader title="Raporlar" subtitle="Tarih aralığı seçilebilir özet · Sevkiyat cirosu · Müşteri, ürün, ülke, yöntem analizleri" />
+      <PageHeader title={t("reports")} subtitle={t("reportsSubtitle")} />
 
       <div className="p-8 space-y-4">
         <div className="flex gap-1 rounded-lg p-1" style={{ background: TOKENS.cream, border: `1px solid ${TOKENS.border}` }}>
@@ -7233,7 +7728,7 @@ function StatusReport({ orders = [], rates = {} }) {
 // AYARLAR — kur, demo, yedek, Supabase
 // ============================================================================
 
-function SettingsView({ customers, setCustomers, products, setProducts, bankAccounts, setBankAccounts, orders, setOrders, payments, setPayments, rates, setRates, users, setUsers, currentUser, isAdmin, canEdit, setView, showToast }) {
+function SettingsView({ customers, setCustomers, products, setProducts, bankAccounts, setBankAccounts, orders, setOrders, payments, setPayments, rates, setRates, users, setUsers, currentUser, isAdmin, canEdit, setView, showToast, t = (k) => k, lang = "tr", setLang }) {
   const fileRef = useRef(null);
 
   // Demo veriler — tüm modüller dolu görünsün
@@ -7398,7 +7893,7 @@ function SettingsView({ customers, setCustomers, products, setProducts, bankAcco
 
   return (
     <div>
-      <PageHeader title="Ayarlar" subtitle="Kurlar, demo veri, yedekleme ve paylaşımlı veritabanı" />
+      <PageHeader title={t("settings")} subtitle="Kurlar, demo veri, yedekleme ve paylaşımlı veritabanı" />
 
       <div className="p-8 space-y-4 max-w-4xl">
         {/* Hızlı eylemler */}

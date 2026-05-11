@@ -989,8 +989,12 @@ function printPDF({ title, subtitle, contentHtml, orientation = "portrait", lang
   .kpi { padding: 8px 10px; background: #F8F5EE; border: 1px solid #ddd; border-left: 3px solid #C9A961; border-radius: 3px; }
   .kpi .kpi-label { font-size: 9px; color: #7A736A; text-transform: uppercase; font-weight: 700; }
   .kpi .kpi-value { font-size: 14px; font-weight: 700; color: #0F1A2E; margin-top: 2px; }
-  .print-btn { position: fixed; top: 10px; right: 10px; padding: 10px 18px; background: #1E3A5F; color: white; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 100; }
-  .print-btn:hover { background: #0F1A2E; }
+  .print-btn { padding: 10px 18px; color: white; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+  .btn-print { background: #1E3A5F; }
+  .btn-print:hover { background: #0F1A2E; }
+  .btn-download { background: #C9A961; color: #0F1A2E; }
+  .btn-download:hover { background: #A88947; }
+  .toolbar { position: fixed; top: 10px; right: 10px; display: flex; gap: 8px; z-index: 100; }
   @media print {
     .no-print { display: none !important; }
     body { padding: 0; }
@@ -1001,7 +1005,28 @@ function printPDF({ title, subtitle, contentHtml, orientation = "portrait", lang
 </style>
 </head>
 <body>
-  <button class="print-btn no-print" onclick="window.print()">${t("pdfPrintBtn")}</button>
+  <div class="toolbar no-print">
+    <button class="print-btn btn-print" onclick="window.print()">🖨️ ${activeLang === "en" ? "Print" : "Yazdır"}</button>
+    <button class="print-btn btn-download" onclick="downloadAsHTML()">⬇️ ${activeLang === "en" ? "Download" : "İndir"}</button>
+  </div>
+  <script>
+    function downloadAsHTML() {
+      // Sayfanın HTML içeriğini dosya olarak indir
+      const filename = ${JSON.stringify(title.replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_\- ]/g, "_") + "_" + new Date().toISOString().slice(0,10))};
+      const printBtn = document.querySelector('.toolbar');
+      if (printBtn) printBtn.style.display = 'none';
+      const blob = new Blob(['<!DOCTYPE html>' + document.documentElement.outerHTML], { type: 'text/html;charset=utf-8' });
+      if (printBtn) printBtn.style.display = '';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename + '.html';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+  </script>
   <div class="doc-header">
     <div class="left">
       <h1>${title}</h1>
@@ -1476,7 +1501,7 @@ function Modal({ open, onClose, title, subtitle, children, size = "md", footer }
 }
 
 // Tablo — sıralama, satır tıklama, eylem sütunu
-function DataTable({ columns, rows, keyField = "id", onRowClick, emptyText = "Kayıt yok", emptyHint, actions, defaultSort, rowStyle }) {
+function DataTable({ columns, rows, keyField = "id", onRowClick, emptyText = "Kayıt yok", emptyHint, actions, defaultSort, rowStyle, onSortedChange }) {
   const [sort, setSort] = useState(defaultSort || { key: null, dir: "asc" });
 
   const sorted = useMemo(() => {
@@ -1494,6 +1519,11 @@ function DataTable({ columns, rows, keyField = "id", onRowClick, emptyText = "Ka
         : String(bv).localeCompare(String(av), "tr");
     });
   }, [rows, sort, columns]);
+
+  // Sıralama değiştiğinde parent'a haber ver (PDF için)
+  useEffect(() => {
+    if (onSortedChange) onSortedChange(sorted);
+  }, [sorted, onSortedChange]);
 
   const toggleSort = (key) => {
     setSort((s) => {
@@ -1597,9 +1627,11 @@ function FilterBar({ children }) {
 // values: array of string (seçili değerler)
 // onChange: (newArray) => void
 // options: [{ value, label, sub? }]
-function MultiSelect({ values = [], onChange, options = [], placeholder = "Tümü", className = "", maxLabels = 2 }) {
+function MultiSelect({ values = [], onChange, options = [], placeholder = "Tümü", className = "", maxLabels = 2, searchable = true }) {
   const [open, setOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
   const ref = useRef(null);
+  const searchInputRef = useRef(null);
 
   useEffect(() => {
     if (!open) return;
@@ -1610,6 +1642,14 @@ function MultiSelect({ values = [], onChange, options = [], placeholder = "Tüm�
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  // Açıldığında arama input'una focus
+  useEffect(() => {
+    if (open && searchable && searchInputRef.current) {
+      setTimeout(() => searchInputRef.current?.focus(), 50);
+    }
+    if (!open) setSearchText(""); // kapanınca aramayı temizle
+  }, [open, searchable]);
+
   const toggle = (v) => {
     if (values.includes(v)) {
       onChange(values.filter((x) => x !== v));
@@ -1619,6 +1659,14 @@ function MultiSelect({ values = [], onChange, options = [], placeholder = "Tüm�
   };
 
   const clearAll = (e) => { e.stopPropagation(); onChange([]); };
+
+  // Filtreli seçenekler
+  const q = searchText.toLowerCase().trim();
+  const filteredOptions = !q ? options : options.filter((o) =>
+    String(o.label || "").toLowerCase().includes(q) ||
+    String(o.sub || "").toLowerCase().includes(q) ||
+    String(o.value || "").toLowerCase().includes(q)
+  );
 
   // Görünen etiket
   let displayLabel;
@@ -1664,11 +1712,31 @@ function MultiSelect({ values = [], onChange, options = [], placeholder = "Tüm�
         </div>
       </button>
       {open && (
-        <div className="absolute z-20 mt-1 max-h-64 overflow-auto rounded-md shadow-lg" style={{ background: "white", border: `1px solid ${TOKENS.border}`, minWidth: "100%" }}>
-          {options.length === 0 ? (
-            <div className="px-3 py-2 text-xs" style={{ color: TOKENS.muted }}>Seçenek yok</div>
+        <div className="absolute z-20 mt-1 max-h-72 overflow-hidden rounded-md shadow-lg flex flex-col" style={{ background: "white", border: `1px solid ${TOKENS.border}`, minWidth: "100%" }}>
+          {/* Arama input */}
+          {searchable && options.length > 5 && (
+            <div className="p-2 border-b" style={{ borderColor: TOKENS.border, background: TOKENS.cream + "60" }}>
+              <div className="relative">
+                <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2" style={{ color: TOKENS.muted }} />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  placeholder="Ara..."
+                  className="w-full pl-7 pr-2 py-1.5 text-xs rounded font-semibold focus:outline-none"
+                  style={{ border: `1px solid ${TOKENS.border}`, background: "white" }}
+                />
+              </div>
+            </div>
+          )}
+          <div className="overflow-auto" style={{ maxHeight: "240px" }}>
+          {filteredOptions.length === 0 ? (
+            <div className="px-3 py-2 text-xs" style={{ color: TOKENS.muted }}>
+              {q ? `"${q}" ile eşleşen yok` : "Seçenek yok"}
+            </div>
           ) : (
-            options.map((opt) => {
+            filteredOptions.map((opt) => {
               const checked = values.includes(opt.value);
               return (
                 <div
@@ -1690,6 +1758,7 @@ function MultiSelect({ values = [], onChange, options = [], placeholder = "Tüm�
               );
             })
           )}
+          </div>
         </div>
       )}
     </div>
@@ -3217,15 +3286,16 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
       </Modal>
 
       {/* Detay görünüm */}
-      <CustomerDetailModal customer={viewing} onClose={() => setViewing(null)} orders={orders} payments={payments} bankAccounts={bankAccounts} rates={rates} setView={setView} setPendingOrderToOpen={setPendingOrderToOpen} t={t} lang={lang} />
+      <CustomerDetailModal customer={viewing} customers={customers} onClose={() => setViewing(null)} orders={orders} payments={payments} bankAccounts={bankAccounts} rates={rates} setView={setView} setPendingOrderToOpen={setPendingOrderToOpen} canEdit={canEdit} t={t} lang={lang} />
     </div>
   );
 }
 
-function CustomerDetailModal({ customer, onClose, orders, payments, bankAccounts, rates, setView, setPendingOrderToOpen, t = (k) => k, lang = "tr" }) {
+function CustomerDetailModal({ customer, customers, onClose, orders, payments, bankAccounts, rates, setView, setPendingOrderToOpen, canEdit, t = (k) => k, lang = "tr" }) {
   if (!customer) return null;
   const custOrders = orders.filter((o) => o.customerId === customer.id).sort((a, b) => (b.orderDate || "").localeCompare(a.orderDate || ""));
   const custPayments = payments.filter((p) => custOrders.some((o) => o.id === p.orderId));
+  const [nestedOrder, setNestedOrder] = useState(null);
 
   // Hesap ekstresi yazdır — yeni pencere aç, HTML render et, kullanıcı PDF'e kaydetsin
   const printStatement = () => {
@@ -3317,11 +3387,33 @@ function CustomerDetailModal({ customer, onClose, orders, payments, bankAccounts
   .summary-card { background: #F8F5EE; border: 1px solid #C9A961; padding: 12px 16px; border-radius: 4px; margin: 8px 0 16px; }
   .footer { margin-top: 24px; padding-top: 12px; border-top: 1px solid #ccc; font-size: 9px; color: #7A736A; text-align: center; }
   @media print { .no-print { display: none; } body { padding: 0; } }
-  .print-btn { position: fixed; top: 10px; right: 10px; padding: 10px 20px; background: #1E3A5F; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; }
+  .print-btn { padding: 10px 18px; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 12px; }
+  .btn-print { background: #1E3A5F; }
+  .btn-print:hover { background: #0F1A2E; }
+  .btn-download { background: #C9A961; color: #0F1A2E; }
+  .btn-download:hover { background: #A88947; }
+  .toolbar { position: fixed; top: 10px; right: 10px; display: flex; gap: 8px; z-index: 100; }
 </style>
 </head>
 <body>
-  <button class="print-btn no-print" onclick="window.print()">🖨️ Yazdır / PDF Kaydet</button>
+  <div class="toolbar no-print">
+    <button class="print-btn btn-print" onclick="window.print()">🖨️ ${lang === "en" ? "Print" : "Yazdır"}</button>
+    <button class="print-btn btn-download" onclick="downloadHTML()">⬇️ ${lang === "en" ? "Download" : "İndir"}</button>
+  </div>
+  <script>
+    function downloadHTML() {
+      const filename = ${JSON.stringify("HesapEkstresi_" + (customer.name || "musteri").replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ]/g, "_") + "_" + new Date().toISOString().slice(0,10))};
+      const tb = document.querySelector('.toolbar');
+      if (tb) tb.style.display = 'none';
+      const blob = new Blob(['<!DOCTYPE html>' + document.documentElement.outerHTML], { type: 'text/html;charset=utf-8' });
+      if (tb) tb.style.display = '';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename + '.html';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+  </script>
   <div class="header">
     <div>
       <h1>HESAP EKSTRESİ</h1>
@@ -3538,14 +3630,12 @@ function CustomerDetailModal({ customer, onClose, orders, payments, bankAccounts
                   return (
                     <tr key={o.id} className="cursor-pointer transition" style={{ borderTop: `1px solid ${TOKENS.border}` }}
                       onClick={() => {
-                        // Müşteri modal'ını kapat → Siparişler sayfasına git → bu siparişi aç
-                        if (setPendingOrderToOpen) setPendingOrderToOpen(o.id);
-                        if (setView) setView("orders");
-                        onClose();
+                        // Müşteri modal'ını kapatmadan sipariş detayını üstte aç
+                        setNestedOrder(o);
                       }}
                       onMouseEnter={(e) => (e.currentTarget.style.background = TOKENS.cream)}
                       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                      title="Siparişler sayfasında detay aç"
+                      title="Sipariş detayını görüntüle"
                     >
                       <td className="px-3 py-2 font-mono font-bold" style={{ color: TOKENS.navy }}>{o.orderNumber}</td>
                       <td className="px-3 py-2">{fmtDate(o.orderDate)}</td>
@@ -3567,6 +3657,22 @@ function CustomerDetailModal({ customer, onClose, orders, payments, bankAccounts
           </div>
         )}
       </div>
+
+      {/* MÜŞTERİ DETAYINDAN AÇILAN SİPARİŞ DETAYI (NESTED) */}
+      {nestedOrder && (
+        <OrderDetailModal
+          order={nestedOrder}
+          onClose={() => setNestedOrder(null)}
+          customers={customers || [customer]}
+          payments={payments}
+          bankAccounts={bankAccounts}
+          rates={rates}
+          setView={setView}
+          canEdit={canEdit}
+          t={t}
+          lang={lang}
+        />
+      )}
     </Modal>
   );
 }
@@ -3609,6 +3715,7 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
   const [curFilter, setCurFilter] = useState("");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [sortedFiltered, setSortedFiltered] = useState(null);
 
   // Her ürüne kullanım istatistiği ekle (kaç siparişte yer aldı, toplam adet)
   const enriched = useMemo(() => products.map((p) => {
@@ -3726,7 +3833,7 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
   const printList = () => {
     if (!filtered.length) return showToast(lang === "en" ? "No products to print" : "Yazdırılacak ürün yok", "error");
 
-    const list = filtered;
+    const list = sortedFiltered && sortedFiltered.length === filtered.length ? sortedFiltered : filtered;
 
     const rows = list.map((p) => `
       <tr>
@@ -3803,7 +3910,9 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
         {products.length === 0 ? (
           <Card><EmptyState icon={Package} title="Ürün kataloğu boş" hint="Sattığın ürünleri ürün kodu, mamul kodu ve TR/EN isimleriyle tanımla. Sipariş girerken bu listeden seçebileceksin." action={canEdit ? <Btn variant="primary" size="sm" icon={Plus} onClick={openNew}>İlk Ürünü Ekle</Btn> : null} /></Card>
         ) : (
-          <DataTable columns={columns} rows={filtered} emptyText="Eşleşen ürün yok" actions={canEdit ? (r) => (
+          <DataTable columns={columns} rows={filtered} emptyText="Eşleşen ürün yok"
+            onSortedChange={setSortedFiltered}
+            actions={canEdit ? (r) => (
             <div className="flex items-center justify-end gap-1">
               <button onClick={() => openEdit(r)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.cream; e.currentTarget.style.color = TOKENS.navy; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Pencil size={14} /></button>
               <button onClick={() => remove(r.id)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Trash2 size={14} /></button>
@@ -4018,7 +4127,8 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
-  const [viewMode, setViewMode] = useState("list");
+  const [viewMode, setViewMode] = useState("calendar");
+  const [sortedFiltered, setSortedFiltered] = useState(null); // DataTable'dan sıralı liste
 
   // Müşteri sayfasından "siparişi aç" yönlendirmesi geldiyse, otomatik aç
   useEffect(() => {
@@ -4166,9 +4276,10 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
 
   // Filtreli sipariş listesini PDF olarak yazdır
   const printList = () => {
-    if (!filtered.length) return showToast("Yazdırılacak sipariş yok", "error");
+    const dataToUse = sortedFiltered && sortedFiltered.length === filtered.length ? sortedFiltered : filtered;
+    if (!dataToUse.length) return showToast("Yazdırılacak sipariş yok", "error");
 
-    const rows = filtered.map((o) => {
+    const rows = dataToUse.map((o) => {
       const c = customers.find((x) => x.id === o.customerId);
       const t = orderTotal(o);
       const paid = orderPaidAmount(o, payments);
@@ -4332,7 +4443,73 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
                 <div style="font-size:9px;color:#7A736A">${st?.label || o.status}</div>
               </div>
             </div>
-            ${(o.items || []).length > 0 ? `
+            ${(o.shipments || []).length > 0 ? `
+              <div style="padding:6px 8px;background:white">
+                ${o.shipments.map((sh) => {
+                  const shItems = (o.items || [])
+                    .map((it) => {
+                      const dist = it.shipmentDistribution || (it.shipmentNo ? { [it.shipmentNo]: Math.floor(Number(it.quantity) || 0) } : { 1: Math.floor(Number(it.quantity) || 0) });
+                      const qty = Math.floor(Number(dist[sh.no]) || 0);
+                      return qty > 0 ? { ...it, _q: qty } : null;
+                    })
+                    .filter(Boolean);
+                  const shTotal = shItems.reduce((s, it) => s + (it._q * (Number(it.unitPrice) || 0)) * (1 - (Number(it.discount) || 0) / 100), 0);
+                  const isSh = !!sh.actualShipmentDate;
+                  const shItemRows = shItems.map((it) => {
+                    const disc = Number(it.discount) || 0;
+                    const lt = (it._q * (Number(it.unitPrice) || 0)) * (1 - disc / 100);
+                    return `<tr>
+                      <td class="text-mono" style="font-size:9px;font-weight:700;color:#1E3A5F;padding:3px 6px">${htmlEscape(it.productCode)}</td>
+                      <td style="font-size:9px;padding:3px 6px"><strong>${htmlEscape(it.nameTr || "—")}</strong></td>
+                      <td class="right text-mono" style="font-size:9px;padding:3px 6px">${fmtNum(it._q)} ${it.unit || ""}</td>
+                      <td class="right text-mono" style="font-size:9px;padding:3px 6px">${fmtMoneyPDF(it.unitPrice, o.currency)}</td>
+                      <td class="right text-mono" style="font-size:9px;font-weight:700;padding:3px 6px">${fmtMoneyPDF(lt, o.currency)}</td>
+                    </tr>`;
+                  }).join("");
+                  return `
+                    <div style="margin:6px 0;border:1px solid #E8E2D6;border-radius:4px;overflow:hidden;${isSh ? 'background:#3E7D5A08' : ''}">
+                      <div style="padding:5px 8px;background:${isSh ? '#3E7D5A12' : '#F8F5EE'};display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:10px">
+                        <div>
+                          <strong style="color:#1E3A5F">🚛 ${htmlEscape(sh.name)}</strong>
+                          <span style="font-size:8px;padding:1px 5px;border-radius:2px;margin-left:4px;background:${isSh ? '#3E7D5A20' : '#C9A96130'};color:${isSh ? '#3E7D5A' : '#A88947'};font-weight:700">${isSh ? (lang === "en" ? 'Shipped' : 'Sevk Edildi') : (lang === "en" ? 'Pending' : 'Bekliyor')}</span>
+                          <span style="font-size:9px;color:#7A736A;margin-left:6px">
+                            ${sh.shipmentDate ? `Plan: ${fmtDate(sh.shipmentDate)}` : ""}
+                            ${sh.actualShipmentDate ? ` · Fiili: ${fmtDate(sh.actualShipmentDate)}` : ""}
+                          </span>
+                        </div>
+                        <div style="text-align:right">
+                          <strong>${fmtMoneyPDF(shTotal, o.currency)}</strong>
+                          <span style="color:#7A736A;font-size:8px"> · ${shItems.length} ${lang === "en" ? "items" : "kalem"}</span>
+                        </div>
+                      </div>
+                      ${shItems.length > 0 ? `
+                        <table style="margin:0;border:none">
+                          <thead style="background:#F8F5EE60">
+                            <tr>
+                              <th style="font-size:8px;padding:3px 6px">${lang === "en" ? "Code" : "Kod"}</th>
+                              <th style="font-size:8px;padding:3px 6px">${lang === "en" ? "Product" : "Ürün"}</th>
+                              <th class="right" style="font-size:8px;padding:3px 6px">${lang === "en" ? "Qty (Ship)" : "Adet"}</th>
+                              <th class="right" style="font-size:8px;padding:3px 6px">${lang === "en" ? "Unit Price" : "B.Fiyat"}</th>
+                              <th class="right" style="font-size:8px;padding:3px 6px">${lang === "en" ? "Total" : "Toplam"}</th>
+                            </tr>
+                          </thead>
+                          <tbody>${shItemRows}</tbody>
+                        </table>
+                      ` : `<div style="padding:5px;text-align:center;color:#7A736A;font-style:italic;font-size:9px">${lang === "en" ? "No items in this shipment" : "Bu sevkiyatta kalem yok"}</div>`}
+                    </div>
+                  `;
+                }).join("")}
+                ${totals.discount > 0 || totals.vatRate > 0 || (o.additionalCosts || []).length > 0 ? `
+                  <table style="margin:6px 0 0;border:none;font-size:10px">
+                    <tfoot>${totalsRows}</tfoot>
+                  </table>
+                ` : `
+                  <div style="padding:5px 8px;text-align:right;background:#C9A96115;border-radius:4px;margin-top:4px">
+                    <strong style="font-size:10px;text-transform:uppercase;letter-spacing:0.04em">${lang === "en" ? "Grand Total" : "Genel Toplam"}: ${fmtMoneyPDF(totals.total, o.currency)}</strong>
+                  </div>
+                `}
+              </div>
+            ` : (o.items || []).length > 0 ? `
               <table style="margin:0;border:none;font-size:10px">
                 <thead style="background:#F8F5EE">
                   <tr>
@@ -4642,6 +4819,7 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
                 rowStyle={(r) => r.actualShipmentDate
                   ? { background: "#3E7D5A14", hoverBackground: "#3E7D5A22" }
                   : null}
+                onSortedChange={setSortedFiltered}
                 actions={(r) => (
                 <div className="flex items-center justify-end gap-1">
                   <button onClick={() => setViewing(r)} className="p-1.5 rounded transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.cream; e.currentTarget.style.color = TOKENS.navy; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}><Eye size={14} /></button>
@@ -6455,6 +6633,138 @@ function OrderItemsSection({ editing, setEditing, products, itemsTotal, addItem,
 // SİPARİŞ DETAY GÖRÜNÜMÜ
 // ============================================================================
 
+// Sevkiyat accordion bileşeni — sevkiyata bas, içindeki kalemleri aç/kapat
+function ShipmentsAccordion({ order }) {
+  const [openShipments, setOpenShipments] = useState(() => {
+    // Varsayılan: tüm sevkiyatlar açık
+    const obj = {};
+    (order.shipments || []).forEach((sh) => { obj[sh.id] = true; });
+    return obj;
+  });
+
+  const toggle = (id) => setOpenShipments((s) => ({ ...s, [id]: !s[id] }));
+  const allOpen = (order.shipments || []).every((sh) => openShipments[sh.id]);
+  const toggleAll = () => {
+    const obj = {};
+    (order.shipments || []).forEach((sh) => { obj[sh.id] = !allOpen; });
+    setOpenShipments(obj);
+  };
+
+  return (
+    <Card
+      title={`Sevkiyatlar (${order.shipments.length})`}
+      subtitle="Tıklayarak sevkiyat içindeki kalemleri aç/kapat · Ödeme planı tüm sipariş için ortak takip edilir"
+      noPadding
+      actions={
+        <button onClick={toggleAll} className="text-[11px] font-bold px-2 py-1 rounded transition" style={{ color: TOKENS.ink, background: TOKENS.cream, border: `1px solid ${TOKENS.border}` }}>
+          {allOpen ? "Tümünü Kapat" : "Tümünü Aç"}
+        </button>
+      }
+    >
+      <div className="divide-y" style={{ borderColor: TOKENS.border }}>
+        {order.shipments.map((sh, idx) => {
+          // Kalem dağılımı: shipmentDistribution[sh.no] veya shipmentNo eşitliği (geriye uyumlu)
+          const shipItems = (order.items || [])
+            .map((it) => {
+              const dist = it.shipmentDistribution
+                || (it.shipmentNo ? { [it.shipmentNo]: Math.floor(Number(it.quantity) || 0) } : { 1: Math.floor(Number(it.quantity) || 0) });
+              const qty = Math.floor(Number(dist[sh.no]) || 0);
+              return qty > 0 ? { ...it, _shipmentQty: qty } : null;
+            })
+            .filter(Boolean);
+          const shipTotal = shipItems.reduce((s, it) => s + (it._shipmentQty * (Number(it.unitPrice) || 0)) * (1 - (Number(it.discount) || 0) / 100), 0);
+          const isShipped = !!sh.actualShipmentDate;
+          const isOpen = openShipments[sh.id];
+          return (
+            <div key={sh.id} style={{ background: isShipped ? "#3E7D5A0A" : "white", borderTop: idx > 0 ? `1px solid ${TOKENS.border}` : "none" }}>
+              {/* SEVKİYAT BAŞLIĞI — tıklanabilir */}
+              <div
+                onClick={() => toggle(sh.id)}
+                className="px-4 py-3 flex items-start gap-3 cursor-pointer transition"
+                onMouseEnter={(e) => (e.currentTarget.style.background = isShipped ? "#3E7D5A15" : TOKENS.cream + "60")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = isShipped ? "#3E7D5A0A" : "white")}
+              >
+                <div className="flex-shrink-0">
+                  {isOpen ? <ChevronDown size={16} style={{ color: TOKENS.gold }} /> : <ChevronRight size={16} style={{ color: TOKENS.muted }} />}
+                </div>
+                <div className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: (isShipped ? TOKENS.forest : TOKENS.gold) + "20" }}>
+                  <Truck size={16} style={{ color: isShipped ? TOKENS.forest : TOKENS.goldDark }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-bold" style={{ color: TOKENS.ink }}>{sh.name}</span>
+                    <Badge color={isShipped ? "forest" : "gold"}>{isShipped ? "Sevk Edildi" : "Bekliyor"}</Badge>
+                    <span className="text-[10px] font-bold" style={{ color: TOKENS.muted }}>{shipItems.length} kalem</span>
+                  </div>
+                  <div className="flex items-center gap-4 mt-1 text-[11px]" style={{ color: TOKENS.muted }}>
+                    {sh.shipmentDate && <span><strong>Plan:</strong> {fmtDate(sh.shipmentDate)} · W{getISOWeek(sh.shipmentDate)}</span>}
+                    {sh.actualShipmentDate && <span style={{ color: TOKENS.forest, fontWeight: 700 }}>Fiili: {fmtDate(sh.actualShipmentDate)} · W{getISOWeek(sh.actualShipmentDate)}</span>}
+                  </div>
+                  {sh.notes && <div className="text-[11px] italic mt-1" style={{ color: TOKENS.muted }}>"{sh.notes}"</div>}
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <div className="text-sm font-bold tabular-nums">{fmtMoney(shipTotal, order.currency)}</div>
+                  <div className="text-[10px]" style={{ color: TOKENS.muted }}>{shipItems.length === 0 ? "kalem yok" : `${shipItems.length} kalem`}</div>
+                </div>
+              </div>
+
+              {/* SEVKİYAT KALEMLERİ — açıkken görünür */}
+              {isOpen && shipItems.length > 0 && (
+                <div style={{ background: TOKENS.cream + "60", borderTop: `1px solid ${TOKENS.border}` }}>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr style={{ background: TOKENS.cream }}>
+                        <th className="px-3 py-1.5 text-left text-[10px] uppercase tracking-wider font-bold" style={{ color: TOKENS.muted }}>Ürün</th>
+                        <th className="px-3 py-1.5 text-left text-[10px] uppercase tracking-wider font-bold" style={{ color: TOKENS.muted }}>İsim</th>
+                        <th className="px-3 py-1.5 text-right text-[10px] uppercase tracking-wider font-bold" style={{ color: TOKENS.muted }}>Adet (Bu Sevk)</th>
+                        <th className="px-3 py-1.5 text-right text-[10px] uppercase tracking-wider font-bold" style={{ color: TOKENS.muted }}>Birim Fiyat</th>
+                        <th className="px-3 py-1.5 text-right text-[10px] uppercase tracking-wider font-bold" style={{ color: TOKENS.muted }}>Toplam</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {shipItems.map((it) => {
+                        const lineDisc = Number(it.discount) || 0;
+                        const lineTotal = (it._shipmentQty * (Number(it.unitPrice) || 0)) * (1 - lineDisc / 100);
+                        const totalQty = Math.floor(Number(it.quantity) || 0);
+                        return (
+                          <tr key={it.id} style={{ borderTop: `1px solid ${TOKENS.border}30` }}>
+                            <td className="px-3 py-1.5 font-mono font-bold text-[11px]" style={{ color: TOKENS.navy }}>{it.productCode}</td>
+                            <td className="px-3 py-1.5 text-[11px]">
+                              <div className="font-bold">{it.nameTr || "—"}</div>
+                              {it.nameEn && <div className="text-[10px] italic" style={{ color: TOKENS.muted }}>{it.nameEn}</div>}
+                            </td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-[11px] font-bold">
+                              {fmtNum(it._shipmentQty)} {it.unit || ""}
+                              {it._shipmentQty < totalQty && (
+                                <div className="text-[9px] font-normal" style={{ color: TOKENS.copper }}>toplam {fmtNum(totalQty)} {it.unit || ""}</div>
+                              )}
+                            </td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-[11px]">{fmtMoney(it.unitPrice, order.currency)}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-[11px] font-bold">{fmtMoney(lineTotal, order.currency)}</td>
+                          </tr>
+                        );
+                      })}
+                      <tr style={{ background: TOKENS.gold + "15", borderTop: `2px solid ${TOKENS.gold}` }}>
+                        <td colSpan="4" className="px-3 py-1.5 text-right text-[11px] font-bold uppercase tracking-wider" style={{ color: TOKENS.ink }}>Sevkiyat Toplamı</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums font-bold text-xs">{fmtMoney(shipTotal, order.currency)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {isOpen && shipItems.length === 0 && (
+                <div className="text-center py-3 text-xs italic" style={{ color: TOKENS.muted, background: TOKENS.cream + "60", borderTop: `1px solid ${TOKENS.border}` }}>
+                  Bu sevkiyatta kalem yok
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, rates, setView, onEdit, canEdit, t = (k) => k, lang = "tr" }) {
   if (!order) return null;
   const customer = customers.find((c) => c.id === order.customerId);
@@ -6556,7 +6866,73 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
         ${order.portOfDischarge ? `<div><div class="label">Boşaltma Limanı</div><div>${htmlEscape(order.portOfDischarge)}</div></div>` : ""}
       </div>
 
-      <h2>Sipariş Kalemleri (${(order.items || []).length})</h2>
+      ${(order.shipments || []).length > 0 ? `
+      <h2>Sevkiyatlar (${order.shipments.length})</h2>
+      ${order.shipments.map((sh) => {
+        const shipItems = (order.items || [])
+          .map((it) => {
+            const dist = it.shipmentDistribution || (it.shipmentNo ? { [it.shipmentNo]: Math.floor(Number(it.quantity) || 0) } : { 1: Math.floor(Number(it.quantity) || 0) });
+            const qty = Math.floor(Number(dist[sh.no]) || 0);
+            return qty > 0 ? { ...it, _shipmentQty: qty } : null;
+          })
+          .filter(Boolean);
+        const shipTotal = shipItems.reduce((s, it) => s + (it._shipmentQty * (Number(it.unitPrice) || 0)) * (1 - (Number(it.discount) || 0) / 100), 0);
+        const isShipped = !!sh.actualShipmentDate;
+        const shipItemRows = shipItems.map((it, idx) => {
+          const price = Number(it.unitPrice) || 0;
+          const disc = Number(it.discount) || 0;
+          const lineTotal = (it._shipmentQty * price) * (1 - disc / 100);
+          return `
+            <tr>
+              <td class="center">${idx + 1}</td>
+              <td><div class="text-mono">${htmlEscape(it.productCode || "—")}</div></td>
+              <td><div style="font-weight:700">${htmlEscape(it.nameTr || "—")}</div>${it.nameEn ? `<div style="font-style:italic;font-size:9px;color:#7A736A">${htmlEscape(it.nameEn)}</div>` : ""}</td>
+              <td class="right text-mono">${fmtNum(it._shipmentQty)} ${htmlEscape(it.unit || "")}</td>
+              <td class="right text-mono">${fmtMoneyPDF(price, order.currency)}</td>
+              <td class="right text-mono">${disc > 0 ? `%${disc}` : "—"}</td>
+              <td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(lineTotal, order.currency)}</td>
+            </tr>`;
+        }).join("");
+        return `
+          <div style="margin-bottom:14px;page-break-inside:avoid;border:1px solid #E8E2D6;border-radius:6px;overflow:hidden;${isShipped ? 'background:#3E7D5A0A' : ''}">
+            <div style="padding:8px 12px;background:${isShipped ? '#3E7D5A15' : '#F8F5EE'};border-bottom:1px solid #E8E2D6;display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <strong style="font-size:12px;color:#1E3A5F">🚛 ${htmlEscape(sh.name)}</strong>
+                <span style="font-size:9px;padding:2px 6px;border-radius:3px;margin-left:6px;background:${isShipped ? '#3E7D5A20' : '#C9A96130'};color:${isShipped ? '#3E7D5A' : '#A88947'};font-weight:700">${isShipped ? 'Sevk Edildi' : 'Bekliyor'}</span>
+                <div style="font-size:9px;color:#7A736A;margin-top:2px">
+                  ${sh.shipmentDate ? `Plan: ${fmtDate(sh.shipmentDate)} · W${getISOWeek(sh.shipmentDate)}` : ""}
+                  ${sh.actualShipmentDate ? ` · <span style="color:#3E7D5A;font-weight:700">Fiili: ${fmtDate(sh.actualShipmentDate)}</span>` : ""}
+                </div>
+                ${sh.notes ? `<div style="font-size:9px;font-style:italic;color:#7A736A;margin-top:2px">"${htmlEscape(sh.notes)}"</div>` : ""}
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:12px;font-weight:700">${fmtMoneyPDF(shipTotal, order.currency)}</div>
+                <div style="font-size:9px;color:#7A736A">${shipItems.length} kalem</div>
+              </div>
+            </div>
+            ${shipItems.length > 0 ? `
+              <table style="margin:0;border:none">
+                <thead style="background:#F8F5EE">
+                  <tr>
+                    <th class="center" style="width:24px;font-size:9px">#</th>
+                    <th style="width:90px;font-size:9px">Ürün Kodu</th>
+                    <th style="font-size:9px">İsim</th>
+                    <th class="right" style="width:90px;font-size:9px">Adet</th>
+                    <th class="right" style="width:80px;font-size:9px">Birim Fiyat</th>
+                    <th class="right" style="width:50px;font-size:9px">İsk %</th>
+                    <th class="right" style="width:90px;font-size:9px">Tutar</th>
+                  </tr>
+                </thead>
+                <tbody>${shipItemRows}</tbody>
+              </table>
+            ` : `<div style="padding:10px;text-align:center;color:#7A736A;font-style:italic;font-size:10px">Bu sevkiyatta kalem yok</div>`}
+          </div>
+        `;
+      }).join("")}
+      ` : ""}
+
+      <h2>${(order.shipments || []).length > 0 ? "Genel Sipariş Toplamı" : "Sipariş Kalemleri (" + (order.items || []).length + ")"}</h2>
+      ${(order.shipments || []).length > 0 ? "" : `
       <table>
         <thead>
           <tr>
@@ -6570,6 +6946,9 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
           </tr>
         </thead>
         <tbody>${itemRows || `<tr><td colspan="7" style="text-align:center;color:#7A736A;padding:12px">Kalem yok</td></tr>`}</tbody>
+      </table>
+      `}
+      <table style="margin-top:${(order.shipments || []).length > 0 ? "0" : "4px"}">
         <tfoot>
           ${totals.discount > 0 || totals.vatRate > 0 || (order.additionalCosts || []).length > 0 ? `<tr><td colspan="6" class="right" style="font-weight:700;color:#7A736A">Ara Toplam</td><td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(totals.subtotal, order.currency)}</td></tr>` : ""}
           ${totals.discount > 0 ? `<tr><td colspan="6" class="right text-warning">Sipariş İskontosu (${order.discountType === "percentage" ? "%" + order.discountValue : "tutar"})</td><td class="right text-mono text-warning">− ${fmtMoneyPDF(totals.discount, order.currency)}</td></tr>` : ""}
@@ -6689,40 +7068,9 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
           </div>
         </Card>
 
-        {/* SEVKİYATLAR — birden fazla varsa göster */}
+        {/* SEVKİYATLAR — birden fazla varsa göster, tıklanınca kalemleri açılır */}
         {(order.shipments || []).length > 0 && (
-          <Card title={`Sevkiyatlar (${order.shipments.length})`} subtitle="Bu sipariş birden fazla parti hâlinde sevk ediliyor — ödeme planı ortak takip edilir" noPadding>
-            <div className="divide-y" style={{ borderColor: TOKENS.border }}>
-              {order.shipments.map((sh, idx) => {
-                const shipItems = (order.items || []).filter((it) => (it.shipmentNo || 1) === sh.no);
-                const shipTotal = shipItems.reduce((s, it) => s + ((Number(it.quantity) || 0) * (Number(it.unitPrice) || 0)) * (1 - (Number(it.discount) || 0) / 100), 0);
-                const isShipped = !!sh.actualShipmentDate;
-                return (
-                  <div key={sh.id} className="px-4 py-3 flex items-start gap-3" style={{ background: isShipped ? "#3E7D5A0A" : "white", borderTop: idx > 0 ? `1px solid ${TOKENS.border}` : "none" }}>
-                    <div className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: (isShipped ? TOKENS.forest : TOKENS.gold) + "20" }}>
-                      <Truck size={16} style={{ color: isShipped ? TOKENS.forest : TOKENS.goldDark }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-bold" style={{ color: TOKENS.ink }}>{sh.name}</span>
-                        <Badge color={isShipped ? "forest" : "gold"}>{isShipped ? "Sevk Edildi" : "Bekliyor"}</Badge>
-                        <span className="text-[10px] font-bold" style={{ color: TOKENS.muted }}>{shipItems.length} kalem</span>
-                      </div>
-                      <div className="flex items-center gap-4 mt-1 text-[11px]" style={{ color: TOKENS.muted }}>
-                        {sh.shipmentDate && <span><strong>Plan:</strong> {fmtDate(sh.shipmentDate)} · W{getISOWeek(sh.shipmentDate)}</span>}
-                        {sh.actualShipmentDate && <span style={{ color: TOKENS.forest, fontWeight: 700 }}>Fiili: {fmtDate(sh.actualShipmentDate)} · W{getISOWeek(sh.actualShipmentDate)}</span>}
-                      </div>
-                      {sh.notes && <div className="text-[11px] italic mt-1" style={{ color: TOKENS.muted }}>"{sh.notes}"</div>}
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <div className="text-sm font-bold tabular-nums">{fmtMoney(shipTotal, order.currency)}</div>
-                      <div className="text-[10px]" style={{ color: TOKENS.muted }}>{shipItems.length === 0 ? "kalem yok" : `${shipItems.length} kalem`}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
+          <ShipmentsAccordion order={order} />
         )}
 
         <Card title={`Kalemler (${order.items?.length || 0})`} noPadding>
@@ -7128,6 +7476,115 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
     exportToExcel(rows, `odemeler_${todayISO()}.xlsx`, "Ödemeler");
   };
 
+  // Sipariş bazlı PDF — ödemeler sipariş başlığı altında gruplanır
+  const printByOrder = () => {
+    if (!filtered.length) return showToast(lang === "en" ? "No payments to print" : "Yazdırılacak ödeme yok", "error");
+
+    // Sipariş bazlı grupla
+    const groups = {};
+    filtered.forEach((p) => {
+      const orderId = p.order?.id || "_no_order";
+      if (!groups[orderId]) {
+        groups[orderId] = { order: p.order, customer: p.customer, payments: [] };
+      }
+      groups[orderId].payments.push(p);
+    });
+    const groupList = Object.values(groups).sort((a, b) => {
+      return (b.order?.orderDate || "").localeCompare(a.order?.orderDate || "");
+    });
+
+    const orderBlocks = groupList.map((g) => {
+      const order = g.order;
+      const customer = g.customer;
+      const groupPayments = g.payments.sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""));
+      const totalAmount = order ? orderTotal(order) : groupPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      const paid = groupPayments.filter((p) => p.status === "paid").reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      const pending = groupPayments.filter((p) => p.status === "pending").reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      const overdue = groupPayments.filter((p) => p.status === "overdue").reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      const cur = groupPayments[0]?.currency || order?.currency || "USD";
+
+      const paymentRows = groupPayments.map((p) => {
+        const tp = PAYMENT_PLAN_TYPES.find((x) => x.key === p.type);
+        const meth = PAYMENT_METHODS.find((m) => m.key === p.method);
+        const st = PAYMENT_STATUSES.find((s) => s.key === p.status);
+        const stColor = p.status === "paid" ? "#3E7D5A" : p.status === "overdue" ? "#A6383D" : p.status === "partial" ? "#C9A961" : "#7A736A";
+        return `
+          <tr>
+            <td>${tp?.label || p.type}</td>
+            <td>${p.dueDate ? fmtDate(p.dueDate) : "—"}</td>
+            <td>${p.paidDate ? fmtDate(p.paidDate) : "—"}</td>
+            <td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(p.amount, p.currency)}</td>
+            <td>${meth?.label || p.method || "—"}</td>
+            <td style="color:${stColor};font-weight:700">${st?.label || p.status}</td>
+            <td style="font-size:9px;color:#7A736A">${htmlEscape(p.referenceNumber || "")}</td>
+          </tr>`;
+      }).join("");
+
+      return `
+        <div style="margin-bottom:14px;page-break-inside:avoid;border:1px solid #E8E2D6;border-radius:6px;overflow:hidden">
+          <div style="padding:8px 12px;background:#F8F5EE;border-bottom:1px solid #E8E2D6;display:flex;justify-content:space-between;align-items:center;gap:12px">
+            <div style="flex:1">
+              <strong style="font-family:'Courier New',monospace;color:#1E3A5F;font-size:11px">${htmlEscape(order?.orderNumber || (lang === "en" ? "(no order)" : "(sipariş yok)"))}</strong>
+              <span style="margin-left:10px;font-size:11px;font-weight:700">${htmlEscape(customer?.name || "—")}</span>
+              ${customer?.country ? `<span style="margin-left:8px;font-size:9px;color:#7A736A">📍 ${htmlEscape(customer.country)}</span>` : ""}
+              ${order?.orderDate ? `<div style="font-size:9px;color:#7A736A;margin-top:2px">${lang === "en" ? "Order Date" : "Sipariş Tarihi"}: ${fmtDate(order.orderDate)}</div>` : ""}
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:11px;font-weight:700">${fmtMoneyPDF(totalAmount, cur)}</div>
+              <div style="font-size:9px;color:#3E7D5A">✓ ${fmtMoneyPDF(paid, cur)}</div>
+              ${pending > 0 ? `<div style="font-size:9px;color:#7A736A">${lang === "en" ? "Pending" : "Bekleyen"}: ${fmtMoneyPDF(pending, cur)}</div>` : ""}
+              ${overdue > 0 ? `<div style="font-size:9px;color:#A6383D;font-weight:700">${lang === "en" ? "Overdue" : "Gecikmiş"}: ${fmtMoneyPDF(overdue, cur)}</div>` : ""}
+            </div>
+          </div>
+          <table style="margin:0;border:none;font-size:10px">
+            <thead style="background:#F8F5EE">
+              <tr>
+                <th style="font-size:9px;padding:5px 8px">${lang === "en" ? "Type" : "Tip"}</th>
+                <th style="font-size:9px;padding:5px 8px">${lang === "en" ? "Due Date" : "Vade"}</th>
+                <th style="font-size:9px;padding:5px 8px">${lang === "en" ? "Paid Date" : "Tahsil"}</th>
+                <th class="right" style="font-size:9px;padding:5px 8px">${lang === "en" ? "Amount" : "Tutar"}</th>
+                <th style="font-size:9px;padding:5px 8px">${lang === "en" ? "Method" : "Yöntem"}</th>
+                <th style="font-size:9px;padding:5px 8px">${lang === "en" ? "Status" : "Durum"}</th>
+                <th style="font-size:9px;padding:5px 8px">${lang === "en" ? "Reference" : "Referans"}</th>
+              </tr>
+            </thead>
+            <tbody>${paymentRows}</tbody>
+          </table>
+        </div>
+      `;
+    }).join("");
+
+    // Filtre özeti
+    const filters = [];
+    if (search) filters.push(`${lang === "en" ? "Search" : "Arama"}: "${search}"`);
+    if (statusFilter.length > 0) filters.push(`${t("status")}: ${statusFilter.map((s) => PAYMENT_STATUSES.find((x) => x.key === s)?.label || s).join(", ")}`);
+    if (customerFilter.length > 0) filters.push(`${t("customer")}: ${customerFilter.map((id) => customers.find((c) => c.id === id)?.name || id).join(", ")}`);
+    if (orderFilter.length > 0) filters.push(`${t("orderNumber")}: ${orderFilter.map((id) => orders.find((o) => o.id === id)?.orderNumber || id).join(", ")}`);
+
+    const totalPaid = filtered.filter((p) => p.status === "paid").reduce((s, p) => s + toUSD(Number(p.amount) || 0, p.currency, rates), 0);
+    const totalPending = filtered.filter((p) => p.status === "pending").reduce((s, p) => s + toUSD(Number(p.amount) || 0, p.currency, rates), 0);
+    const totalOverdue = filtered.filter((p) => p.status === "overdue").reduce((s, p) => s + toUSD(Number(p.amount) || 0, p.currency, rates), 0);
+
+    const content = `
+      ${filters.length ? `<div style="font-size:10px;padding:6px 10px;background:#FFF8E7;border-left:3px solid #C9A961;margin-bottom:10px"><strong>${lang === "en" ? "Filters" : "Filtreler"}:</strong> ${filters.join(" · ")}</div>` : ""}
+      <div class="kpi-grid">
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Orders" : "Sipariş"}</div><div class="kpi-value">${groupList.length}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Payment Records" : "Ödeme Kaydı"}</div><div class="kpi-value">${filtered.length}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Paid (USD)" : "Tahsil (USD)"}</div><div class="kpi-value" style="color:#3E7D5A">$${totalPaid.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Pending+Overdue (USD)" : "Açık (USD)"}</div><div class="kpi-value" style="color:#B87333">$${(totalPending + totalOverdue).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
+      </div>
+      ${orderBlocks}
+    `;
+
+    printPDF({
+      title: lang === "en" ? "Payments by Order" : "Ödemeler · Sipariş Bazlı",
+      subtitle: `${groupList.length} ${lang === "en" ? "orders" : "sipariş"} · ${filtered.length} ${lang === "en" ? "payments" : "ödeme"}${filters.length ? (lang === "en" ? " · filtered" : " · filtreli") : ""}`,
+      contentHtml: content,
+      orientation: "portrait",
+      lang,
+    });
+  };
+
   return (
     <div>
       <PageHeader title={t("payments")} subtitle={`${payments.length} ${t("paymentsSubtitle")}`}>
@@ -7155,7 +7612,8 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
             Liste
           </button>
         </div>
-        <Btn variant="ghost" size="sm" icon={FileDown} onClick={printList}>PDF</Btn>
+        <Btn variant="ghost" size="sm" icon={FileDown} onClick={printList}>PDF {lang === "en" ? "List" : "Liste"}</Btn>
+        <Btn variant="ghost" size="sm" icon={FileDown} onClick={printByOrder}>PDF {lang === "en" ? "By Order" : "Sipariş Bazlı"}</Btn>
         <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>{t("export")}</Btn>
       </PageHeader>
 

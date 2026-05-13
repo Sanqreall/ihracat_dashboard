@@ -1797,6 +1797,104 @@ function DateRange({ from, to, onChange }) {
   );
 }
 
+// Ay seçici — birden fazla ay seçilebilir, tek tıkla ekler/çıkarır
+// values: array of "YYYY-MM" string'leri
+// onChange: (newArray) => void
+function MonthPicker({ values = [], onChange, monthsBack = 12, monthsForward = 6, lang = "tr" }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  // Şu andan geriye ve ileriye ayları üret
+  const months = useMemo(() => {
+    const arr = [];
+    const now = new Date();
+    for (let i = -monthsBack; i <= monthsForward; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const label = d.toLocaleDateString(lang === "en" ? "en-US" : "tr-TR", { month: "short", year: "2-digit" });
+      arr.push({ key, label, isCurrent: i === 0 });
+    }
+    return arr.reverse(); // En yeni başta
+  }, [monthsBack, monthsForward, lang]);
+
+  const toggle = (key) => {
+    if (values.includes(key)) onChange(values.filter((x) => x !== key));
+    else onChange([...values, key]);
+  };
+  const clear = (e) => { e.stopPropagation(); onChange([]); };
+
+  const displayLabel = values.length === 0
+    ? (lang === "en" ? "Select month..." : "Ay seç...")
+    : values.length === 1
+    ? months.find((m) => m.key === values[0])?.label || values[0]
+    : `${values.length} ${lang === "en" ? "months" : "ay"}`;
+
+  return (
+    <div ref={ref} className="relative" style={{ minWidth: "150px" }}>
+      <Label>{lang === "en" ? "Month" : "Ay"}</Label>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full px-3 py-2 text-xs font-bold rounded-md text-left flex items-center justify-between gap-2 transition"
+        style={{
+          background: "white",
+          border: `1px solid ${values.length > 0 ? TOKENS.gold : TOKENS.border}`,
+          color: values.length > 0 ? TOKENS.ink : TOKENS.muted,
+          minHeight: "36px",
+        }}
+      >
+        <span className="flex items-center gap-1.5">
+          <Calendar size={12} />
+          {displayLabel}
+        </span>
+        <div className="flex items-center gap-1">
+          {values.length > 0 && (
+            <span role="button" onClick={clear} className="p-0.5 rounded transition" style={{ color: TOKENS.muted, cursor: "pointer" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}>
+              <X size={12} />
+            </span>
+          )}
+          <ChevronDown size={12} style={{ color: TOKENS.muted, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+        </div>
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 rounded-md shadow-lg p-2" style={{ background: "white", border: `1px solid ${TOKENS.border}`, minWidth: "220px" }}>
+          <div className="grid grid-cols-3 gap-1 max-h-64 overflow-auto">
+            {months.map((m) => {
+              const sel = values.includes(m.key);
+              return (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => toggle(m.key)}
+                  className="px-2 py-1.5 text-[11px] font-bold rounded transition"
+                  style={{
+                    background: sel ? TOKENS.gold : (m.isCurrent ? TOKENS.cream : "white"),
+                    color: sel ? TOKENS.ink : TOKENS.ink,
+                    border: `1px solid ${sel ? TOKENS.gold : TOKENS.border}`,
+                  }}
+                  onMouseEnter={(e) => { if (!sel) e.currentTarget.style.background = TOKENS.cream; }}
+                  onMouseLeave={(e) => { if (!sel) e.currentTarget.style.background = m.isCurrent ? TOKENS.cream : "white"; }}
+                >
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Boş durum — anlamlı mesaj + eyleme yönlendirme
 function EmptyState({ icon: Icon = Sparkles, title, hint, action }) {
   return (
@@ -2564,6 +2662,18 @@ function KPIDetailModal({ kind, onClose, orders, customers, payments, rates, set
       color: TOKENS.oxblood,
       icon: AlertTriangle,
     },
+    next7: {
+      title: lang === "en" ? "Payments within 7 Days" : "7 Gün İçindeki Tahsilatlar",
+      subtitle: lang === "en" ? "Upcoming receivables (pending + overdue)" : "Yaklaşan alacaklar",
+      color: TOKENS.terracotta,
+      icon: Clock,
+    },
+    next30: {
+      title: lang === "en" ? "Payments within 30 Days" : "30 Gün İçindeki Tahsilatlar",
+      subtitle: lang === "en" ? "Upcoming receivables" : "Yaklaşan alacaklar",
+      color: TOKENS.gold,
+      icon: Calendar,
+    },
   };
   const cfg = config[kind];
 
@@ -2594,8 +2704,21 @@ function KPIDetailModal({ kind, onClose, orders, customers, payments, rates, set
       );
     });
   } else {
-    const filtered = payments.filter((p) => p.status === kind);
-    const sorted = [...filtered].sort((a, b) => (b.dueDate || "").localeCompare(a.dueDate || ""));
+    let filtered;
+    if (kind === "next7" || kind === "next30") {
+      const days = kind === "next7" ? 7 : 30;
+      const today = todayISO();
+      const endDate = addDays(today, days);
+      filtered = payments.filter((p) => {
+        if (p.status === "paid" || p.status === "cancelled") return false;
+        if (!p.dueDate) return false;
+        if (p.status === "overdue") return true; // Gecikmişler her zaman dahil
+        return p.dueDate <= endDate;
+      });
+    } else {
+      filtered = payments.filter((p) => p.status === kind);
+    }
+    const sorted = [...filtered].sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""));
     total = sorted.reduce((s, p) => s + toUSD(Number(p.amount) || 0, p.currency, rates), 0);
     rows = sorted.map((p) => {
       const order = orders.find((o) => o.id === p.orderId);
@@ -3333,7 +3456,10 @@ function CustomerDetailModal({ customer, customers, onClose, orders, payments, b
 
     // Sipariş listesi
     const orderRows = custOrders.map((o) => {
-      const t = orderTotal(o);
+      const totals = calcOrderTotals(o);
+      const t = totals.total;
+      const exVat = totals.subtotal - totals.discount + (totals.additionalCosts || 0);
+      const vatTotal = totals.vatAmount + (totals.additionalCostsVat || 0);
       const paid = orderPaidAmount(o, payments);
       const remaining = t - paid;
       const st = ORDER_STATUSES.find((s) => s.key === o.status);
@@ -3343,7 +3469,9 @@ function CustomerDetailModal({ customer, customers, onClose, orders, payments, b
           <td style="padding:6px 8px;border:1px solid #ccc">${fmtDate(o.orderDate)}</td>
           <td style="padding:6px 8px;border:1px solid #ccc">${o.actualShipmentDate ? fmtDate(o.actualShipmentDate) : (o.shipmentDate ? fmtDate(o.shipmentDate) + " (plan)" : "—")}</td>
           <td style="padding:6px 8px;border:1px solid #ccc">${st?.label || o.status}</td>
-          <td style="padding:6px 8px;border:1px solid #ccc;text-align:right">${o.currency} ${t.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="padding:6px 8px;border:1px solid #ccc;text-align:right">${o.currency} ${exVat.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="padding:6px 8px;border:1px solid #ccc;text-align:right;color:#7A736A">${vatTotal > 0 ? o.currency + " " + vatTotal.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}</td>
+          <td style="padding:6px 8px;border:1px solid #ccc;text-align:right;font-weight:bold">${o.currency} ${t.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
           <td style="padding:6px 8px;border:1px solid #ccc;text-align:right;color:#3E7D5A">${o.currency} ${paid.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
           <td style="padding:6px 8px;border:1px solid #ccc;text-align:right;color:${remaining > 0.01 ? "#B87333" : "#3E7D5A"};font-weight:bold">${o.currency} ${remaining.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
         </tr>`;
@@ -3497,7 +3625,9 @@ function CustomerDetailModal({ customer, customers, onClose, orders, payments, b
         <th>Tarih</th>
         <th>Sevk</th>
         <th>Durum</th>
-        <th style="text-align:right">Tutar</th>
+        <th style="text-align:right">KDV Hariç</th>
+        <th style="text-align:right">KDV</th>
+        <th style="text-align:right">KDV Dahil Toplam</th>
         <th style="text-align:right">Tahsil</th>
         <th style="text-align:right">Kalan</th>
       </tr>
@@ -4129,6 +4259,7 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
   const [viewing, setViewing] = useState(null);
   const [viewMode, setViewMode] = useState("calendar");
   const [sortedFiltered, setSortedFiltered] = useState(null); // DataTable'dan sıralı liste
+  const [monthFilter, setMonthFilter] = useState([]); // Ay-bazlı filtre (YYYY-MM array)
 
   // Müşteri sayfasından "siparişi aç" yönlendirmesi geldiyse, otomatik aç
   useEffect(() => {
@@ -4145,15 +4276,22 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
       if (statusFilter.length > 0 && !statusFilter.includes(o.status)) return false;
       if (customerFilter.length > 0 && !customerFilter.includes(o.customerId)) return false;
       if (curFilter.length > 0 && !curFilter.includes(o.currency)) return false;
-      if (dateRange.from && (o.orderDate || "") < dateRange.from) return false;
-      if (dateRange.to && (o.orderDate || "") > dateRange.to) return false;
+      // Tarih filtresi: fiili sevk varsa o, yoksa planlanan sevk, o da yoksa sipariş tarihi
+      const refDate = o.actualShipmentDate || o.shipmentDate || o.orderDate || "";
+      if (dateRange.from && refDate < dateRange.from) return false;
+      if (dateRange.to && refDate > dateRange.to) return false;
+      // Ay filtresi: refDate'in ay-bölümü seçili aylarda mı?
+      if (monthFilter.length > 0) {
+        const monthKey = refDate.slice(0, 7);
+        if (!monthFilter.includes(monthKey)) return false;
+      }
       if (!q) return true;
       const customer = customers.find((c) => c.id === o.customerId);
       const itemsText = (o.items || []).map((i) => `${i.productCode} ${i.nameTr} ${i.nameEn}`).join(" ");
       return [o.orderNumber, customer?.name, customer?.country, o.notes, o.invoiceNumber, o.billOfLading, itemsText]
         .filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
     });
-  }, [orders, customers, search, statusFilter, customerFilter, curFilter, dateRange]);
+  }, [orders, customers, search, statusFilter, customerFilter, curFilter, dateRange, monthFilter]);
 
   // Yeni sipariş otomatik numaralandırma: SP-YIL-XXXX
   const nextOrderNumber = () => {
@@ -4803,11 +4941,74 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
                   placeholder={t("all")}
                 />
               </div>
+              <MonthPicker values={monthFilter} onChange={setMonthFilter} lang={lang} />
               <DateRange from={dateRange.from} to={dateRange.to} onChange={setDateRange} />
-              {(search || statusFilter.length > 0 || customerFilter.length > 0 || curFilter.length > 0 || dateRange.from || dateRange.to) && (
-                <Btn variant="ghost" size="sm" icon={X} onClick={() => { setSearch(""); setStatusFilter([]); setCustomerFilter([]); setCurFilter([]); setDateRange({ from: "", to: "" }); }}>{t("clear")}</Btn>
+              {(search || statusFilter.length > 0 || customerFilter.length > 0 || curFilter.length > 0 || dateRange.from || dateRange.to || monthFilter.length > 0) && (
+                <Btn variant="ghost" size="sm" icon={X} onClick={() => { setSearch(""); setStatusFilter([]); setCustomerFilter([]); setCurFilter([]); setDateRange({ from: "", to: "" }); setMonthFilter([]); }}>{t("clear")}</Btn>
               )}
             </FilterBar>
+
+            {/* ALT TOPLAM KARTI — filtreye göre alt toplam */}
+            {filtered.length > 0 && (() => {
+              // Her sipariş için totals hesapla
+              let subtotal = 0, vatAmount = 0, addCostsExVat = 0, addCostsVat = 0, grandTotal = 0;
+              const byCurrency = {};
+              filtered.forEach((o) => {
+                const t = calcOrderTotals(o);
+                subtotal += toUSD(t.subtotal - t.discount, o.currency, rates);
+                vatAmount += toUSD(t.vatAmount, o.currency, rates);
+                addCostsExVat += toUSD(t.additionalCosts || 0, o.currency, rates);
+                addCostsVat += toUSD(t.additionalCostsVat || 0, o.currency, rates);
+                grandTotal += toUSD(t.total, o.currency, rates);
+                if (!byCurrency[o.currency]) byCurrency[o.currency] = { exVat: 0, vat: 0, total: 0 };
+                byCurrency[o.currency].exVat += (t.subtotal - t.discount) + (t.additionalCosts || 0);
+                byCurrency[o.currency].vat += t.vatAmount + (t.additionalCostsVat || 0);
+                byCurrency[o.currency].total += t.total;
+              });
+              const exVatUSD = subtotal + addCostsExVat;
+              const vatTotalUSD = vatAmount + addCostsVat;
+              const isFiltered = search || statusFilter.length || customerFilter.length || curFilter.length || dateRange.from || dateRange.to || monthFilter.length;
+
+              return (
+                <div className="rounded-lg p-4" style={{ background: "white", border: `1px solid ${TOKENS.border}` }}>
+                  <div className="flex items-center justify-between mb-3 pb-2" style={{ borderBottom: `1px solid ${TOKENS.border}` }}>
+                    <div className="text-[11px] uppercase tracking-widest font-bold" style={{ color: TOKENS.gold }}>
+                      {isFiltered ? (lang === "en" ? "Filtered Subtotal" : "Filtre Alt Toplamı") : (lang === "en" ? "All Orders Subtotal" : "Tüm Siparişler Toplamı")}
+                      <span className="ml-2 normal-case font-normal text-[10px]" style={{ color: TOKENS.muted }}>
+                        · {filtered.length} {lang === "en" ? "orders" : "sipariş"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="rounded-md p-3" style={{ background: TOKENS.cream }}>
+                      <div className="text-[9px] uppercase tracking-wider font-bold mb-1" style={{ color: TOKENS.muted }}>{lang === "en" ? "Subtotal (Ex-VAT)" : "Ara Toplam (KDV Hariç)"}</div>
+                      <div className="text-base font-bold tabular-nums" style={{ color: TOKENS.ink }}>{fmtMoney(exVatUSD, "USD", { compact: true })}</div>
+                      <div className="text-[10px]" style={{ color: TOKENS.muted }}>USD</div>
+                    </div>
+                    <div className="rounded-md p-3" style={{ background: "#C9A96115" }}>
+                      <div className="text-[9px] uppercase tracking-wider font-bold mb-1" style={{ color: TOKENS.copper }}>{lang === "en" ? "Total VAT" : "Toplam KDV"}</div>
+                      <div className="text-base font-bold tabular-nums" style={{ color: TOKENS.copper }}>{fmtMoney(vatTotalUSD, "USD", { compact: true })}</div>
+                      <div className="text-[10px]" style={{ color: TOKENS.muted }}>USD</div>
+                    </div>
+                    <div className="rounded-md p-3" style={{ background: "#3E7D5A15" }}>
+                      <div className="text-[9px] uppercase tracking-wider font-bold mb-1" style={{ color: TOKENS.forest }}>{lang === "en" ? "Grand Total (Inc-VAT)" : "Genel Toplam (KDV Dahil)"}</div>
+                      <div className="text-base font-bold tabular-nums" style={{ color: TOKENS.forest }}>{fmtMoney(grandTotal, "USD", { compact: true })}</div>
+                      <div className="text-[10px]" style={{ color: TOKENS.muted }}>USD</div>
+                    </div>
+                    <div className="rounded-md p-3" style={{ background: "#1E3A5F12" }}>
+                      <div className="text-[9px] uppercase tracking-wider font-bold mb-1" style={{ color: TOKENS.navy }}>{lang === "en" ? "By Currency" : "Para Birimi Bazlı"}</div>
+                      <div className="space-y-0.5">
+                        {Object.entries(byCurrency).map(([cur, v]) => (
+                          <div key={cur} className="text-[10px] font-bold tabular-nums" style={{ color: TOKENS.navy }}>
+                            <span style={{ color: TOKENS.muted, fontWeight: 600 }}>{cur}:</span> {fmtMoney(v.total, cur, { compact: true })}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {orders.length === 0 ? (
               <Card>
@@ -5014,8 +5215,34 @@ function OrdersCalendarView({ orders, customers, rates, payments, onView, onEdit
 
       {grouped.map(([monthKey, monthOrders]) => {
         const isMonthOpen = openMonths[monthKey] !== false; // varsayılan açık
-        const monthTotal = monthOrders.reduce((s, o) => s + orderTotalUSD(o, rates), 0);
-        const shippedCount = monthOrders.filter((o) => o.actualShipmentDate).length;
+        // Ay toplamı: KDV hariç ve KDV dahil olarak ayrı ayrı (sevkiyat bazlı)
+        let monthExVat = 0, monthVat = 0, monthTotalCalc = 0;
+        monthOrders.forEach((o) => {
+          const totals = calcOrderTotals(o);
+          if (o._shipment) {
+            const sh = o._shipment;
+            const shItems = (o.items || []).map((it) => {
+              const dist = it.shipmentDistribution
+                || (it.shipmentNo ? { [it.shipmentNo]: Math.floor(Number(it.quantity) || 0) } : { 1: Math.floor(Number(it.quantity) || 0) });
+              const qty = Math.floor(Number(dist[sh.no]) || 0);
+              return qty > 0 ? { ...it, _q: qty } : null;
+            }).filter(Boolean);
+            const shSub = shItems.reduce((sum, it) => sum + (it._q * (Number(it.unitPrice) || 0)) * (1 - (Number(it.discount) || 0) / 100), 0);
+            const shVatRate = Number(o.vatRate) || 0;
+            const shVat = shSub * shVatRate / 100;
+            monthExVat += toUSD(shSub, o.currency, rates);
+            monthVat += toUSD(shVat, o.currency, rates);
+            monthTotalCalc += toUSD(shSub + shVat, o.currency, rates);
+          } else {
+            const exVat = (totals.subtotal - totals.discount) + (totals.additionalCosts || 0);
+            const vatT = totals.vatAmount + (totals.additionalCostsVat || 0);
+            monthExVat += toUSD(exVat, o.currency, rates);
+            monthVat += toUSD(vatT, o.currency, rates);
+            monthTotalCalc += toUSD(totals.total, o.currency, rates);
+          }
+        });
+        const monthTotal = monthTotalCalc;
+        const shippedCount = monthOrders.filter((o) => (o._shipment ? o._shipment.actualShipmentDate : o.actualShipmentDate)).length;
         return (
           <div key={monthKey} className="rounded-lg overflow-hidden" style={{ background: "white", border: `1px solid ${TOKENS.border}` }}>
             {/* AY BAŞLIĞI */}
@@ -5038,8 +5265,15 @@ function OrdersCalendarView({ orders, customers, rates, payments, onView, onEdit
                   </span>
                 )}
               </div>
-              <div className="text-sm font-bold tabular-nums" style={{ color: TOKENS.gold }}>
-                ${monthTotal.toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              <div className="text-right">
+                <div className="text-sm font-bold tabular-nums" style={{ color: TOKENS.gold }}>
+                  ${monthTotal.toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </div>
+                {monthVat > 0 && (
+                  <div className="text-[10px] tabular-nums" style={{ color: "rgba(255,255,255,0.65)" }}>
+                    {lang === "en" ? "ex-VAT" : "KDV hariç"}: ${monthExVat.toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </div>
+                )}
               </div>
             </button>
 
@@ -5055,13 +5289,29 @@ function OrdersCalendarView({ orders, customers, rates, payments, onView, onEdit
                   const totals = calcOrderTotals(o);
                   const st = ORDER_STATUSES.find((s) => s.key === o.status);
                   const sh = o._shipment;
-                  // Sevkiyat varsa onu kullan, yoksa order seviyesini
                   const effectiveShipDate = sh ? sh.shipmentDate : o.shipmentDate;
                   const effectiveActualDate = sh ? sh.actualShipmentDate : o.actualShipmentDate;
                   const isShipped = !!effectiveActualDate;
-                  // Sevkiyatla ilgili kalemler
-                  const shipItems = sh ? (o.items || []).filter((it) => (it.shipmentNo || 1) === sh.no) : (o.items || []);
-                  const shipTotal = sh ? shipItems.reduce((s, it) => s + ((Number(it.quantity) || 0) * (Number(it.unitPrice) || 0)) * (1 - (Number(it.discount) || 0) / 100), 0) : t;
+                  // Sevkiyatla ilgili kalemler — adet bazlı dağılımı destekle
+                  const shipItems = sh
+                    ? (o.items || []).map((it) => {
+                        const dist = it.shipmentDistribution
+                          || (it.shipmentNo ? { [it.shipmentNo]: Math.floor(Number(it.quantity) || 0) } : { 1: Math.floor(Number(it.quantity) || 0) });
+                        const qty = Math.floor(Number(dist[sh.no]) || 0);
+                        return qty > 0 ? { ...it, _q: qty } : null;
+                      }).filter(Boolean)
+                    : (o.items || []);
+                  // Bu sevkiyatın alt toplamı (ex-VAT)
+                  const shipSubtotal = sh
+                    ? shipItems.reduce((s, it) => s + (it._q * (Number(it.unitPrice) || 0)) * (1 - (Number(it.discount) || 0) / 100), 0)
+                    : (totals.subtotal - totals.discount);
+                  // KDV hesabı: sevkiyatın oranı = order kdv oranı
+                  const shipVatRate = Number(o.vatRate) || 0;
+                  const shipVatAmount = shipSubtotal * shipVatRate / 100;
+                  const shipTotal = sh ? (shipSubtotal + shipVatAmount) : t;
+                  // USD karşılığı
+                  const shipTotalUSD = toUSD(shipSubtotal + shipVatAmount, o.currency, rates);
+                  const shipSubtotalUSD = toUSD(shipSubtotal, o.currency, rates);
                   return (
                     <div key={sh ? `${o.id}-${sh.id}` : o.id} style={{ borderTop: `1px solid ${TOKENS.border}` }}>
                       {/* SİPARİŞ / SEVKİYAT SATIRI */}
@@ -5087,8 +5337,16 @@ function OrdersCalendarView({ orders, customers, rates, payments, onView, onEdit
                             {effectiveActualDate && <span style={{ color: TOKENS.forest }}> · Fiili Sevk: W{getISOWeek(effectiveActualDate)}</span>}
                           </div>
                         </div>
-                        <div className="w-24 text-right">
+                        <div className="w-36 text-right">
                           <div className="text-xs font-bold tabular-nums">{fmtMoney(sh ? shipTotal : t, o.currency)}</div>
+                          <div className="text-[10px] tabular-nums" style={{ color: TOKENS.muted }}>
+                            ≈ {fmtMoney(shipTotalUSD, "USD", { compact: true })}
+                          </div>
+                          {shipVatRate > 0 && (
+                            <div className="text-[9px] tabular-nums" style={{ color: TOKENS.muted }}>
+                              {lang === "en" ? "ex-VAT" : "KDV hariç"}: {fmtMoney(shipSubtotal, o.currency, { compact: true })}
+                            </div>
+                          )}
                           {sh ? (
                             <div className="text-[10px] font-semibold" style={{ color: TOKENS.muted }}>{shipItems.length} kalem</div>
                           ) : (
@@ -7213,15 +7471,16 @@ function OrderDetailModal({ order, onClose, customers, payments, bankAccounts, r
 // ÖDEMELER — tahsilat takibi
 // ============================================================================
 
-function PaymentsView({ orders, setOrders, customers, payments, setPayments, bankAccounts, rates, canEdit, showToast, t = (k) => k, lang = "tr" }) {
+function PaymentsView({ orders, setOrders, customers, payments, setPayments, bankAccounts, rates, canEdit, showToast, setView, t = (k) => k, lang = "tr" }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState([]);
   const [methodFilter, setMethodFilter] = useState([]);
   const [typeFilter, setTypeFilter] = useState([]);
-  const [customerFilter, setCustomerFilter] = useState([]); // multi-select müşteri
-  const [orderFilter, setOrderFilter] = useState([]); // multi-select sipariş no
+  const [customerFilter, setCustomerFilter] = useState([]);
+  const [orderFilter, setOrderFilter] = useState([]);
   const [viewMode, setViewMode] = useState("by-order");
   const [marking, setMarking] = useState(null);
+  const [kpiDetail, setKpiDetail] = useState(null); // KPI tıklayınca detay modal
 
   const enriched = useMemo(() => payments.map((p) => {
     const order = orders.find((o) => o.id === p.orderId);
@@ -7619,9 +7878,12 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
 
       <div className="p-8 space-y-4">
         <div className="grid grid-cols-3 gap-4">
-          <KPICard icon={CheckCircle2} label={t("totalReceived")} value={fmtMoney(stats.paid, "USD", { compact: true })} sub={`${stats.paidCount} ${t("payments").toLowerCase()}`} accent={TOKENS.forest} />
-          <KPICard icon={Clock} label={t("pending")} value={fmtMoney(stats.pending, "USD", { compact: true })} sub={`${enriched.filter((p) => p.status === "pending").length}`} accent={TOKENS.gold} />
-          <KPICard icon={AlertTriangle} label={t("overdue")} value={fmtMoney(stats.overdue, "USD", { compact: true })} sub={`${enriched.filter((p) => p.status === "overdue").length}`} accent={TOKENS.oxblood} />
+          <KPICard icon={CheckCircle2} label={t("totalReceived")} value={fmtMoney(stats.paid, "USD", { compact: true })} sub={`${stats.paidCount} ${t("payments").toLowerCase()}`} accent={TOKENS.forest}
+            onClick={() => setKpiDetail("paid")} />
+          <KPICard icon={Clock} label={t("pending")} value={fmtMoney(stats.pending, "USD", { compact: true })} sub={`${enriched.filter((p) => p.status === "pending").length}`} accent={TOKENS.gold}
+            onClick={() => setKpiDetail("pending")} />
+          <KPICard icon={AlertTriangle} label={t("overdue")} value={fmtMoney(stats.overdue, "USD", { compact: true })} sub={`${enriched.filter((p) => p.status === "overdue").length}`} accent={TOKENS.oxblood}
+            onClick={() => setKpiDetail("overdue")} />
         </div>
 
         <FilterBar>
@@ -7779,6 +8041,19 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
           );
         })()}
       </Modal>
+
+      {/* KPI DETAY MODAL — Tahsil/Bekleyen/Gecikmiş kartlarına tıklayınca */}
+      <KPIDetailModal
+        kind={kpiDetail}
+        onClose={() => setKpiDetail(null)}
+        orders={orders}
+        customers={customers}
+        payments={payments}
+        rates={rates}
+        setView={setView}
+        t={t}
+        lang={lang}
+      />
     </div>
   );
 }
@@ -7916,9 +8191,10 @@ function PaymentsByOrder({ filtered, orders, customers, bankAccounts, rates, can
 function CashFlowView({ orders, customers, payments, rates, setView, t = (k) => k, lang = "tr" }) {
   const [period, setPeriod] = useState("90"); // gün
   const [groupBy, setGroupBy] = useState("day"); // day, week, month
-  const [statusFilter, setStatusFilter] = useState(["all"]); // multi: pending/overdue/all
-  const [customerFilter, setCustomerFilter] = useState([]); // multi
+  const [statusFilter, setStatusFilter] = useState(["all"]);
+  const [customerFilter, setCustomerFilter] = useState([]);
   const [orderSearch, setOrderSearch] = useState("");
+  const [kpiDetail, setKpiDetail] = useState(null);
 
   // Filtreli ödemeler
   const filteredPayments = useMemo(() => {
@@ -8005,6 +8281,40 @@ function CashFlowView({ orders, customers, payments, rates, setView, t = (k) => 
     });
     return Object.values(buckets).sort((a, b) => a.month.localeCompare(b.month));
   }, [filteredPayments, rates]);
+
+  // Nakit akışı Excel çıktısı
+  const handleExport = () => {
+    if (!filteredPayments.length) {
+      alert(lang === "en" ? "No payments to export." : "Aktarılacak ödeme yok.");
+      return;
+    }
+    const sorted = [...filteredPayments].sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""));
+    const rows = sorted.map((p) => {
+      const order = orders.find((o) => o.id === p.orderId);
+      const cust = customers.find((c) => c.id === order?.customerId);
+      const tp = PAYMENT_PLAN_TYPES.find((t) => t.key === p.type);
+      const meth = PAYMENT_METHODS.find((m) => m.key === p.method);
+      const st = PAYMENT_STATUSES.find((s) => s.key === p.status);
+      const usd = toUSD(Number(p.amount) || 0, p.currency, rates);
+      // Vadeye kalan gün
+      const daysToGo = p.dueDate ? Math.floor((new Date(p.dueDate) - new Date()) / 86400000) : null;
+      return {
+        "Vade Tarihi": p.dueDate || "",
+        "Vadeye Kalan (Gün)": daysToGo,
+        "Sipariş No": order?.orderNumber || "",
+        "Müşteri": cust?.name || "",
+        "Ülke": cust?.country || "",
+        "Tip": tp?.label || p.type,
+        "Tutar": Number(p.amount) || 0,
+        "Para Birimi": p.currency || "",
+        "USD Karşılığı": Number(usd.toFixed(2)),
+        "Yöntem": meth?.label || p.method || "",
+        "Durum": st?.label || p.status,
+        "Notlar": p.notes || "",
+      };
+    });
+    exportToExcel(rows, `nakit-akisi_${todayISO()}.xlsx`, lang === "en" ? "Cash Flow" : "Nakit Akışı");
+  };
 
   // Nakit akışı PDF
   const printList = () => {
@@ -8118,15 +8428,20 @@ function CashFlowView({ orders, customers, payments, rates, setView, t = (k) => 
           <option value="365">1 yıl</option>
         </Select>
         <Btn variant="ghost" size="sm" icon={FileDown} onClick={printList}>PDF</Btn>
+        <Btn variant="secondary" size="sm" icon={FileDown} onClick={handleExport}>{t("export")}</Btn>
       </PageHeader>
 
       <div className="p-8 space-y-4">
-        {/* Üst KPI'lar */}
+        {/* Üst KPI'lar — tıklanabilir */}
         <div className="grid grid-cols-4 gap-4">
-          <KPICard icon={Clock} label={lang === "en" ? "Within 7 Days" : "7 Gün İçinde"} value={fmtMoney(stats.next7, "USD", { compact: true })} sub={t("upcoming").toLowerCase()} accent={TOKENS.terracotta} />
-          <KPICard icon={Calendar} label={lang === "en" ? "Within 30 Days" : "30 Gün İçinde"} value={fmtMoney(stats.next30, "USD", { compact: true })} sub={t("upcoming").toLowerCase()} accent={TOKENS.gold} />
-          <KPICard icon={TrendingUp} label={`${t("nextMonth")} (${period} ${t("days")})`} value={fmtMoney(stats.totalExpected, "USD", { compact: true })} sub={t("pending").toLowerCase()} accent={TOKENS.navy} />
-          <KPICard icon={AlertTriangle} label={t("overdue")} value={fmtMoney(stats.totalOverdue, "USD", { compact: true })} sub={lang === "en" ? "urgent" : "acil takip"} accent={TOKENS.oxblood} />
+          <KPICard icon={Clock} label={lang === "en" ? "Within 7 Days" : "7 Gün İçinde"} value={fmtMoney(stats.next7, "USD", { compact: true })} sub={t("upcoming").toLowerCase()} accent={TOKENS.terracotta}
+            onClick={() => setKpiDetail("next7")} />
+          <KPICard icon={Calendar} label={lang === "en" ? "Within 30 Days" : "30 Gün İçinde"} value={fmtMoney(stats.next30, "USD", { compact: true })} sub={t("upcoming").toLowerCase()} accent={TOKENS.gold}
+            onClick={() => setKpiDetail("next30")} />
+          <KPICard icon={TrendingUp} label={`${t("nextMonth")} (${period} ${t("days")})`} value={fmtMoney(stats.totalExpected, "USD", { compact: true })} sub={t("pending").toLowerCase()} accent={TOKENS.navy}
+            onClick={() => setKpiDetail("pending")} />
+          <KPICard icon={AlertTriangle} label={t("overdue")} value={fmtMoney(stats.totalOverdue, "USD", { compact: true })} sub={lang === "en" ? "urgent" : "acil takip"} accent={TOKENS.oxblood}
+            onClick={() => setKpiDetail("overdue")} />
         </div>
 
         {/* Filtreler */}
@@ -8312,6 +8627,19 @@ function CashFlowView({ orders, customers, payments, rates, setView, t = (k) => 
           </Card>
         )}
       </div>
+
+      {/* KPI DETAY MODAL */}
+      <KPIDetailModal
+        kind={kpiDetail}
+        onClose={() => setKpiDetail(null)}
+        orders={orders}
+        customers={customers}
+        payments={payments}
+        rates={rates}
+        setView={setView}
+        t={t}
+        lang={lang}
+      />
     </div>
   );
 }

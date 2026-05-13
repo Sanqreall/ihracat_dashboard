@@ -4304,33 +4304,34 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
         .filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
       if (!matchesSearch) return;
 
-      // Sevkiyat bazlı ay filtresi: birden fazla sevkiyat varsa her biri kendi ayında değerlendir
+      // Sevkiyat bazlı tarih filtresi:
+      // Birden fazla sevkiyat varsa ve herhangi bir tarih/ay filtresi aktifse,
+      // her sevkiyat kendi tarihine (fiili varsa fiili, yoksa planlanan) göre
+      // bağımsız olarak değerlendirilir — sipariş seviyesindeki tarih kullanılmaz.
       const shipments = o.shipments || [];
-      if (monthFilter.length > 0 && shipments.length > 1) {
-        // Her sevkiyatı ayrı ayrı kontrol et
+      const hasDateFilter = dateRange.from || dateRange.to || monthFilter.length > 0;
+
+      if (shipments.length > 1 && hasDateFilter) {
+        // Her sevkiyatı ayrı ayrı kontrol et — fiili sevk varsa onu, yoksa planlanını kullan
         shipments.forEach((sh) => {
+          // Fiili sevk tarihi varsa onu, yoksa planlanan sevk tarihini kullan
           const shDate = sh.actualShipmentDate || sh.shipmentDate || "";
-          const shMonth = shDate.slice(0, 7);
-          if (!monthFilter.includes(shMonth)) return;
-          // Tarih aralığı filtresi sevkiyat tarihine göre
+          if (!shDate) return; // tarihi olmayan sevkiyatı filtre dışı bırak
+          if (monthFilter.length > 0 && !monthFilter.includes(shDate.slice(0, 7))) return;
           if (dateRange.from && shDate < dateRange.from) return;
           if (dateRange.to && shDate > dateRange.to) return;
           result.push({ ...o, _shipment: sh, _shipmentFiltered: true });
         });
       } else {
-        // Tek sevkiyat veya ay filtresi yok: normal davranış
-        const refDate = o.actualShipmentDate || o.shipmentDate || o.orderDate || "";
+        // Tek sevkiyat veya tarih filtresi yok: normal davranış
+        const singleSh = shipments.length === 1 ? shipments[0] : null;
+        // Tek sevkiyat varsa onun tarihini kullan (fiili > planlanan), yoksa sipariş tarihini
+        const refDate = (singleSh ? (singleSh.actualShipmentDate || singleSh.shipmentDate) : null)
+          || o.actualShipmentDate || o.shipmentDate || o.orderDate || "";
         if (dateRange.from && refDate < dateRange.from) return;
         if (dateRange.to && refDate > dateRange.to) return;
-        if (monthFilter.length > 0) {
-          if (shipments.length === 1) {
-            const shDate = shipments[0].actualShipmentDate || shipments[0].shipmentDate || refDate;
-            if (!monthFilter.includes(shDate.slice(0, 7))) return;
-          } else {
-            if (!monthFilter.includes(refDate.slice(0, 7))) return;
-          }
-        }
-        result.push({ ...o, _shipment: shipments.length === 1 ? shipments[0] : null, _shipmentFiltered: false });
+        if (monthFilter.length > 0 && !monthFilter.includes(refDate.slice(0, 7))) return;
+        result.push({ ...o, _shipment: singleSh, _shipmentFiltered: false });
       }
     });
     return result;

@@ -5315,37 +5315,26 @@ function OrdersCalendarView({ orders, customers, rates, payments, onView, onEdit
   const [openMonths, setOpenMonths] = useState({}); // { "2026-05": true }
   const [openOrders, setOpenOrders] = useState({}); // { orderId: true }
 
-  // Ay bazında grupla — eğer siparişin shipments[] varsa her sevkiyatın kendi ayına dağıtılır
-  // Aksi halde order'ın aktif tarihi (fiili sevk > planlanan > sipariş) kullanılır
+  // Ay bazında grupla.
+  // `orders` listesi zaten filtrelenmiş + sevkiyat bazlı bölünmüş satırlar içerir (_shipment / _shipmentFiltered).
+  // Bu yüzden shipments[] üzerinde yeniden döngü yapmıyoruz — filtreye uymayan sevkiyatlar
+  // zaten dışarıda bırakılmış olur. Her satırın kendi efektif tarihine bakarak aya yerleştiriyoruz.
   const grouped = useMemo(() => {
     const m = {};
     orders.forEach((o) => {
-      const shipments = o.shipments || [];
-      if (shipments.length > 0) {
-        // Birden fazla sevkiyat varsa her birini ayrı satır olarak ekle
-        shipments.forEach((sh) => {
-          const d = sh.actualShipmentDate || sh.shipmentDate;
-          if (!d) {
-            // Sevkiyat tarihi yoksa sipariş tarihine fall back
-            const fallback = o.orderDate || o.createdAt;
-            if (!fallback) return;
-            const key = fallback.slice(0, 7);
-            if (!m[key]) m[key] = [];
-            m[key].push({ ...o, _shipment: sh });
-            return;
-          }
-          const key = d.slice(0, 7);
-          if (!m[key]) m[key] = [];
-          m[key].push({ ...o, _shipment: sh });
-        });
-      } else {
-        // Tek sevkiyatlı eski format
-        const d = o.actualShipmentDate || o.shipmentDate || o.orderDate || o.createdAt;
-        if (!d) return;
-        const key = d.slice(0, 7);
-        if (!m[key]) m[key] = [];
-        m[key].push({ ...o, _shipment: null });
+      // Satırın efektif tarihi: _shipmentFiltered ise o sevkiyatın tarihi,
+      // değilse sipariş seviyesindeki tarih (fiili > planlanan > sipariş)
+      let d;
+      if (o._shipment) {
+        d = o._shipment.actualShipmentDate || o._shipment.shipmentDate;
       }
+      if (!d) {
+        d = o.actualShipmentDate || o.shipmentDate || o.orderDate || o.createdAt;
+      }
+      if (!d) return;
+      const key = d.slice(0, 7);
+      if (!m[key]) m[key] = [];
+      m[key].push(o);
     });
     Object.keys(m).forEach((k) => m[k].sort((a, b) => {
       const sa = a._shipment;

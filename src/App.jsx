@@ -5014,14 +5014,11 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
               )}
             </FilterBar>
 
-            {/* ALT TOPLAM KARTI — filtreye göre alt toplam */}
+            {/* ALT TOPLAM KARTI — filtreye göre alt toplam; sevk edilenler ve planlananlar ayrı */}
             {filtered.length > 0 && (() => {
-              // Her sipariş için totals hesapla — sevkiyat bazlı filtreleme varsa sadece o sevkiyatın tutarı
-              let subtotal = 0, vatAmount = 0, addCostsExVat = 0, addCostsVat = 0, grandTotal = 0;
-              const byCurrency = {};
-              filtered.forEach((o) => {
+              // Yardımcı: bir satır için sevkiyat tutarını hesapla
+              const calcRowAmounts = (o) => {
                 if (o._shipmentFiltered && o._shipment) {
-                  // Sadece bu sevkiyata ait kalemlerin toplamı
                   const sh = o._shipment;
                   const shItems = (o.items || []).map((it) => {
                     const dist = it.shipmentDistribution
@@ -5030,34 +5027,84 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
                     return qty > 0 ? { ...it, _q: qty } : null;
                   }).filter(Boolean);
                   const shSub = shItems.reduce((sum, it) => sum + (it._q * (Number(it.unitPrice) || 0)) * (1 - (Number(it.discount) || 0) / 100), 0);
-                  const shVatRate = Number(o.vatRate) || 0;
-                  const shVat = shSub * shVatRate / 100;
-                  subtotal += toUSD(shSub, o.currency, rates);
-                  vatAmount += toUSD(shVat, o.currency, rates);
-                  grandTotal += toUSD(shSub + shVat, o.currency, rates);
-                  if (!byCurrency[o.currency]) byCurrency[o.currency] = { exVat: 0, vat: 0, total: 0 };
-                  byCurrency[o.currency].exVat += shSub;
-                  byCurrency[o.currency].vat += shVat;
-                  byCurrency[o.currency].total += shSub + shVat;
+                  const shVat = shSub * (Number(o.vatRate) || 0) / 100;
+                  return { exVat: shSub, vat: shVat, total: shSub + shVat, currency: o.currency, addCostsExVat: 0, addCostsVat: 0 };
                 } else {
                   const t = calcOrderTotals(o);
-                  subtotal += toUSD(t.subtotal - t.discount, o.currency, rates);
-                  vatAmount += toUSD(t.vatAmount, o.currency, rates);
-                  addCostsExVat += toUSD(t.additionalCosts || 0, o.currency, rates);
-                  addCostsVat += toUSD(t.additionalCostsVat || 0, o.currency, rates);
-                  grandTotal += toUSD(t.total, o.currency, rates);
-                  if (!byCurrency[o.currency]) byCurrency[o.currency] = { exVat: 0, vat: 0, total: 0 };
-                  byCurrency[o.currency].exVat += (t.subtotal - t.discount) + (t.additionalCosts || 0);
-                  byCurrency[o.currency].vat += t.vatAmount + (t.additionalCostsVat || 0);
-                  byCurrency[o.currency].total += t.total;
+                  const exVat = (t.subtotal - t.discount) + (t.additionalCosts || 0);
+                  return { exVat, vat: t.vatAmount + (t.additionalCostsVat || 0), total: t.total, currency: o.currency, addCostsExVat: t.additionalCosts || 0, addCostsVat: t.additionalCostsVat || 0 };
                 }
-              });
-              const exVatUSD = subtotal + addCostsExVat;
-              const vatTotalUSD = vatAmount + addCostsVat;
+              };
+
+              // Sevk edilmiş mi? (fiili sevk tarihi var mı bu satır/sevkiyat için)
+              const isRowShipped = (o) => {
+                if (o._shipmentFiltered && o._shipment) return !!o._shipment.actualShipmentDate;
+                return !!o.actualShipmentDate;
+              };
+
+              // Gruplara ayır
+              const shippedRows = filtered.filter(isRowShipped);
+              const plannedRows = filtered.filter((o) => !isRowShipped(o));
+              const hasBothGroups = shippedRows.length > 0 && plannedRows.length > 0;
+
+              // Grup toplamlarını hesapla
+              const sumGroup = (rows) => {
+                let exVatUSD = 0, vatUSD = 0, grandTotalUSD = 0;
+                const byCur = {};
+                rows.forEach((o) => {
+                  const a = calcRowAmounts(o);
+                  exVatUSD += toUSD(a.exVat, a.currency, rates);
+                  vatUSD += toUSD(a.vat, a.currency, rates);
+                  grandTotalUSD += toUSD(a.total, a.currency, rates);
+                  if (!byCur[a.currency]) byCur[a.currency] = { exVat: 0, vat: 0, total: 0 };
+                  byCur[a.currency].exVat += a.exVat;
+                  byCur[a.currency].vat += a.vat;
+                  byCur[a.currency].total += a.total;
+                });
+                return { exVatUSD, vatUSD, grandTotalUSD, byCur };
+              };
+
+              const shippedTotals = sumGroup(shippedRows);
+              const plannedTotals = sumGroup(plannedRows);
+              const allTotals = sumGroup(filtered);
+
               const isFiltered = search || statusFilter.length || customerFilter.length || curFilter.length || dateRange.from || dateRange.to || monthFilter.length;
-              // Kaç benzersiz sipariş var (sevkiyat bölünmesi olabilir)
               const uniqueOrderCount = new Set(filtered.map((o) => o.id)).size;
               const hasShipmentSplit = filtered.some((o) => o._shipmentFiltered);
+
+              // Tek grup kartı
+              const GroupCard = ({ label, icon: Icon, color, bg, rows, totals }) => (
+                <div className="rounded-md p-3" style={{ background: bg, border: `1px solid ${color}30` }}>
+                  <div className="flex items-center gap-1.5 mb-2 pb-1.5" style={{ borderBottom: `1px dashed ${color}40` }}>
+                    {Icon && <Icon size={11} style={{ color }} />}
+                    <div className="text-[9px] uppercase tracking-wider font-bold" style={{ color }}>{label}</div>
+                    <div className="ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded" style={{ background: color + "18", color }}>{rows.length} {lang === "en" ? "shipment" : "sevkiyat"}</div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-[9px]" style={{ color: TOKENS.muted }}>{lang === "en" ? "Ex-VAT" : "KDV Hariç"}</span>
+                      <span className="text-[11px] font-bold tabular-nums" style={{ color: TOKENS.ink }}>{fmtMoney(totals.exVatUSD, "USD", { compact: true })}</span>
+                    </div>
+                    {totals.vatUSD > 0.01 && (
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-[9px]" style={{ color: TOKENS.muted }}>KDV</span>
+                        <span className="text-[10px] tabular-nums" style={{ color: TOKENS.copper }}>{fmtMoney(totals.vatUSD, "USD", { compact: true })}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-baseline pt-0.5" style={{ borderTop: `1px solid ${color}25` }}>
+                      <span className="text-[9px] font-bold" style={{ color }}>{lang === "en" ? "Total" : "Toplam"}</span>
+                      <span className="text-[12px] font-bold tabular-nums" style={{ color }}>{fmtMoney(totals.grandTotalUSD, "USD", { compact: true })}</span>
+                    </div>
+                    <div className="pt-0.5 space-y-0.5">
+                      {Object.entries(totals.byCur).map(([cur, v]) => (
+                        <div key={cur} className="text-[9px] tabular-nums" style={{ color: TOKENS.muted }}>
+                          <span style={{ fontWeight: 600 }}>{cur}:</span> {fmtMoney(v.total, cur, { compact: true })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
 
               return (
                 <div className="rounded-lg p-4" style={{ background: "white", border: `1px solid ${TOKENS.border}` }}>
@@ -5069,33 +5116,88 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
                       </span>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    <div className="rounded-md p-3" style={{ background: TOKENS.cream }}>
-                      <div className="text-[9px] uppercase tracking-wider font-bold mb-1" style={{ color: TOKENS.muted }}>{lang === "en" ? "Subtotal (Ex-VAT)" : "Ara Toplam (KDV Hariç)"}</div>
-                      <div className="text-base font-bold tabular-nums" style={{ color: TOKENS.ink }}>{fmtMoney(exVatUSD, "USD", { compact: true })}</div>
-                      <div className="text-[10px]" style={{ color: TOKENS.muted }}>USD</div>
-                    </div>
-                    <div className="rounded-md p-3" style={{ background: "#C9A96115" }}>
-                      <div className="text-[9px] uppercase tracking-wider font-bold mb-1" style={{ color: TOKENS.copper }}>{lang === "en" ? "Total VAT" : "Toplam KDV"}</div>
-                      <div className="text-base font-bold tabular-nums" style={{ color: TOKENS.copper }}>{fmtMoney(vatTotalUSD, "USD", { compact: true })}</div>
-                      <div className="text-[10px]" style={{ color: TOKENS.muted }}>USD</div>
-                    </div>
-                    <div className="rounded-md p-3" style={{ background: "#3E7D5A15" }}>
-                      <div className="text-[9px] uppercase tracking-wider font-bold mb-1" style={{ color: TOKENS.forest }}>{lang === "en" ? "Grand Total (Inc-VAT)" : "Genel Toplam (KDV Dahil)"}</div>
-                      <div className="text-base font-bold tabular-nums" style={{ color: TOKENS.forest }}>{fmtMoney(grandTotal, "USD", { compact: true })}</div>
-                      <div className="text-[10px]" style={{ color: TOKENS.muted }}>USD</div>
-                    </div>
-                    <div className="rounded-md p-3" style={{ background: "#1E3A5F12" }}>
-                      <div className="text-[9px] uppercase tracking-wider font-bold mb-1" style={{ color: TOKENS.navy }}>{lang === "en" ? "By Currency" : "Para Birimi Bazlı"}</div>
-                      <div className="space-y-0.5">
-                        {Object.entries(byCurrency).map(([cur, v]) => (
-                          <div key={cur} className="text-[10px] font-bold tabular-nums" style={{ color: TOKENS.navy }}>
-                            <span style={{ color: TOKENS.muted, fontWeight: 600 }}>{cur}:</span> {fmtMoney(v.total, cur, { compact: true })}
+
+                  {hasBothGroups ? (
+                    /* Her iki grup da var: üç bölüm göster */
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {/* SEVKEDİLENLER */}
+                        <GroupCard
+                          label={lang === "en" ? "Shipped" : "Sevk Edilenler"}
+                          icon={Ship}
+                          color={TOKENS.forest}
+                          bg="#3E7D5A10"
+                          rows={shippedRows}
+                          totals={shippedTotals}
+                        />
+                        {/* PLANLANANLAR */}
+                        <GroupCard
+                          label={lang === "en" ? "Planned" : "Planlananlar"}
+                          icon={Clock}
+                          color={TOKENS.navy}
+                          bg="#1E3A5F0C"
+                          rows={plannedRows}
+                          totals={plannedTotals}
+                        />
+                      </div>
+                      {/* GENEL TOPLAM */}
+                      <div className="rounded-md p-3 flex flex-wrap items-center gap-4" style={{ background: TOKENS.cream, border: `1px solid ${TOKENS.gold}40` }}>
+                        <div className="text-[9px] uppercase tracking-wider font-bold" style={{ color: TOKENS.gold }}>{lang === "en" ? "Grand Total" : "Genel Toplam"}</div>
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-[9px]" style={{ color: TOKENS.muted }}>{lang === "en" ? "Ex-VAT" : "KDV Hariç"}</span>
+                          <span className="text-sm font-bold tabular-nums" style={{ color: TOKENS.ink }}>{fmtMoney(allTotals.exVatUSD, "USD", { compact: true })}</span>
+                        </div>
+                        {allTotals.vatUSD > 0.01 && (
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-[9px]" style={{ color: TOKENS.muted }}>KDV</span>
+                            <span className="text-sm font-bold tabular-nums" style={{ color: TOKENS.copper }}>{fmtMoney(allTotals.vatUSD, "USD", { compact: true })}</span>
                           </div>
-                        ))}
+                        )}
+                        <div className="flex items-baseline gap-1.5 ml-auto">
+                          <span className="text-[9px] font-bold" style={{ color: TOKENS.gold }}>{lang === "en" ? "Inc-VAT" : "KDV Dahil"}</span>
+                          <span className="text-base font-bold tabular-nums" style={{ color: TOKENS.gold }}>{fmtMoney(allTotals.grandTotalUSD, "USD", { compact: true })}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {Object.entries(allTotals.byCur).map(([cur, v]) => (
+                            <span key={cur} className="text-[9px] tabular-nums" style={{ color: TOKENS.muted }}>
+                              <span style={{ fontWeight: 600 }}>{cur}:</span> {fmtMoney(v.total, cur, { compact: true })}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  ) : (
+                    /* Tek grup: eski düzen */
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div className="rounded-md p-3" style={{ background: TOKENS.cream }}>
+                        <div className="text-[9px] uppercase tracking-wider font-bold mb-1" style={{ color: TOKENS.muted }}>{lang === "en" ? "Subtotal (Ex-VAT)" : "Ara Toplam (KDV Hariç)"}</div>
+                        <div className="text-base font-bold tabular-nums" style={{ color: TOKENS.ink }}>{fmtMoney(allTotals.exVatUSD, "USD", { compact: true })}</div>
+                        <div className="text-[10px]" style={{ color: TOKENS.muted }}>USD</div>
+                      </div>
+                      <div className="rounded-md p-3" style={{ background: "#C9A96115" }}>
+                        <div className="text-[9px] uppercase tracking-wider font-bold mb-1" style={{ color: TOKENS.copper }}>{lang === "en" ? "Total VAT" : "Toplam KDV"}</div>
+                        <div className="text-base font-bold tabular-nums" style={{ color: TOKENS.copper }}>{fmtMoney(allTotals.vatUSD, "USD", { compact: true })}</div>
+                        <div className="text-[10px]" style={{ color: TOKENS.muted }}>USD</div>
+                      </div>
+                      <div className="rounded-md p-3" style={{ background: shippedRows.length > 0 ? "#3E7D5A15" : "#1E3A5F0C" }}>
+                        <div className="text-[9px] uppercase tracking-wider font-bold mb-1" style={{ color: shippedRows.length > 0 ? TOKENS.forest : TOKENS.navy }}>
+                          {shippedRows.length > 0 ? (lang === "en" ? "Shipped Total" : "Sevk Edilenler") : (lang === "en" ? "Planned Total" : "Planlananlar")}
+                        </div>
+                        <div className="text-base font-bold tabular-nums" style={{ color: shippedRows.length > 0 ? TOKENS.forest : TOKENS.navy }}>{fmtMoney(allTotals.grandTotalUSD, "USD", { compact: true })}</div>
+                        <div className="text-[10px]" style={{ color: TOKENS.muted }}>USD</div>
+                      </div>
+                      <div className="rounded-md p-3" style={{ background: "#1E3A5F12" }}>
+                        <div className="text-[9px] uppercase tracking-wider font-bold mb-1" style={{ color: TOKENS.navy }}>{lang === "en" ? "By Currency" : "Para Birimi Bazlı"}</div>
+                        <div className="space-y-0.5">
+                          {Object.entries(allTotals.byCur).map(([cur, v]) => (
+                            <div key={cur} className="text-[10px] font-bold tabular-nums" style={{ color: TOKENS.navy }}>
+                              <span style={{ color: TOKENS.muted, fontWeight: 600 }}>{cur}:</span> {fmtMoney(v.total, cur, { compact: true })}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })()}

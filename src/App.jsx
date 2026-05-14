@@ -5725,16 +5725,16 @@ function buildShipmentBasedPlan(order, customers) {
     if (preShipPct > 0) {
       plan.push({ id: uid(), type: "preShipment", shipmentNo: sh.no, percentage: preShipPct, amount: +(base * preShipPct / 100).toFixed(2), method, dueDate: effectiveDate, notes: `${shLabel} — sevk öncesi` });
     }
+    const deferredDate = addDays(effectiveDate, vade);
     if (defPct > 0) {
-      plan.push({ id: uid(), type: "deferred", shipmentNo: sh.no, percentage: defPct, amount: +(base * defPct / 100).toFixed(2), method, dueDate: addDays(effectiveDate, vade), notes: `${shLabel} — vadeli (${vade} gün)` });
+      plan.push({ id: uid(), type: "deferred", shipmentNo: sh.no, percentage: defPct, amount: +(base * defPct / 100).toFixed(2), method, dueDate: deferredDate, notes: `${shLabel} — vadeli (${vade} gün)` });
     }
     if (prepPct === 0 && preShipPct === 0 && defPct === 0 && base > 0) {
-      plan.push({ id: uid(), type: "deferred", shipmentNo: sh.no, percentage: 100, amount: base, method, dueDate: addDays(effectiveDate, vade), notes: `${shLabel} — vadeli (${vade} gün)` });
+      plan.push({ id: uid(), type: "deferred", shipmentNo: sh.no, percentage: 100, amount: base, method, dueDate: deferredDate, notes: `${shLabel} — vadeli (${vade} gün)` });
     }
-    // KDV — fiili sevk tarihi öncelikli, yoksa planlanan sevk tarihi
+    // KDV — vadeli tarihle aynı (fiili sevk varsa fiili + vade, yoksa planlanan + vade)
     if (vatAmt > 0) {
-      const vatDate = sh.actualShipmentDate || sh.shipmentDate || orderDate;
-      plan.push({ id: uid(), type: "vat", shipmentNo: sh.no, percentage: 100, amount: vatAmt, method, dueDate: vatDate, notes: `${shLabel} — KDV${sh.actualShipmentDate ? " (fiili sevk tarihinde)" : " (planlanan sevk tarihinde)"}` });
+      plan.push({ id: uid(), type: "vat", shipmentNo: sh.no, percentage: 100, amount: vatAmt, method, dueDate: deferredDate, notes: `${shLabel} — KDV (vadeli tarihte, ${vade} gün)` });
     }
   });
 
@@ -6186,16 +6186,17 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
       plan.push({ id: uid(), type: "deferred", percentage: 100, amount: baseAmount, method, dueDate: addDays(shipDate, vade), notes: `Sevkten ${vade} gün sonra` });
     }
 
-    // KDV varsa otomatik kalem ekle — genelde sevkiyat sırasında ödenir
+    // KDV varsa otomatik kalem ekle — vadeli tarihle aynı
     if (vatAmount > 0) {
+      const vatDueDate = addDays(shipDate, vade);
       plan.push({
         id: uid(),
         type: "vat",
         percentage: 100, // KDV kalemleri için %100 = vatAmount'un tamamı
         amount: +vatAmount.toFixed(2),
         method,
-        dueDate: shipDate,
-        notes: "KDV tutarı — mal bedelinden ayrı"
+        dueDate: vatDueDate,
+        notes: `KDV tutarı — vadeli tarihte (${vade} gün)`
       });
     }
 
@@ -6539,8 +6540,43 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
                   Sevkiyat Bazlı
                 </button>
               </div>
-              {editing.paymentBasis !== "shipment" && (
+              {editing.paymentBasis !== "shipment" ? (
                 <Btn variant="secondary" size="xs" icon={Plus} onClick={() => addPlanItem()}>Plan Kalemi Ekle</Btn>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <select
+                    id="manualShipmentNo"
+                    className="text-[11px] border rounded px-1.5 py-1 h-7"
+                    style={{ borderColor: TOKENS.border, color: TOKENS.ink }}
+                    defaultValue=""
+                  >
+                    <option value="">Sevkiyat seç...</option>
+                    {(editing.shipments || []).map((sh) => (
+                      <option key={sh.no} value={sh.no}>{sh.name || `${sh.no}. Sevkiyat`}</option>
+                    ))}
+                    <option value="order">Sipariş geneli (ön ödeme)</option>
+                  </select>
+                  <Btn variant="secondary" size="xs" icon={Plus} onClick={() => {
+                    const sel = document.getElementById("manualShipmentNo");
+                    const val = sel?.value;
+                    if (!val) { alert("Önce bir sevkiyat seç."); return; }
+                    const isOrder = val === "order";
+                    const shipNo = isOrder ? null : Number(val);
+                    const sh = !isOrder && (editing.shipments || []).find((s) => s.no === shipNo);
+                    const effectiveDate = sh ? (sh.actualShipmentDate || sh.shipmentDate || "") : (editing.orderDate || "");
+                    const item = {
+                      id: uid(),
+                      type: isOrder ? "prepayment" : "preShipment",
+                      shipmentNo: shipNo,
+                      percentage: 0,
+                      amount: 0,
+                      method: "bank_transfer",
+                      dueDate: effectiveDate,
+                      notes: isOrder ? "Manuel ön ödeme" : (sh?.name || `${shipNo}. Sevkiyat`) + " — manuel kalem",
+                    };
+                    setEditing({ ...editing, paymentPlan: [...(editing.paymentPlan || []), item] });
+                  }}>Manuel Kalem Ekle</Btn>
+                </div>
               )}
             </div>
           </div>
@@ -6593,8 +6629,8 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
 
               {/* Sevkiyat bazlı plan özet tablosu */}
               {/* ÖN ÖDEME bloğu — sipariş toplamından, shipmentNo=null */}
-              {(editing.paymentPlan || []).filter((p) => p.type === "prepayment" && !p.shipmentNo).length > 0 && (() => {
-                const prepItems = (editing.paymentPlan || []).filter((p) => p.type === "prepayment" && !p.shipmentNo);
+              {(editing.paymentPlan || []).filter((p) => !p.shipmentNo).length > 0 && (() => {
+                const prepItems = (editing.paymentPlan || []).filter((p) => !p.shipmentNo);
                 const orderTotalsDisp = calcOrderTotals(editing);
                 return (
                   <div className="rounded-md overflow-hidden" style={{ border: `2px solid ${TOKENS.gold}60`, background: TOKENS.gold + "08" }}>

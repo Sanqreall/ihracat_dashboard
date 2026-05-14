@@ -2530,9 +2530,6 @@ function LoginModal({ open, onClose, setCurrentUser, showToast }) {
           <Btn variant="accent" size="lg" onClick={handleLogin} disabled={busy} className="w-full">
             {busy ? "Giriş yapılıyor..." : "Giriş Yap"}
           </Btn>
-          <div className="text-[10px] p-2 rounded mt-3" style={{ background: TOKENS.gold + "12", color: TOKENS.ink, border: `1px solid ${TOKENS.gold}40` }}>
-            💡 <strong>Kullanıcı yönetimi:</strong> Yeni kullanıcılar Supabase Dashboard'dan eklenir. Authentication → Users → Add user. Rol için User Metadata: <code>{`{"role": "editor"}`}</code>
-          </div>
         </div>
       </div>
     </div>

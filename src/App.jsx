@@ -4499,34 +4499,35 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
         .filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
       if (!matchesSearch) return;
 
-      // Sevkiyat bazlı tarih filtresi:
-      // Birden fazla sevkiyat varsa ve herhangi bir tarih/ay filtresi aktifse,
-      // her sevkiyat kendi tarihine (fiili varsa fiili, yoksa planlanan) göre
-      // bağımsız olarak değerlendirilir — sipariş seviyesindeki tarih kullanılmaz.
+      // Sevkiyat bazlı gruplama:
+      // Birden fazla sevkiyat varsa HER ZAMAN ayrı satır olarak göster,
+      // her satır kendi tarihine (fiili > planlanan) göre filtrelenir ve gruplara girer.
       const shipments = o.shipments || [];
       const hasDateFilter = dateRange.from || dateRange.to || monthFilter.length > 0;
 
-      if (shipments.length > 1 && hasDateFilter) {
-        // Her sevkiyatı ayrı ayrı kontrol et — fiili sevk varsa onu, yoksa planlanını kullan
+      if (shipments.length > 1) {
+        // Her sevkiyat her zaman ayrı satır — fiili varsa onu, yoksa planlananı kullan
         shipments.forEach((sh) => {
-          // Fiili sevk tarihi varsa onu, yoksa planlanan sevk tarihini kullan
           const shDate = sh.actualShipmentDate || sh.shipmentDate || "";
-          if (!shDate) return; // tarihi olmayan sevkiyatı filtre dışı bırak
-          if (monthFilter.length > 0 && !monthFilter.includes(shDate.slice(0, 7))) return;
-          if (dateRange.from && shDate < dateRange.from) return;
-          if (dateRange.to && shDate > dateRange.to) return;
+          if (hasDateFilter) {
+            if (!shDate) return;
+            if (monthFilter.length > 0 && !monthFilter.includes(shDate.slice(0, 7))) return;
+            if (dateRange.from && shDate < dateRange.from) return;
+            if (dateRange.to && shDate > dateRange.to) return;
+          }
           result.push({ ...o, _shipment: sh, _shipmentFiltered: true });
         });
       } else {
-        // Tek sevkiyat veya tarih filtresi yok: normal davranış
+        // Tek sevkiyat veya sevkiyat yok
         const singleSh = shipments.length === 1 ? shipments[0] : null;
-        // Tek sevkiyat varsa onun tarihini kullan (fiili > planlanan), yoksa sipariş tarihini
         const refDate = (singleSh ? (singleSh.actualShipmentDate || singleSh.shipmentDate) : null)
           || o.actualShipmentDate || o.shipmentDate || o.orderDate || "";
-        if (dateRange.from && refDate < dateRange.from) return;
-        if (dateRange.to && refDate > dateRange.to) return;
-        if (monthFilter.length > 0 && !monthFilter.includes(refDate.slice(0, 7))) return;
-        result.push({ ...o, _shipment: singleSh, _shipmentFiltered: false });
+        if (hasDateFilter) {
+          if (dateRange.from && refDate < dateRange.from) return;
+          if (dateRange.to && refDate > dateRange.to) return;
+          if (monthFilter.length > 0 && !monthFilter.includes(refDate.slice(0, 7))) return;
+        }
+        result.push({ ...o, _shipment: singleSh, _shipmentFiltered: shipments.length === 1 });
       }
     });
     return result;
@@ -9575,6 +9576,48 @@ function CashFlowView({ orders, customers, payments, rates, setView, t = (k) => 
 // RAPORLAR
 // ============================================================================
 
+// ============================================================================
+// RAPORLAR İÇİN YARDIMCI: Sipariş listesini sevkiyat bazlı genişlet
+// Birden fazla sevkiyatı olan sipariş → her sevkiyat için ayrı satır
+// Her satırda _shipment (sevkiyat nesnesi), _effectiveDate (fiili > planlanan) alanları eklenir
+// ============================================================================
+function expandOrdersForShipments(orders) {
+  const result = [];
+  orders.forEach((o) => {
+    const shipments = o.shipments || [];
+    if (shipments.length > 1) {
+      shipments.forEach((sh) => {
+        const effectiveDate = sh.actualShipmentDate || sh.shipmentDate || o.actualShipmentDate || o.shipmentDate || o.orderDate || "";
+        result.push({ ...o, _shipment: sh, _effectiveDate: effectiveDate });
+      });
+    } else {
+      const singleSh = shipments.length === 1 ? shipments[0] : null;
+      const effectiveDate = (singleSh ? (singleSh.actualShipmentDate || singleSh.shipmentDate) : null)
+        || o.actualShipmentDate || o.shipmentDate || o.orderDate || "";
+      result.push({ ...o, _shipment: singleSh, _effectiveDate: effectiveDate });
+    }
+  });
+  return result;
+}
+
+// Sevkiyat bazlı genişletilmiş satır için tutar hesapla
+// _shipment varsa sadece o sevkiyatın kalemleri; yoksa tüm sipariş
+function expandedOrderTotalUSD(row, rates) {
+  if (row._shipment && (row.shipments || []).length > 1) {
+    const sh = row._shipment;
+    let sub = 0;
+    (row.items || []).forEach((it) => {
+      const dist = it.shipmentDistribution
+        || (it.shipmentNo ? { [it.shipmentNo]: Math.floor(Number(it.quantity) || 0) } : { 1: Math.floor(Number(it.quantity) || 0) });
+      const qty = Math.floor(Number(dist[sh.no]) || 0);
+      if (qty > 0) sub += qty * (Number(it.unitPrice) || 0) * (1 - (Number(it.discount) || 0) / 100);
+    });
+    const vatRate = Number(row.vatRate) || 0;
+    return toUSD(sub * (1 + vatRate / 100), row.currency, rates);
+  }
+  return orderTotalUSD(row, rates);
+}
+
 function ReportsView({ orders = [], customers = [], products = [], payments = [], rates = {}, t = (k) => k, lang = "tr" }) {
   const [tab, setTab] = useState("summary");
 
@@ -9625,10 +9668,11 @@ function SummaryReport({ orders = [], customers = [], products = [], payments = 
   const [dateBasis, setDateBasis] = useState("orderDate"); // orderDate, shipmentDate, paidDate
   const [monthFilter, setMonthFilter] = useState([]);
 
-  // Tarih aralığında filtrele
+  // Tarih aralığında filtrele — çok sevkiyatlı siparişler her sevkiyat için ayrı satır
   const filteredOrders = useMemo(() => {
-    return orders.filter((o) => {
-      const d = dateBasis === "shipmentDate" ? (o.actualShipmentDate || o.shipmentDate) : o.orderDate;
+    const expanded = expandOrdersForShipments(orders);
+    return expanded.filter((row) => {
+      const d = dateBasis === "shipmentDate" ? row._effectiveDate : row.orderDate;
       if (!d) return false;
       if (dateRange.from && d < dateRange.from) return false;
       if (dateRange.to && d > dateRange.to) return false;
@@ -9652,12 +9696,16 @@ function SummaryReport({ orders = [], customers = [], products = [], payments = 
   // Özet metrikler
   const stats = useMemo(() => {
     const orderCount = filteredOrders.length;
-    const totalOrdersUSD = filteredOrders.reduce((s, o) => s + orderTotalUSD(o, rates), 0);
-    const shippedCount = filteredOrders.filter((o) => o.actualShipmentDate || ["shipped", "delivered", "completed"].includes(o.status)).length;
-    const shippedTotalUSD = filteredOrders.filter((o) => o.actualShipmentDate || ["shipped", "delivered", "completed"].includes(o.status)).reduce((s, o) => s + orderTotalUSD(o, rates), 0);
+    const totalOrdersUSD = filteredOrders.reduce((s, row) => s + expandedOrderTotalUSD(row, rates), 0);
+    const shippedRows = filteredOrders.filter((row) => {
+      const hasActual = row._shipment ? !!row._shipment.actualShipmentDate : !!row.actualShipmentDate;
+      return hasActual || ["shipped", "delivered", "completed"].includes(row.status);
+    });
+    const shippedCount = shippedRows.length;
+    const shippedTotalUSD = shippedRows.reduce((s, row) => s + expandedOrderTotalUSD(row, rates), 0);
     const paidCount = filteredPayments.length;
     const paidTotalUSD = filteredPayments.reduce((s, p) => s + toUSD(p.amount, p.currency, rates), 0);
-    const customerCount = new Set(filteredOrders.map((o) => o.customerId)).size;
+    const customerCount = new Set(filteredOrders.map((row) => row.customerId)).size;
     return { orderCount, orderTotalUSD: totalOrdersUSD, shippedCount, shippedTotalUSD, paidCount, paidTotalUSD, customerCount };
   }, [filteredOrders, filteredPayments, rates]);
 
@@ -9972,11 +10020,16 @@ function ShipmentReport({ orders = [], customers = [], rates = {} }) {
   });
   const [monthFilter, setMonthFilter] = useState([]);
 
-  // Sadece sevk edilmiş siparişler (actualShipmentDate var olan)
+  // Sevk edilmiş satırlar — çok sevkiyatlı siparişler sevkiyat bazlı ayrılır
+  // Fiili sevk tarihi olan sevkiyat/sipariş satırları gösterilir
   const shippedOrders = useMemo(() => {
-    return orders.filter((o) => {
-      const shipDate = o.actualShipmentDate;
+    const expanded = expandOrdersForShipments(orders);
+    return expanded.filter((row) => {
+      const shipDate = row._effectiveDate;
       if (!shipDate) return false;
+      // Fiili sevk tarihi zorunlu: ya sevkiyatın ya da siparişin fiili tarihi olmalı
+      const hasActual = row._shipment ? !!row._shipment.actualShipmentDate : !!row.actualShipmentDate;
+      if (!hasActual) return false;
       if (dateRange.from && shipDate < dateRange.from) return false;
       if (dateRange.to && shipDate > dateRange.to) return false;
       if (monthFilter.length > 0 && !monthFilter.includes(shipDate.slice(0, 7))) return false;
@@ -9984,14 +10037,16 @@ function ShipmentReport({ orders = [], customers = [], rates = {} }) {
     });
   }, [orders, dateRange, monthFilter]);
 
-  // Aylık sevkiyat dağılımı
+  // Aylık sevkiyat dağılımı — her satırın _effectiveDate'ine göre
   const monthlyShipment = useMemo(() => {
     const buckets = {};
-    shippedOrders.forEach((o) => {
-      const d = new Date(o.actualShipmentDate);
+    shippedOrders.forEach((row) => {
+      const dateStr = row._effectiveDate;
+      if (!dateStr) return;
+      const d = new Date(dateStr);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       if (!buckets[key]) buckets[key] = { month: key, label: d.toLocaleDateString("tr-TR", { month: "short", year: "2-digit" }), value: 0, count: 0 };
-      buckets[key].value += orderTotalUSD(o, rates);
+      buckets[key].value += expandedOrderTotalUSD(row, rates);
       buckets[key].count++;
     });
     return Object.values(buckets).sort((a, b) => a.month.localeCompare(b.month));
@@ -9999,27 +10054,27 @@ function ShipmentReport({ orders = [], customers = [], rates = {} }) {
 
   const stats = useMemo(() => ({
     count: shippedOrders.length,
-    totalUSD: shippedOrders.reduce((s, o) => s + orderTotalUSD(o, rates), 0),
-    customers: new Set(shippedOrders.map((o) => o.customerId)).size,
-    avgUSD: shippedOrders.length > 0 ? shippedOrders.reduce((s, o) => s + orderTotalUSD(o, rates), 0) / shippedOrders.length : 0,
+    totalUSD: shippedOrders.reduce((s, row) => s + expandedOrderTotalUSD(row, rates), 0),
+    customers: new Set(shippedOrders.map((row) => row.customerId)).size,
+    avgUSD: shippedOrders.length > 0 ? shippedOrders.reduce((s, row) => s + expandedOrderTotalUSD(row, rates), 0) / shippedOrders.length : 0,
   }), [shippedOrders, rates]);
 
   const exportShipment = () => {
     if (!shippedOrders.length) return;
-    const rows = shippedOrders.map((o) => {
-      const c = customers.find((x) => x.id === o.customerId);
+    const rows = shippedOrders.map((row) => {
+      const c = customers.find((x) => x.id === row.customerId);
+      const shLabel = row._shipment && (row.shipments || []).length > 1 ? ` (${row._shipment.name || row._shipment.no + ". Sevk"})` : "";
       return {
-        "Sevk Tarihi": o.actualShipmentDate,
-        "Sipariş No": o.orderNumber,
+        "Sevk Tarihi": row._effectiveDate,
+        "Sipariş No": row.orderNumber + shLabel,
         "Müşteri": c?.name || "—",
         "Ülke": c?.country || "",
-        "Sipariş Tarihi": o.orderDate || "",
-        "Para Birimi": o.currency,
-        "Tutar": orderTotal(o),
-        "Tutar (USD)": orderTotalUSD(o, rates).toFixed(2),
-        "Incoterms": o.incoterms || "",
-        "Konşimento": o.billOfLading || "",
-        "Fatura No": o.invoiceNumber || "",
+        "Sipariş Tarihi": row.orderDate || "",
+        "Para Birimi": row.currency,
+        "Tutar (USD)": expandedOrderTotalUSD(row, rates).toFixed(2),
+        "Incoterms": row.incoterms || "",
+        "Konşimento": row.billOfLading || "",
+        "Fatura No": row.invoiceNumber || "",
       };
     });
     exportToExcel(rows, `sevkiyat_cirosu_${dateRange.from}_${dateRange.to}.xlsx`, "Sevkiyat");
@@ -10084,7 +10139,15 @@ function ShipmentReport({ orders = [], customers = [], rates = {} }) {
         ) : (
           <DataTable
             columns={[
-              { key: "actualShipmentDate", label: "Sevk Tarihi", render: (r) => <span className="font-bold">{fmtDate(r.actualShipmentDate)}</span> },
+              { key: "actualShipmentDate", label: "Sevk Tarihi", sortValue: (r) => r._effectiveDate || "", render: (r) => {
+                const isMulti = (r.shipments || []).length > 1;
+                return (
+                  <div>
+                    <span className="font-bold">{fmtDate(r._effectiveDate)}</span>
+                    {isMulti && r._shipment && <div className="text-[10px] font-semibold mt-0.5" style={{ color: TOKENS.copper }}>{r._shipment.name || `${r._shipment.no}. Sevkiyat`}</div>}
+                  </div>
+                );
+              }},
               { key: "orderNumber", label: "Sipariş No", render: (r) => <span className="font-mono font-bold" style={{ color: TOKENS.navy }}>{r.orderNumber}</span> },
               { key: "customer", label: "Müşteri", sortValue: (r) => customers.find((c) => c.id === r.customerId)?.name || "", render: (r) => {
                 const c = customers.find((x) => x.id === r.customerId);
@@ -10097,8 +10160,7 @@ function ShipmentReport({ orders = [], customers = [], rates = {} }) {
               }},
               { key: "incoterms", label: "Incoterms", render: (r) => r.incoterms ? <Badge color="navy">{r.incoterms}</Badge> : "—" },
               { key: "currency", label: "Pb." },
-              { key: "total", label: "Tutar", align: "right", sortValue: (r) => orderTotal(r), render: (r) => <span className="font-bold tabular-nums">{fmtMoney(orderTotal(r), r.currency)}</span> },
-              { key: "totalUSD", label: "USD", align: "right", sortValue: (r) => toUSD(orderTotal(r), r.currency, rates), render: (r) => <span className="tabular-nums" style={{ color: TOKENS.muted }}>{fmtMoney(toUSD(orderTotal(r), r.currency, rates), "USD", { compact: true })}</span> },
+              { key: "total", label: "Tutar (USD)", align: "right", sortValue: (r) => expandedOrderTotalUSD(r, rates), render: (r) => <span className="font-bold tabular-nums">{fmtMoney(expandedOrderTotalUSD(r, rates), "USD", { compact: true })}</span> },
               { key: "billOfLading", label: "Konşimento", render: (r) => r.billOfLading ? <span className="font-mono text-xs">{r.billOfLading}</span> : "—" },
             ]}
             rows={shippedOrders}
@@ -10115,21 +10177,22 @@ function ShipmentReport({ orders = [], customers = [], rates = {} }) {
 function CustomerReport({ orders = [], customers = [], payments = [], rates = {} }) {
   const [monthFilter, setMonthFilter] = useState([]);
   const filteredOrders = useMemo(() => {
-    if (monthFilter.length === 0) return orders;
-    return orders.filter((o) => {
-      const d = o.actualShipmentDate || o.shipmentDate || o.orderDate;
+    const expanded = expandOrdersForShipments(orders);
+    if (monthFilter.length === 0) return expanded;
+    return expanded.filter((row) => {
+      const d = row._effectiveDate;
       return d && monthFilter.includes(d.slice(0, 7));
     });
   }, [orders, monthFilter]);
 
   const data = useMemo(() => {
     const map = {};
-    filteredOrders.forEach((o) => {
-      const c = customers.find((x) => x.id === o.customerId);
+    filteredOrders.forEach((row) => {
+      const c = customers.find((x) => x.id === row.customerId);
       const key = c?.name || "—";
       if (!map[key]) map[key] = { name: key, country: c?.country, count: 0, total: 0, paid: 0 };
       map[key].count++;
-      map[key].total += orderTotalUSD(o, rates);
+      map[key].total += expandedOrderTotalUSD(row, rates);
     });
     payments.filter((p) => p.status === "paid").forEach((p) => {
       const o = filteredOrders.find((x) => x.id === p.orderId);
@@ -10177,22 +10240,38 @@ function CustomerReport({ orders = [], customers = [], payments = [], rates = {}
 function ProductReport({ orders = [], products = [], rates = {} }) {
   const [monthFilter, setMonthFilter] = useState([]);
   const filteredOrders = useMemo(() => {
-    if (monthFilter.length === 0) return orders;
-    return orders.filter((o) => {
-      const d = o.actualShipmentDate || o.shipmentDate || o.orderDate;
+    const expanded = expandOrdersForShipments(orders);
+    if (monthFilter.length === 0) return expanded;
+    return expanded.filter((row) => {
+      const d = row._effectiveDate;
       return d && monthFilter.includes(d.slice(0, 7));
     });
   }, [orders, monthFilter]);
 
   const data = useMemo(() => {
     const map = {};
-    filteredOrders.forEach((o) => {
-      (o.items || []).forEach((i) => {
-        const key = i.productCode || "—";
-        if (!map[key]) map[key] = { code: key, name: i.nameTr || i.nameEn || "—", qty: 0, count: 0, total: 0 };
-        map[key].count++;
-        map[key].qty += Number(i.quantity) || 0;
-        map[key].total += toUSD((Number(i.quantity) || 0) * (Number(i.unitPrice) || 0), o.currency, rates);
+    filteredOrders.forEach((row) => {
+      const sh = row._shipment;
+      const isMulti = (row.shipments || []).length > 1;
+      (row.items || []).forEach((i) => {
+        // Çok sevkiyatlıysa sadece bu sevkiyata ait kalemleri say
+        if (isMulti && sh) {
+          const dist = i.shipmentDistribution
+            || (i.shipmentNo ? { [i.shipmentNo]: Math.floor(Number(i.quantity) || 0) } : { 1: Math.floor(Number(i.quantity) || 0) });
+          const qty = Math.floor(Number(dist[sh.no]) || 0);
+          if (qty <= 0) return;
+          const key = i.productCode || "—";
+          if (!map[key]) map[key] = { code: key, name: i.nameTr || i.nameEn || "—", qty: 0, count: 0, total: 0 };
+          map[key].count++;
+          map[key].qty += qty;
+          map[key].total += toUSD(qty * (Number(i.unitPrice) || 0) * (1 - (Number(i.discount) || 0) / 100), row.currency, rates);
+        } else {
+          const key = i.productCode || "—";
+          if (!map[key]) map[key] = { code: key, name: i.nameTr || i.nameEn || "—", qty: 0, count: 0, total: 0 };
+          map[key].count++;
+          map[key].qty += Number(i.quantity) || 0;
+          map[key].total += toUSD((Number(i.quantity) || 0) * (Number(i.unitPrice) || 0) * (1 - (Number(i.discount) || 0) / 100), row.currency, rates);
+        }
       });
     });
     return Object.values(map).sort((a, b) => b.total - a.total);
@@ -10230,22 +10309,23 @@ function ProductReport({ orders = [], products = [], rates = {} }) {
 function CountryReport({ orders = [], customers = [], rates = {} }) {
   const [monthFilter, setMonthFilter] = useState([]);
   const filteredOrders = useMemo(() => {
-    if (monthFilter.length === 0) return orders;
-    return orders.filter((o) => {
-      const d = o.actualShipmentDate || o.shipmentDate || o.orderDate;
+    const expanded = expandOrdersForShipments(orders);
+    if (monthFilter.length === 0) return expanded;
+    return expanded.filter((row) => {
+      const d = row._effectiveDate;
       return d && monthFilter.includes(d.slice(0, 7));
     });
   }, [orders, monthFilter]);
 
   const data = useMemo(() => {
     const map = {};
-    filteredOrders.forEach((o) => {
-      const c = customers.find((x) => x.id === o.customerId);
+    filteredOrders.forEach((row) => {
+      const c = customers.find((x) => x.id === row.customerId);
       const key = c?.country || "—";
       if (!map[key]) map[key] = { country: key, count: 0, customers: new Set(), total: 0 };
       map[key].count++;
-      map[key].customers.add(o.customerId);
-      map[key].total += orderTotalUSD(o, rates);
+      map[key].customers.add(row.customerId);
+      map[key].total += expandedOrderTotalUSD(row, rates);
     });
     return Object.values(map).map((r) => ({ ...r, customerCount: r.customers.size })).sort((a, b) => b.total - a.total);
   }, [filteredOrders, customers, rates]);
@@ -10333,20 +10413,21 @@ function MethodReport({ payments = [], rates = {} }) {
 function StatusReport({ orders = [], rates = {} }) {
   const [monthFilter, setMonthFilter] = useState([]);
   const filteredOrders = useMemo(() => {
-    if (monthFilter.length === 0) return orders;
-    return orders.filter((o) => {
-      const d = o.actualShipmentDate || o.shipmentDate || o.orderDate;
+    const expanded = expandOrdersForShipments(orders);
+    if (monthFilter.length === 0) return expanded;
+    return expanded.filter((row) => {
+      const d = row._effectiveDate;
       return d && monthFilter.includes(d.slice(0, 7));
     });
   }, [orders, monthFilter]);
 
   const data = useMemo(() => {
     const map = {};
-    filteredOrders.forEach((o) => {
-      const key = o.status;
+    filteredOrders.forEach((row) => {
+      const key = row.status;
       if (!map[key]) map[key] = { status: key, label: ORDER_STATUSES.find((x) => x.key === key)?.label || key, count: 0, total: 0 };
       map[key].count++;
-      map[key].total += orderTotalUSD(o, rates);
+      map[key].total += expandedOrderTotalUSD(row, rates);
     });
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [filteredOrders, rates]);

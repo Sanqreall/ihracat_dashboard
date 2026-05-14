@@ -5692,7 +5692,28 @@ function buildShipmentBasedPlan(order, customers) {
   const defPct = Number(template.defPct) || 0;
   const plan = [];
 
+  // ÖN ÖDEME — sipariş TOPLAM tutarından tek seferlik (sipariş onayında alınır)
+  // Sevkiyat bazlı değil, tüm sipariş toplamına göre hesaplanır
+  if (prepPct > 0) {
+    const orderTotals = calcOrderTotals(order);
+    const totalBase = orderTotals.afterDiscount; // KDV hariç toplam mal bedeli
+    const prepAmount = +(totalBase * prepPct / 100).toFixed(2);
+    plan.push({
+      id: uid(),
+      type: "prepayment",
+      shipmentNo: null, // Sipariş geneline ait — belirli bir sevkiyata bağlı değil
+      percentage: prepPct,
+      amount: prepAmount,
+      method,
+      dueDate: orderDate,
+      notes: `Sipariş onayında ön ödeme (%${prepPct} — tüm sipariş toplamı üzerinden)`,
+      _prepaymentBasis: "order_total", // işaretçi: sipariş toplamından hesaplandı
+    });
+  }
+
+  // SEVK ÖNCESİ, VADELİ ve KDV — her sevkiyat için ayrı, o sevkiyatın tutarına göre
   shipments.forEach((sh) => {
+    // KDV tarihi: fiili sevk tarihi varsa onu kullan, yoksa planlanan sevk tarihi
     const effectiveDate = sh.actualShipmentDate || sh.shipmentDate || orderDate;
     const totals = calcShipmentTotals(order, sh.no);
     const base = totals.sub;
@@ -5701,9 +5722,6 @@ function buildShipmentBasedPlan(order, customers) {
 
     const shLabel = sh.name || `${sh.no}. Sevkiyat`;
 
-    if (prepPct > 0) {
-      plan.push({ id: uid(), type: "prepayment", shipmentNo: sh.no, percentage: prepPct, amount: +(base * prepPct / 100).toFixed(2), method, dueDate: orderDate, notes: `${shLabel} — ön ödeme` });
-    }
     if (preShipPct > 0) {
       plan.push({ id: uid(), type: "preShipment", shipmentNo: sh.no, percentage: preShipPct, amount: +(base * preShipPct / 100).toFixed(2), method, dueDate: effectiveDate, notes: `${shLabel} — sevk öncesi` });
     }
@@ -5713,8 +5731,10 @@ function buildShipmentBasedPlan(order, customers) {
     if (prepPct === 0 && preShipPct === 0 && defPct === 0 && base > 0) {
       plan.push({ id: uid(), type: "deferred", shipmentNo: sh.no, percentage: 100, amount: base, method, dueDate: addDays(effectiveDate, vade), notes: `${shLabel} — vadeli (${vade} gün)` });
     }
+    // KDV — fiili sevk tarihi öncelikli, yoksa planlanan sevk tarihi
     if (vatAmt > 0) {
-      plan.push({ id: uid(), type: "vat", shipmentNo: sh.no, percentage: 100, amount: vatAmt, method, dueDate: effectiveDate, notes: `${shLabel} — KDV` });
+      const vatDate = sh.actualShipmentDate || sh.shipmentDate || orderDate;
+      plan.push({ id: uid(), type: "vat", shipmentNo: sh.no, percentage: 100, amount: vatAmt, method, dueDate: vatDate, notes: `${shLabel} — KDV${sh.actualShipmentDate ? " (fiili sevk tarihinde)" : " (planlanan sevk tarihinde)"}` });
     }
   });
 
@@ -6572,6 +6592,53 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
               </div>
 
               {/* Sevkiyat bazlı plan özet tablosu */}
+              {/* ÖN ÖDEME bloğu — sipariş toplamından, shipmentNo=null */}
+              {(editing.paymentPlan || []).filter((p) => p.type === "prepayment" && !p.shipmentNo).length > 0 && (() => {
+                const prepItems = (editing.paymentPlan || []).filter((p) => p.type === "prepayment" && !p.shipmentNo);
+                const orderTotalsDisp = calcOrderTotals(editing);
+                return (
+                  <div className="rounded-md overflow-hidden" style={{ border: `2px solid ${TOKENS.gold}60`, background: TOKENS.gold + "08" }}>
+                    <div className="px-3 py-2 flex items-center justify-between text-[11px] font-bold" style={{ background: TOKENS.gold + "20" }}>
+                      <span style={{ color: TOKENS.goldDark }}>⭐ Ön Ödeme — Sipariş Toplamı Üzerinden</span>
+                      <span style={{ color: TOKENS.muted }}>Sipariş toplam: {fmtMoney(orderTotalsDisp.afterDiscount, editing.currency)} (KDV hariç)</span>
+                    </div>
+                    <div className="divide-y">
+                      {prepItems.map((p, idx) => {
+                        const tp = PAYMENT_PLAN_TYPES.find((t) => t.key === p.type);
+                        const globalIdx = (editing.paymentPlan || []).indexOf(p);
+                        return (
+                          <div key={p.id} className="px-3 py-2 text-[11px]">
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0" style={{ background: TOKENS.gold + "40", color: TOKENS.goldDark }}>{idx + 1}</span>
+                              <span className="font-semibold" style={{ color: TOKENS.goldDark }}>{tp?.label}</span>
+                              <span className="text-[10px] flex-1" style={{ color: TOKENS.muted }}>{p.notes}</span>
+                              <button onClick={() => removePlanItem(globalIdx)} className="p-1 rounded" style={{ color: TOKENS.muted, background: "transparent", border: "none", cursor: "pointer" }} onMouseEnter={(e) => { e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.color = TOKENS.muted; }}><Trash2 size={12} /></button>
+                            </div>
+                            <div className="flex items-center gap-2 pl-7">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-[9px] uppercase tracking-wider" style={{ color: TOKENS.muted }}>Tutar ({editing.currency})</span>
+                                <Input type="number" step="0.01" value={p.amount} onChange={(e) => updatePlanItem(globalIdx, { amount: e.target.value })} className="text-right tabular-nums font-semibold text-[11px] h-6 py-0 px-2 w-32" />
+                              </div>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-[9px] uppercase tracking-wider" style={{ color: TOKENS.muted }}>%</span>
+                                <Input type="number" step="0.1" value={p.percentage} onChange={(e) => updatePlanItem(globalIdx, { percentage: e.target.value })} className="text-right tabular-nums text-[11px] h-6 py-0 px-2 w-20" />
+                              </div>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-[9px] uppercase tracking-wider" style={{ color: TOKENS.muted }}>Tarih</span>
+                                <Input type="date" value={p.dueDate} onChange={(e) => updatePlanItem(globalIdx, { dueDate: e.target.value })} className="text-[10px] h-6 py-0 px-2 w-36" />
+                              </div>
+                              <div className="flex flex-col gap-0.5 flex-1">
+                                <span className="text-[9px] uppercase tracking-wider" style={{ color: TOKENS.muted }}>Açıklama</span>
+                                <Input value={p.notes} onChange={(e) => updatePlanItem(globalIdx, { notes: e.target.value })} className="text-[10px] h-6 py-0 px-2" placeholder="Açıklama..." />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
               {(editing.shipments || []).map((sh) => {
                 const shTotals = calcShipmentTotals(editing, sh.no);
                 const shPlan = (editing.paymentPlan || []).filter((p) => p.shipmentNo === sh.no);
@@ -6592,15 +6659,30 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
                           const tp = PAYMENT_PLAN_TYPES.find((t) => t.key === p.type);
                           const globalIdx = (editing.paymentPlan || []).indexOf(p);
                           return (
-                            <div key={p.id} className="px-3 py-2 flex items-center gap-2 text-[11px]">
-                              <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0" style={{ background: TOKENS[tp?.color] + "20", color: TOKENS[tp?.color] }}>{idx + 1}</span>
-                              <span className="font-semibold w-20" style={{ color: TOKENS[tp?.color] }}>{tp?.label}</span>
-                              <span className="font-mono">{fmtMoney(p.amount, editing.currency)}</span>
-                              <span style={{ color: TOKENS.muted }}>{p.dueDate ? fmtDate(p.dueDate) : "—"}</span>
-                              <span className="flex-1 text-[10px]" style={{ color: TOKENS.muted }}>{p.notes}</span>
-                              <div className="flex gap-1">
-                                <Input type="date" value={p.dueDate} onChange={(e) => updatePlanItem(globalIdx, { dueDate: e.target.value })} className="text-[10px] h-6 py-0 px-1 w-32" />
-                                <button onClick={() => removePlanItem(globalIdx)} className="p-1 rounded" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.color = TOKENS.muted; }}><Trash2 size={12} /></button>
+                            <div key={p.id} className="px-3 py-2 text-[11px]" style={{ background: idx % 2 === 0 ? "white" : TOKENS.cream }}>
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0" style={{ background: TOKENS[tp?.color] + "20", color: TOKENS[tp?.color] }}>{idx + 1}</span>
+                                <span className="font-semibold w-24" style={{ color: TOKENS[tp?.color] }}>{tp?.label}</span>
+                                <span className="flex-1 text-[10px]" style={{ color: TOKENS.muted }}>{p.notes}</span>
+                                <button onClick={() => removePlanItem(globalIdx)} className="p-1 rounded" style={{ color: TOKENS.muted, background: "transparent", border: "none", cursor: "pointer" }} onMouseEnter={(e) => { e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.color = TOKENS.muted; }}><Trash2 size={12} /></button>
+                              </div>
+                              <div className="flex items-center gap-2 pl-7">
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="text-[9px] uppercase tracking-wider" style={{ color: TOKENS.muted }}>Tutar ({editing.currency})</span>
+                                  <Input type="number" step="0.01" value={p.amount} onChange={(e) => updatePlanItem(globalIdx, { amount: e.target.value })} className="text-right tabular-nums font-semibold text-[11px] h-6 py-0 px-2 w-32" />
+                                </div>
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="text-[9px] uppercase tracking-wider" style={{ color: TOKENS.muted }}>%</span>
+                                  <Input type="number" step="0.1" value={p.percentage} onChange={(e) => updatePlanItem(globalIdx, { percentage: e.target.value })} className="text-right tabular-nums text-[11px] h-6 py-0 px-2 w-20" />
+                                </div>
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="text-[9px] uppercase tracking-wider" style={{ color: TOKENS.muted }}>Tarih</span>
+                                  <Input type="date" value={p.dueDate} onChange={(e) => updatePlanItem(globalIdx, { dueDate: e.target.value })} className="text-[10px] h-6 py-0 px-2 w-36" />
+                                </div>
+                                <div className="flex flex-col gap-0.5 flex-1">
+                                  <span className="text-[9px] uppercase tracking-wider" style={{ color: TOKENS.muted }}>Açıklama</span>
+                                  <Input value={p.notes} onChange={(e) => updatePlanItem(globalIdx, { notes: e.target.value })} className="text-[10px] h-6 py-0 px-2" placeholder="Açıklama..." />
+                                </div>
                               </div>
                             </div>
                           );

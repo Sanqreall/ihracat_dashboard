@@ -4638,9 +4638,30 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
     if (editing.id) {
       // Mevcut sipariş — plan değişmiş mi ve tahsilatlar var mı kontrol et
       const oldOrder = orders.find((o) => o.id === editing.id);
-      const oldPlanIds = new Set((oldOrder?.paymentPlan || []).map((p) => p.id));
-      const newPlanIds = new Set((cleaned.paymentPlan || []).map((p) => p.id));
-      // Plan değişti mi: kaleme göre ID veya tutar farkı
+
+      // Tarih değişti mi? (sipariş tarihi, planlanan sevk tarihi, fiili sevk tarihi)
+      const datesChanged =
+        oldOrder?.orderDate !== cleaned.orderDate ||
+        oldOrder?.shipmentDate !== cleaned.shipmentDate ||
+        oldOrder?.actualShipmentDate !== cleaned.actualShipmentDate;
+
+      // Tarih değişmişse, tahsil edilmemiş plan kalemlerinin tarihlerini otomatik güncelle
+      if (datesChanged && cleaned.paymentPlan && cleaned.paymentPlan.length > 0) {
+        const paidPlanIds = new Set(
+          payments
+            .filter((p) => p.orderId === editing.id && p.status === "paid")
+            .map((p) => p.planItemId)
+            .filter(Boolean)
+        );
+        const recalcedPlan = recalcPaymentPlanDates(cleaned.paymentPlan, cleaned, customers);
+        cleaned.paymentPlan = cleaned.paymentPlan.map((item) => {
+          if (paidPlanIds.has(item.id)) return item; // Tahsil edilmiş → dokunma
+          const recalced = recalcedPlan.find((r) => r.id === item.id);
+          return recalced ? recalced : item;
+        });
+      }
+
+      // Plan değişti mi: kaleme göre ID veya tutar/tarih farkı
       const planChanged =
         oldOrder?.paymentPlan?.length !== cleaned.paymentPlan?.length ||
         (oldOrder?.paymentPlan || []).some((op) => {
@@ -4650,20 +4671,18 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
       // Bu siparişe ait tahsil edilmiş ödemeler
       const paidPayments = payments.filter((p) => p.orderId === editing.id && p.status === "paid");
 
-      if (planChanged && paidPayments.length > 0) {
+      // Tarih güncellemesi: tahsilatlara dokunma, sadece pending olanları güncelle
+      // Yapısal plan değişikliği (yeni kalem/silme): eski davranış
+      if (planChanged && paidPayments.length > 0 && !datesChanged) {
         const ok = confirm(
-          `Bu sipariş için zaten ${paidPayments.length} tahsil edilmiş ödeme kaydı var.\n\nÖdeme planı değişikliği bu tahsilatları SİLECEK ve plan baştan oluşturulacak.\n\nDevam edilsin mi?`
+          `Bu sipariş için zaten ${paidPayments.length} tahsil edilmiş ödeme kaydı var.\n\nÖdeme planı değişikliği yapıldı. Tahsil edilmiş ödemeler korunacak, diğerleri güncellenecek.\n\nDevam edilsin mi?`
         );
         if (!ok) return;
-        // Tahsilatları temizle
-        setPayments((arr) => arr.filter((p) => p.orderId !== editing.id));
-        // Sonra yeniden oluştur
-        setTimeout(() => syncPaymentsFromPlan(cleaned, [], setPayments), 0);
-      } else {
-        syncPaymentsFromPlan(cleaned, payments, setPayments);
       }
+      syncPaymentsFromPlan(cleaned, payments, setPayments);
       setOrders((arr) => arr.map((x) => x.id === editing.id ? cleaned : x));
-      showToast("Sipariş güncellendi", "success");
+      const dateMsg = datesChanged ? " · Vade tarihleri güncellendi" : "";
+      showToast(`Sipariş güncellendi${dateMsg}`, "success");
     } else {
       const newOrder = { ...cleaned, id: uid(), createdAt: todayISO() };
       setOrders((arr) => [...arr, newOrder]);
@@ -5553,6 +5572,9 @@ function syncPaymentsFromPlan(order, currentPayments, setPayments) {
   const existingForOrder = currentPayments.filter((p) => p.orderId === order.id);
   const orderPlanIds = new Set((order.paymentPlan || []).map((p) => p.id));
 
+  // Plan kalemine göre hızlı erişim haritası
+  const planById = Object.fromEntries((order.paymentPlan || []).map((p) => [p.id, p]));
+
   // Bir plan kalemine ait HERHANGİ bir kayıt varsa (paid veya pending), yeni oluşturma
   // Bu sayede kısmi tahsilat sonrası oluşturulan "kalan" pending kayıtlar korunur
   const newPayments = (order.paymentPlan || []).map((plan) => {
@@ -5578,14 +5600,72 @@ function syncPaymentsFromPlan(order, currentPayments, setPayments) {
 
   setPayments((arr) => {
     // Mevcutlardan: bu siparişe ait olmayanlar veya paid olanlar veya planı hâlâ var olanlar kalır
+    // Pending olanların dueDate'i plan kalemindeki güncel tarihe güncellenir
     const filtered = arr.filter((p) => {
       if (p.orderId !== order.id) return true;
       if (!p.planItemId) return true; // Manuel kayıt, koru
       if (p.status === "paid") return true; // Tahsil edilmiş, asla silme
       // Pending: plan kalemi hâlâ var ise koru, yoksa sil
       return orderPlanIds.has(p.planItemId);
+    }).map((p) => {
+      // Sadece bu siparişe ait, pending, plan kalemi olan kayıtların tarihini güncelle
+      if (
+        p.orderId === order.id &&
+        p.status !== "paid" &&
+        p.planItemId &&
+        planById[p.planItemId]
+      ) {
+        const planItem = planById[p.planItemId];
+        return { ...p, dueDate: planItem.dueDate, amount: planItem.amount, type: planItem.type };
+      }
+      return p;
     });
     return [...filtered, ...newPayments];
+  });
+}
+
+// Sipariş tarih değişikliğinde ödeme planı vade tarihlerini otomatik hesapla
+// Kurallar:
+//   - prepayment  → sipariş tarihi (orderDate)
+//   - preShipment, deferred, vat → fiili sevk tarihi varsa fiili, yoksa planlanan sevk tarihi
+//   - deferred → sevk tarihine vade günü eklenir
+//   - paid olanlar dokunulmaz
+function recalcPaymentPlanDates(paymentPlan, order, customers) {
+  if (!paymentPlan || paymentPlan.length === 0) return paymentPlan;
+  const customer = customers.find((c) => c.id === order.customerId);
+  const vade = Number(customer?.defaultPaymentTerms) || 30;
+
+  // Siparişin efektif sevk tarihi: fiili varsa fiili, yoksa planlanan
+  // Çoklu sevkiyat varsa ilk sevkiyatın tarihini baz al (veya sipariş seviyesi)
+  const effectiveShipDate =
+    order.actualShipmentDate ||
+    (order.shipments && order.shipments.length > 0
+      ? (order.shipments[0].actualShipmentDate || order.shipments[0].shipmentDate)
+      : null) ||
+    order.shipmentDate ||
+    order.orderDate ||
+    todayISO();
+
+  const orderDate = order.orderDate || todayISO();
+
+  return paymentPlan.map((item) => {
+    let newDueDate = item.dueDate; // varsayılan: değişme
+
+    if (item.type === "prepayment") {
+      // Ön ödeme → sipariş tarihine sabitlenir
+      newDueDate = orderDate;
+    } else if (item.type === "preShipment") {
+      // Sevk öncesi → sevk tarihi
+      newDueDate = effectiveShipDate;
+    } else if (item.type === "deferred") {
+      // Vadeli → sevk tarihinden itibaren vade günü
+      newDueDate = addDays(effectiveShipDate, vade);
+    } else if (item.type === "vat") {
+      // KDV → genelde sevk tarihinde ödenir
+      newDueDate = effectiveShipDate;
+    }
+
+    return { ...item, dueDate: newDueDate };
   });
 }
 

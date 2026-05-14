@@ -10723,7 +10723,12 @@ function SettingsView({ customers, setCustomers, products, setProducts, bankAcco
             Sistemde {bankAccounts.length} banka hesabı var. Banka hesabı zorunlu değil — tahsilat girerken opsiyonel olarak seçebilirsin.
           </p>
         </Card>
-
+        
+         <div key={m.label} className="rounded-md p-3" style={{ background: TOKENS.cream }}>
+                  <Icon size={14} className="mx-auto mb-1" style={{ color: TOKENS.gold }} />
+                  <div className="text-xl font-bold" style={{ color: TOKENS.ink, fontFamily: FONT_DISPLAY }}>{m.value}</div>
+                  <div className="text-[10px] uppercase tracking-wider" style={{ color: TOKENS.muted }}>{m.label}</div>
+                </div>
         
 
         <div className="text-center text-[11px] py-4" style={{ color: TOKENS.muted }}>

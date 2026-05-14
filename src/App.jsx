@@ -10730,7 +10730,8 @@ function SettingsView({ customers, setCustomers, products, setProducts, bankAcco
             <div className="p-3 rounded-md" style={{ background: TOKENS.gold + "12", border: `1px solid ${TOKENS.gold}40` }}>
               <strong>Mevcut oturum:</strong> {currentUser ? `${currentUser.name} (${currentUser.email}) — ${USER_ROLES.find((r) => r.key === currentUser.role)?.label || currentUser.role}` : "Misafir (sadece görüntüleme)"}
             </div>
-          </Card>
+         </div>
+        </Card>
         
  {/* Veri özeti */}
         <Card title="Veri Özeti">

@@ -6065,6 +6065,82 @@ function OrdersCalendarView({ orders, customers, rates, payments, onView, onEdit
 }
 
 
+// Sevkiyat bazlı plan için inline tip seçimli kalem ekleme butonu
+function AddPlanItemInline({ shipmentNo, shipmentDate, currency, onAdd }) {
+  const [open, setOpen] = React.useState(false);
+  const [type, setType] = React.useState("prepayment");
+  const isOrderLevel = shipmentNo === null;
+
+  const typeOptions = [
+    { key: "prepayment",  label: "Ön Ödeme",   color: "gold" },
+    { key: "preShipment", label: "Sevk Öncesi", color: "navy" },
+    { key: "deferred",    label: "Vadeli",       color: "copper" },
+    { key: "vat",         label: "KDV",          color: "forest" },
+  ];
+
+  const handleAdd = () => {
+    const item = {
+      id: uid(),
+      type,
+      shipmentNo,
+      percentage: 0,
+      amount: 0,
+      method: "bank_transfer",
+      dueDate: shipmentDate || "",
+      notes: "",
+    };
+    onAdd(item);
+    setOpen(false);
+    setType("prepayment");
+  };
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold transition"
+        style={{ background: TOKENS.ink + "12", color: TOKENS.ink, border: `1px solid ${TOKENS.border}`, cursor: "pointer" }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.ink + "22"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = TOKENS.ink + "12"; }}
+        title={isOrderLevel ? "Sipariş geneline kalem ekle" : "Bu sevkiyata kalem ekle"}
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+        Kalem Ekle
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 rounded px-2 py-1" style={{ background: "white", border: `1px solid ${TOKENS.border}`, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
+      <select
+        value={type}
+        onChange={(e) => setType(e.target.value)}
+        className="text-[11px] border rounded px-1.5 py-0.5 h-6"
+        style={{ borderColor: TOKENS.border, color: TOKENS.ink }}
+        autoFocus
+      >
+        {typeOptions.map((t) => (
+          <option key={t.key} value={t.key}>{t.label}</option>
+        ))}
+      </select>
+      <button
+        onClick={handleAdd}
+        className="px-2 py-0.5 rounded text-[10px] font-bold text-white transition"
+        style={{ background: TOKENS.ink, border: "none", cursor: "pointer" }}
+        onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+      >Ekle</button>
+      <button
+        onClick={() => setOpen(false)}
+        className="px-1.5 py-0.5 rounded text-[10px] transition"
+        style={{ background: "transparent", border: "none", color: TOKENS.muted, cursor: "pointer" }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = TOKENS.oxblood; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = TOKENS.muted; }}
+      >✕</button>
+    </div>
+  );
+}
+
 function OrderEditModal({ open, onClose, editing, setEditing, customers, products, onSave }) {
   if (!editing) return null;
 
@@ -6540,43 +6616,8 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
                   Sevkiyat Bazlı
                 </button>
               </div>
-              {editing.paymentBasis !== "shipment" ? (
+              {editing.paymentBasis !== "shipment" && (
                 <Btn variant="secondary" size="xs" icon={Plus} onClick={() => addPlanItem()}>Plan Kalemi Ekle</Btn>
-              ) : (
-                <div className="flex items-center gap-1">
-                  <select
-                    id="manualShipmentNo"
-                    className="text-[11px] border rounded px-1.5 py-1 h-7"
-                    style={{ borderColor: TOKENS.border, color: TOKENS.ink }}
-                    defaultValue=""
-                  >
-                    <option value="">Sevkiyat seç...</option>
-                    {(editing.shipments || []).map((sh) => (
-                      <option key={sh.no} value={sh.no}>{sh.name || `${sh.no}. Sevkiyat`}</option>
-                    ))}
-                    <option value="order">Sipariş geneli (ön ödeme)</option>
-                  </select>
-                  <Btn variant="secondary" size="xs" icon={Plus} onClick={() => {
-                    const sel = document.getElementById("manualShipmentNo");
-                    const val = sel?.value;
-                    if (!val) { alert("Önce bir sevkiyat seç."); return; }
-                    const isOrder = val === "order";
-                    const shipNo = isOrder ? null : Number(val);
-                    const sh = !isOrder && (editing.shipments || []).find((s) => s.no === shipNo);
-                    const effectiveDate = sh ? (sh.actualShipmentDate || sh.shipmentDate || "") : (editing.orderDate || "");
-                    const item = {
-                      id: uid(),
-                      type: isOrder ? "prepayment" : "preShipment",
-                      shipmentNo: shipNo,
-                      percentage: 0,
-                      amount: 0,
-                      method: "bank_transfer",
-                      dueDate: effectiveDate,
-                      notes: isOrder ? "Manuel ön ödeme" : (sh?.name || `${shipNo}. Sevkiyat`) + " — manuel kalem",
-                    };
-                    setEditing({ ...editing, paymentPlan: [...(editing.paymentPlan || []), item] });
-                  }}>Manuel Kalem Ekle</Btn>
-                </div>
               )}
             </div>
           </div>
@@ -6629,16 +6670,27 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
 
               {/* Sevkiyat bazlı plan özet tablosu */}
               {/* ÖN ÖDEME bloğu — sipariş toplamından, shipmentNo=null */}
-              {(editing.paymentPlan || []).filter((p) => !p.shipmentNo).length > 0 && (() => {
+              {(() => {
                 const prepItems = (editing.paymentPlan || []).filter((p) => !p.shipmentNo);
                 const orderTotalsDisp = calcOrderTotals(editing);
                 return (
                   <div className="rounded-md overflow-hidden" style={{ border: `2px solid ${TOKENS.gold}60`, background: TOKENS.gold + "08" }}>
                     <div className="px-3 py-2 flex items-center justify-between text-[11px] font-bold" style={{ background: TOKENS.gold + "20" }}>
-                      <span style={{ color: TOKENS.goldDark }}>⭐ Ön Ödeme — Sipariş Toplamı Üzerinden</span>
-                      <span style={{ color: TOKENS.muted }}>Sipariş toplam: {fmtMoney(orderTotalsDisp.afterDiscount, editing.currency)} (KDV hariç)</span>
+                      <span style={{ color: TOKENS.goldDark }}>⭐ Sipariş Geneli Kalemler</span>
+                      <div className="flex items-center gap-2">
+                        <span style={{ color: TOKENS.muted }}>Toplam: {fmtMoney(orderTotalsDisp.afterDiscount, editing.currency)} (KDV hariç)</span>
+                        <AddPlanItemInline
+                          shipmentNo={null}
+                          shipmentDate={editing.orderDate || ""}
+                          currency={editing.currency}
+                          onAdd={(item) => setEditing({ ...editing, paymentPlan: [...(editing.paymentPlan || []), item] })}
+                        />
+                      </div>
                     </div>
                     <div className="divide-y">
+                      {prepItems.length === 0 && (
+                        <div className="px-3 py-2 text-[11px]" style={{ color: TOKENS.muted }}>Sipariş geneli kalem yok — sağ üstteki "Kalem Ekle" ile ekle.</div>
+                      )}
                       {prepItems.map((p, idx) => {
                         const tp = PAYMENT_PLAN_TYPES.find((t) => t.key === p.type);
                         const globalIdx = (editing.paymentPlan || []).indexOf(p);
@@ -6683,11 +6735,19 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
                   <div key={sh.id} className="rounded-md overflow-hidden" style={{ border: `1px solid ${TOKENS.border}` }}>
                     <div className="px-3 py-2 flex items-center justify-between text-[11px] font-bold" style={{ background: TOKENS.cream }}>
                       <span>{sh.name || `${sh.no}. Sevkiyat`}</span>
-                      <span style={{ color: TOKENS.muted }}>
-                        {effectiveDate ? fmtDate(effectiveDate) : <span style={{ color: TOKENS.terracotta }}>Tarih girilmedi</span>}
-                        &nbsp;·&nbsp;{fmtMoney(shTotals.sub, editing.currency)}
-                        {shTotals.vat > 0 && <> + KDV {fmtMoney(shTotals.vat, editing.currency)}</>}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span style={{ color: TOKENS.muted }}>
+                          {effectiveDate ? fmtDate(effectiveDate) : <span style={{ color: TOKENS.terracotta }}>Tarih girilmedi</span>}
+                          &nbsp;·&nbsp;{fmtMoney(shTotals.sub, editing.currency)}
+                          {shTotals.vat > 0 && <> + KDV {fmtMoney(shTotals.vat, editing.currency)}</>}
+                        </span>
+                        <AddPlanItemInline
+                          shipmentNo={sh.no}
+                          shipmentDate={effectiveDate || ""}
+                          currency={editing.currency}
+                          onAdd={(item) => setEditing({ ...editing, paymentPlan: [...(editing.paymentPlan || []), item] })}
+                        />
+                      </div>
                     </div>
                     {shPlan.length > 0 ? (
                       <div className="divide-y" style={{ borderTop: `1px solid ${TOKENS.border}` }}>
@@ -6725,7 +6785,7 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
                         })}
                       </div>
                     ) : (
-                      <div className="px-3 py-2 text-[11px]" style={{ color: TOKENS.muted }}>Henüz plan yok — yukarıdan oluştur.</div>
+                      <div className="px-3 py-2 text-[11px]" style={{ color: TOKENS.muted }}>Bu sevkiyat için henüz plan kalemi yok — sağ üstteki butonu kullan.</div>
                     )}
                   </div>
                 );

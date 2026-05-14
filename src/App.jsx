@@ -943,7 +943,7 @@ const fmtDateWithWeek = (d) => {
 // Yeni pencere açar, A4 sayfa stiliyle render eder, otomatik yazdırma diyaloğu açar.
 // Kullanıcı "PDF olarak kaydet" seçeneğini seçebilir.
 
-function printPDF({ title, subtitle, contentHtml, orientation = "portrait", lang }) {
+function printPDF({ title, subtitle, contentHtml, orientation = "portrait", lang, filters, kpiCards }) {
   const w = window.open("", "_blank", "width=1000,height=750");
   // Eğer lang parametresi verilmediyse localStorage'dan otomatik oku
   const activeLang = lang || getStoredLang();
@@ -952,6 +952,27 @@ function printPDF({ title, subtitle, contentHtml, orientation = "portrait", lang
   const t = (key) => tr(activeLang, key);
   const brandTitle = activeLang === "en" ? "Export Operations" : "İhracat Operasyonları";
   const brandSub = activeLang === "en" ? "Management System" : "Yönetim Sistemi";
+
+  // Filtre özeti HTML'i (varsa)
+  const filtersHtml = (filters && filters.length > 0) ? `
+    <div style="background:#FFF8E7;border:1px solid #C9A961;border-left:3px solid #C9A961;border-radius:3px;padding:6px 10px;margin-bottom:10px;font-size:10px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+      <strong style="color:#A88947;text-transform:uppercase;letter-spacing:0.04em;font-size:9px">🔍 ${activeLang === "en" ? "Active Filters" : "Aktif Filtreler"}:</strong>
+      ${filters.map((f) => `<span style="background:white;padding:2px 8px;border-radius:3px;border:1px solid #E8D9A8;color:#0F1A2E"><strong>${f.label}:</strong> ${f.value}</span>`).join("")}
+    </div>
+  ` : "";
+
+  // KPI kartları HTML'i (varsa)
+  const kpiHtml = (kpiCards && kpiCards.length > 0) ? `
+    <div class="kpi-grid" style="grid-template-columns:repeat(${Math.min(kpiCards.length, 4)}, 1fr)">
+      ${kpiCards.map((k) => `
+        <div class="kpi"${k.color ? ` style="border-left-color:${k.color}"` : ""}>
+          <div class="kpi-label">${k.label}</div>
+          <div class="kpi-value"${k.color ? ` style="color:${k.color}"` : ""}>${k.value}</div>
+          ${k.sub ? `<div style="font-size:9px;color:#7A736A;margin-top:2px">${k.sub}</div>` : ""}
+        </div>
+      `).join("")}
+    </div>
+  ` : "";
 
   const html = `<!DOCTYPE html>
 <html lang="tr">
@@ -1038,6 +1059,8 @@ function printPDF({ title, subtitle, contentHtml, orientation = "portrait", lang
       <div style="margin-top:4px;color:#0F1A2E;font-weight:600">${fmtDateLong(todayISO())}</div>
     </div>
   </div>
+  ${filtersHtml}
+  ${kpiHtml}
   ${contentHtml}
   <div class="footer">
     ${t("pdfFooter")} · ${fmtDateLong(todayISO())}
@@ -3124,12 +3147,6 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
     const overdueCount = filteredList.filter((c) => c.overdueBalance > 0).length;
 
     const content = `
-      <div class="kpi-grid">
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Total Customers" : "Toplam Müşteri"}</div><div class="kpi-value">${filteredList.length}</div></div>
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Total Revenue (USD)" : "Toplam Ciro (USD)"}</div><div class="kpi-value">$${totalUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Total Receivable (USD)" : "Toplam Alacak (USD)"}</div><div class="kpi-value" style="color:#B87333">$${totalOpen.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Overdue Receivable (USD)" : "Gecikmiş Alacak (USD)"}</div><div class="kpi-value" style="color:#A6383D">$${totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-      </div>
       ${overdueCount > 0 ? `<div style="font-size:10px;padding:6px 10px;background:#A6383D15;border-left:3px solid #A6383D;margin-bottom:8px"><strong style="color:#A6383D">⚠ ${overdueCount} ${lang === "en" ? `customer(s) have overdue receivables. Total overdue` : `müşteride gecikmiş alacak var. Toplam gecikmiş tutar`}: $${totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</strong></div>` : ""}
       <table>
         <thead>
@@ -3150,12 +3167,22 @@ function CustomersView({ customers, setCustomers, orders, payments, bankAccounts
       </table>
     `;
 
+    const filterList = [];
+    if (search) filterList.push({ label: lang === "en" ? "Search" : "Arama", value: `"${search}"` });
+
     printPDF({
       title: lang === "en" ? "Customer List · Receivables Summary" : "Müşteri Listesi · Alacak/Verecek Özeti",
-      subtitle: `${filteredList.length} ${lang === "en" ? "customers" : "müşteri"}${search ? (lang === "en" ? ` · search: "${search}"` : ` · arama: "${search}"`) : ""}`,
+      subtitle: `${filteredList.length} ${lang === "en" ? "customers" : "müşteri"}`,
       contentHtml: content,
       orientation: "landscape",
       lang,
+      filters: filterList,
+      kpiCards: [
+        { label: lang === "en" ? "Total Customers" : "Toplam Müşteri", value: filteredList.length },
+        { label: lang === "en" ? "Total Revenue (USD)" : "Toplam Ciro (USD)", value: "$" + totalUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0}) },
+        { label: lang === "en" ? "Total Receivable (USD)" : "Toplam Alacak (USD)", value: "$" + totalOpen.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0}), color: "#B87333" },
+        { label: lang === "en" ? "Overdue (USD)" : "Gecikmiş (USD)", value: "$" + totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0}), color: "#A6383D" },
+      ],
     });
   };
 
@@ -4002,12 +4029,6 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
     const cats = [...new Set(list.map((p) => p.category).filter(Boolean))].length;
 
     const content = `
-      <div class="kpi-grid">
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Total Products" : "Toplam Ürün"}</div><div class="kpi-value">${list.length}</div></div>
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Categories" : "Kategori"}</div><div class="kpi-value">${cats}</div></div>
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Total Revenue (USD)" : "Toplam Ciro (USD)"}</div><div class="kpi-value">$${totalCiro.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Active Products" : "Aktif Ürün"}</div><div class="kpi-value">${list.filter((p) => p.totalQty > 0).length}</div></div>
-      </div>
       <table>
         <thead>
           <tr>
@@ -4025,12 +4046,22 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
       </table>
     `;
 
+    const filterList = [];
+    if (search) filterList.push({ label: lang === "en" ? "Search" : "Arama", value: `"${search}"` });
+
     printPDF({
       title: lang === "en" ? "Product Catalog" : "Ürün Kataloğu",
-      subtitle: `${list.length} ${lang === "en" ? "products" : "ürün"}${search ? (lang === "en" ? ` · search: "${search}"` : ` · arama: "${search}"`) : ""}`,
+      subtitle: `${list.length} ${lang === "en" ? "products" : "ürün"}`,
       contentHtml: content,
       orientation: "landscape",
       lang,
+      filters: filterList,
+      kpiCards: [
+        { label: lang === "en" ? "Total Products" : "Toplam Ürün", value: list.length },
+        { label: lang === "en" ? "Categories" : "Kategori", value: cats },
+        { label: lang === "en" ? "Total Revenue (USD)" : "Toplam Ciro (USD)", value: "$" + totalCiro.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0}), color: "#3E7D5A" },
+        { label: lang === "en" ? "Active Products" : "Aktif Ürün", value: list.filter((p) => p.totalQty > 0).length },
+      ],
     });
   };
 
@@ -4463,62 +4494,87 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
 
     const rows = dataToUse.map((o) => {
       const c = customers.find((x) => x.id === o.customerId);
-      const t = orderTotal(o);
+      const amt = getFilteredOrderAmount(o);
+      const fullTotal = orderTotal(o);
       const paid = orderPaidAmount(o, payments);
-      const remaining = t - paid;
+      const remaining = fullTotal - paid;
       const st = ORDER_STATUSES.find((s) => s.key === o.status);
-      const usd = orderTotalUSD ? orderTotalUSD(o, rates) : toUSD(t, o.currency, rates);
+      const usdAmt = toUSD(amt.total, o.currency, rates);
+      const isFilteredShipment = !!o._visibleShipmentNos;
+      const shipmentCount = (o.shipments || []).length;
+      const visibleCount = o._visibleShipmentNos ? o._visibleShipmentNos.length : shipmentCount;
+      // Sevk tarihi tek sevkiyatlıysa o, çoklu için "X sevkiyat"
+      const shipmentInfo = shipmentCount > 0
+        ? (isFilteredShipment
+            ? `${visibleCount}/${shipmentCount} ${lang === "en" ? "ship" : "sevk"}`
+            : `${shipmentCount} ${lang === "en" ? "ship" : "sevk"}`)
+        : "—";
+      // Planlanan/Fiili: en erken sevkiyatın tarihi
+      const visibleShipments = o.shipments && o.shipments.length > 0
+        ? (o._visibleShipmentNos ? o.shipments.filter((sh) => o._visibleShipmentNos.includes(sh.no)) : o.shipments)
+        : null;
+      const planDate = visibleShipments
+        ? visibleShipments.map((s) => s.shipmentDate).filter(Boolean).sort()[0] || o.shipmentDate
+        : o.shipmentDate;
+      const actualDate = visibleShipments
+        ? visibleShipments.map((s) => s.actualShipmentDate).filter(Boolean).sort()[0] || o.actualShipmentDate
+        : o.actualShipmentDate;
       return `
         <tr>
-          <td class="text-mono">${htmlEscape(o.orderNumber)}</td>
+          <td class="text-mono">${htmlEscape(o.orderNumber)}${isFilteredShipment ? `<div style="font-size:8px;color:#B87333;font-weight:700">⚐ filtreli sevk</div>` : ""}</td>
           <td><div style="font-weight:700">${htmlEscape(c?.name || "—")}</div><div style="font-size:9px;color:#7A736A">${htmlEscape(c?.country || "")}</div></td>
           <td>${fmtDate(o.orderDate)}<div style="font-size:9px;color:#7A736A">W${getISOWeek(o.orderDate) || "—"}</div></td>
-          <td>${o.shipmentDate ? fmtDate(o.shipmentDate) : "—"}${o.shipmentDate ? `<div style="font-size:9px;color:#7A736A">W${getISOWeek(o.shipmentDate)}</div>` : ""}</td>
-          <td>${o.actualShipmentDate ? `<span class="text-success">${fmtDate(o.actualShipmentDate)}</span><div style="font-size:9px;color:#3E7D5A">W${getISOWeek(o.actualShipmentDate)}</div>` : "—"}</td>
+          <td>${planDate ? fmtDate(planDate) : "—"}${planDate ? `<div style="font-size:9px;color:#7A736A">W${getISOWeek(planDate)}</div>` : ""}${shipmentCount > 1 ? `<div style="font-size:8px;color:#A88947">${shipmentInfo}</div>` : ""}</td>
+          <td>${actualDate ? `<span class="text-success">${fmtDate(actualDate)}</span><div style="font-size:9px;color:#3E7D5A">W${getISOWeek(actualDate)}</div>` : "—"}</td>
           <td class="center">${(o.items || []).length}</td>
-          <td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(t, o.currency)}</td>
+          <td class="right text-mono">${fmtMoneyPDF(amt.exVat, o.currency)}</td>
+          <td class="right text-mono" style="color:#A88947">${amt.vat > 0 ? fmtMoneyPDF(amt.vat, o.currency) : "—"}</td>
+          <td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(amt.total, o.currency)}</td>
           <td class="right text-mono text-success">${paid > 0 ? fmtMoneyPDF(paid, o.currency) : "—"}</td>
           <td class="right text-mono ${remaining > 0.01 ? 'text-warning' : 'text-success'}">${remaining > 0.01 ? fmtMoneyPDF(remaining, o.currency) : "✓"}</td>
-          <td class="right text-mono" style="color:#7A736A">$${(usd || 0).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+          <td class="right text-mono" style="color:#7A736A">$${(usdAmt || 0).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
           <td>${st?.label || o.status}</td>
         </tr>`;
     }).join("");
 
-    // KPI'lar
-    const totalUSD = filtered.reduce((s, o) => s + (orderTotalUSD ? orderTotalUSD(o, rates) : toUSD(orderTotal(o), o.currency, rates)), 0);
-    const totalPaidUSD = filtered.reduce((s, o) => s + toUSD(orderPaidAmount(o, payments), o.currency, rates), 0);
-    const shipped = filtered.filter((o) => o.actualShipmentDate).length;
+    // KPI: alt toplam kartı ile aynı mantık
+    let exVatUSD = 0, vatUSD = 0, totalUSD = 0;
+    dataToUse.forEach((o) => {
+      const amt = getFilteredOrderAmount(o);
+      exVatUSD += toUSD(amt.exVat, o.currency, rates);
+      vatUSD += toUSD(amt.vat, o.currency, rates);
+      totalUSD += toUSD(amt.total, o.currency, rates);
+    });
+    const totalPaidUSD = dataToUse.reduce((s, o) => s + toUSD(orderPaidAmount(o, payments), o.currency, rates), 0);
+    const hasShipmentFilter = dataToUse.some((o) => o._visibleShipmentNos);
 
-    // Filtre özeti
-    const filters = [];
-    if (search) filters.push(`${lang === "en" ? "Search" : "Arama"}: "${search}"`);
-    if (statusFilter.length > 0) filters.push(`${t("status")}: ${statusFilter.map((s) => ORDER_STATUSES.find((x) => x.key === s)?.label || s).join(", ")}`);
-    if (customerFilter.length > 0) filters.push(`${t("customer")}: ${customerFilter.map((id) => customers.find((c) => c.id === id)?.name || id).join(", ")}`);
-    if (curFilter.length > 0) filters.push(`${lang === "en" ? "Currency" : "Para Birimi"}: ${curFilter.join(", ")}`);
-    if (dateRange.from || dateRange.to) filters.push(`${lang === "en" ? "Date" : "Tarih"}: ${dateRange.from || "..."} → ${dateRange.to || "..."}`);
+    // Filtre özeti — structured
+    const filterList = [];
+    if (search) filterList.push({ label: lang === "en" ? "Search" : "Arama", value: `"${search}"` });
+    if (statusFilter.length > 0) filterList.push({ label: t("status"), value: statusFilter.map((s) => ORDER_STATUSES.find((x) => x.key === s)?.label || s).join(", ") });
+    if (customerFilter.length > 0) filterList.push({ label: t("customer"), value: customerFilter.map((id) => customers.find((c) => c.id === id)?.name || id).join(", ") });
+    if (curFilter.length > 0) filterList.push({ label: lang === "en" ? "Currency" : "Para Birimi", value: curFilter.join(", ") });
+    if (monthFilter.length > 0) filterList.push({ label: lang === "en" ? "Month" : "Ay", value: monthFilter.join(", ") });
+    if (dateRange.from || dateRange.to) filterList.push({ label: lang === "en" ? "Date" : "Tarih", value: `${dateRange.from || "..."} → ${dateRange.to || "..."}` });
 
     const content = `
-      <div class="kpi-grid">
-        <div class="kpi"><div class="kpi-label">Toplam Sipariş</div><div class="kpi-value">${filtered.length}</div></div>
-        <div class="kpi"><div class="kpi-label">Sevk Edilen</div><div class="kpi-value">${shipped}</div></div>
-        <div class="kpi"><div class="kpi-label">Toplam Ciro (USD)</div><div class="kpi-value">$${totalUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-        <div class="kpi"><div class="kpi-label">Tahsil (USD)</div><div class="kpi-value" style="color:#3E7D5A">$${totalPaidUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-      </div>
-      ${filters.length ? `<div style="font-size:10px;padding:6px 10px;background:#F8F5EE;border-radius:3px;margin-bottom:8px"><strong>Filtreler:</strong> ${filters.join(" · ")}</div>` : ""}
+      ${hasShipmentFilter ? `<div style="background:#B8733315;border-left:3px solid #B87333;padding:6px 10px;margin-bottom:10px;font-size:10px;color:#A88947"><strong>⚐ ${lang === "en" ? "Shipment-level filter active" : "Sevkiyat bazlı filtre aktif"}:</strong> ${lang === "en" ? "Amounts reflect only the shipments matching the date filter, not the full order." : "Tutarlar sadece tarih filtresine uyan sevkiyatları yansıtır, tüm siparişi değil."}</div>` : ""}
       <table>
         <thead>
           <tr>
-            <th>Sipariş No</th>
-            <th>Müşteri</th>
-            <th>Sipariş</th>
-            <th>Plan. Sevk</th>
-            <th>Fiili Sevk</th>
-            <th class="center">Klm</th>
-            <th class="right">Tutar</th>
-            <th class="right">Tahsil</th>
-            <th class="right">Kalan</th>
+            <th>${lang === "en" ? "Order No" : "Sipariş No"}</th>
+            <th>${lang === "en" ? "Customer" : "Müşteri"}</th>
+            <th>${lang === "en" ? "Order" : "Sipariş"}</th>
+            <th>${lang === "en" ? "Plan. Ship" : "Plan. Sevk"}</th>
+            <th>${lang === "en" ? "Actual Ship" : "Fiili Sevk"}</th>
+            <th class="center">${lang === "en" ? "Items" : "Klm"}</th>
+            <th class="right">${lang === "en" ? "Ex-VAT" : "KDV Hariç"}</th>
+            <th class="right">${lang === "en" ? "VAT" : "KDV"}</th>
+            <th class="right">${lang === "en" ? "Total" : "Toplam"}</th>
+            <th class="right">${lang === "en" ? "Paid" : "Tahsil"}</th>
+            <th class="right">${lang === "en" ? "Remaining" : "Kalan"}</th>
             <th class="right">USD</th>
-            <th>Durum</th>
+            <th>${lang === "en" ? "Status" : "Durum"}</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -4527,30 +4583,49 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
 
     printPDF({
       title: lang === "en" ? "Order List" : "Sipariş Listesi",
-      subtitle: `${filtered.length} ${lang === "en" ? "orders" : "sipariş"}${filters.length ? (lang === "en" ? " · filtered" : " · filtreli") : ""}`,
+      subtitle: `${dataToUse.length} ${lang === "en" ? "orders" : "sipariş"}`,
       contentHtml: content,
       orientation: "landscape",
       lang,
+      filters: filterList,
+      kpiCards: [
+        { label: lang === "en" ? "Orders" : "Sipariş", value: dataToUse.length },
+        { label: lang === "en" ? "Ex-VAT Total" : "KDV Hariç Toplam", value: "$" + exVatUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0}) },
+        { label: lang === "en" ? "VAT Total" : "Toplam KDV", value: "$" + vatUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0}), color: "#B87333" },
+        { label: lang === "en" ? "Grand Total" : "Genel Toplam", value: "$" + totalUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0}), color: "#3E7D5A" },
+      ],
     });
   };
 
-  // Ay/Hafta görünümü için PDF — accordion mantığında
-  // Aylar başlık, içlerinde sipariş satırları + altlarında kalemler
+  // Ay/Hafta görünümü için PDF — sevkiyat-aware, calendar view ile uyumlu
   const printCalendar = () => {
     if (!filtered.length) return showToast(lang === "en" ? "No orders to print" : "Yazdırılacak sipariş yok", "error");
 
-    // Ay bazında grupla — sevk tarihine göre (calendar view ile aynı mantık)
+    // Ay bazında grupla — sevkiyat-aware (her sevkiyat kendi ayına dağıtılır)
     const grouped = {};
     filtered.forEach((o) => {
-      const d = o.actualShipmentDate || o.shipmentDate || o.orderDate || o.createdAt;
-      if (!d) return;
-      const key = d.slice(0, 7);
-      if (!grouped[key]) grouped[key] = [];
-      grouped[key].push(o);
+      const shipments = o.shipments || [];
+      const visibleNos = o._visibleShipmentNos;
+      if (shipments.length > 0) {
+        shipments.forEach((sh) => {
+          if (visibleNos && !visibleNos.includes(sh.no)) return;
+          const d = sh.actualShipmentDate || sh.shipmentDate || o.orderDate;
+          if (!d) return;
+          const key = d.slice(0, 7);
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push({ ...o, _shipment: sh });
+        });
+      } else {
+        const d = o.actualShipmentDate || o.shipmentDate || o.orderDate || o.createdAt;
+        if (!d) return;
+        const key = d.slice(0, 7);
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push({ ...o, _shipment: null });
+      }
     });
     Object.keys(grouped).forEach((k) => grouped[k].sort((a, b) => {
-      const da = a.actualShipmentDate || a.shipmentDate || a.orderDate || "";
-      const db = b.actualShipmentDate || b.shipmentDate || b.orderDate || "";
+      const da = (a._shipment ? a._shipment.actualShipmentDate || a._shipment.shipmentDate : null) || a.actualShipmentDate || a.shipmentDate || a.orderDate || "";
+      const db = (b._shipment ? b._shipment.actualShipmentDate || b._shipment.shipmentDate : null) || b.actualShipmentDate || b.shipmentDate || b.orderDate || "";
       return db.localeCompare(da);
     }));
     const sortedMonths = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
@@ -4563,17 +4638,46 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
 
     const monthBlocks = sortedMonths.map((monthKey) => {
       const monthOrders = grouped[monthKey];
-      const monthTotal = monthOrders.reduce((s, o) => s + orderTotalUSD(o, rates), 0);
-      const shippedCount = monthOrders.filter((o) => o.actualShipmentDate).length;
+      // Ay toplamı: sevkiyat-aware
+      const monthTotal = monthOrders.reduce((s, o) => {
+        if (o._shipment) {
+          const sh = o._shipment;
+          const shItems = (o.items || []).map((it) => {
+            const dist = it.shipmentDistribution || (it.shipmentNo ? { [it.shipmentNo]: Math.floor(Number(it.quantity) || 0) } : { 1: Math.floor(Number(it.quantity) || 0) });
+            const qty = Math.floor(Number(dist[sh.no]) || 0);
+            return qty > 0 ? { _q: qty, p: Number(it.unitPrice) || 0, d: Number(it.discount) || 0 } : null;
+          }).filter(Boolean);
+          const shSub = shItems.reduce((sum, it) => sum + (it._q * it.p) * (1 - it.d / 100), 0);
+          const shVat = shSub * (Number(o.vatRate) || 0) / 100;
+          return s + toUSD(shSub + shVat, o.currency, rates);
+        }
+        return s + orderTotalUSD(o, rates);
+      }, 0);
+      const shippedCount = monthOrders.filter((o) => (o._shipment ? o._shipment.actualShipmentDate : o.actualShipmentDate)).length;
 
       const orderBlocks = monthOrders.map((o) => {
         const c = customers.find((x) => x.id === o.customerId);
+        const sh = o._shipment;
+        const totals = calcOrderTotals(o);
         const t = orderTotal(o);
         const paid = orderPaidAmount(o, payments);
         const remaining = t - paid;
-        const totals = calcOrderTotals(o);
         const st = ORDER_STATUSES.find((s) => s.key === o.status);
-        const isShipped = !!o.actualShipmentDate;
+        // Sevkiyatlıysa: o sevkiyatın tarihleri/tutarı, değilse: tüm sipariş
+        const effShipDate = sh ? sh.shipmentDate : o.shipmentDate;
+        const effActualDate = sh ? sh.actualShipmentDate : o.actualShipmentDate;
+        const isShipped = !!effActualDate;
+        // Sevkiyat-bazlı tutar
+        let shipDisplayTotal = t;
+        if (sh) {
+          const shItems = (o.items || []).map((it) => {
+            const dist = it.shipmentDistribution || (it.shipmentNo ? { [it.shipmentNo]: Math.floor(Number(it.quantity) || 0) } : { 1: Math.floor(Number(it.quantity) || 0) });
+            const qty = Math.floor(Number(dist[sh.no]) || 0);
+            return qty > 0 ? { _q: qty, p: Number(it.unitPrice) || 0, d: Number(it.discount) || 0 } : null;
+          }).filter(Boolean);
+          const shSub = shItems.reduce((sum, it) => sum + (it._q * it.p) * (1 - it.d / 100), 0);
+          shipDisplayTotal = shSub + shSub * (Number(o.vatRate) || 0) / 100;
+        }
 
         const itemRows = (o.items || []).map((it) => {
           const baseT = (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0);
@@ -4609,19 +4713,20 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
           <div style="margin-bottom:14px;page-break-inside:avoid;border:1px solid #E8E2D6;border-radius:6px;overflow:hidden;${isShipped ? 'background:#3E7D5A0A' : 'background:white'}">
             <div style="padding:8px 12px;background:${isShipped ? '#3E7D5A15' : '#F8F5EE'};border-bottom:1px solid #E8E2D6;display:flex;justify-content:space-between;align-items:center;gap:12px">
               <div style="display:flex;align-items:center;gap:12px;flex:1">
-                <strong style="font-family:'Courier New',monospace;color:#1E3A5F;font-size:11px">${htmlEscape(o.orderNumber)}</strong>
+                <strong style="font-family:'Courier New',monospace;color:#1E3A5F;font-size:11px">${htmlEscape(o.orderNumber)}${sh ? `<br/><span style="font-size:9px;color:#A88947;font-weight:700">🚛 ${htmlEscape(sh.name)}</span>` : ""}</strong>
                 <div>
                   <div style="font-weight:700;font-size:11px">${htmlEscape(c?.name || "—")}</div>
                   <div style="font-size:9px;color:#7A736A">
                     ${fmtDate(o.orderDate)} · W${getISOWeek(o.orderDate) || "—"}
-                    ${o.shipmentDate ? ` · ${lang === "en" ? "Plan. Ship" : "Plan. Sevk"}: ${fmtDate(o.shipmentDate)}` : ""}
-                    ${o.actualShipmentDate ? ` · <span style="color:#3E7D5A;font-weight:700">${lang === "en" ? "Actual Ship" : "Fiili Sevk"}: ${fmtDate(o.actualShipmentDate)}</span>` : ""}
+                    ${effShipDate ? ` · ${lang === "en" ? "Plan. Ship" : "Plan. Sevk"}: ${fmtDate(effShipDate)}` : ""}
+                    ${effActualDate ? ` · <span style="color:#3E7D5A;font-weight:700">${lang === "en" ? "Actual Ship" : "Fiili Sevk"}: ${fmtDate(effActualDate)}</span>` : ""}
                   </div>
                 </div>
               </div>
               <div style="text-align:right">
-                <div style="font-size:11px;font-weight:700">${fmtMoneyPDF(t, o.currency)}</div>
-                ${paid > 0 ? `<div style="font-size:9px;color:#3E7D5A">✓ ${fmtMoneyPDF(paid, o.currency)}</div>` : ""}
+                <div style="font-size:11px;font-weight:700">${fmtMoneyPDF(shipDisplayTotal, o.currency)}</div>
+                ${sh ? `<div style="font-size:9px;color:#7A736A">${lang === "en" ? "shipment portion" : "sevkiyat payı"}</div>` : ""}
+                ${paid > 0 && !sh ? `<div style="font-size:9px;color:#3E7D5A">✓ ${fmtMoneyPDF(paid, o.currency)}</div>` : ""}
                 <div style="font-size:9px;color:#7A736A">${st?.label || o.status}</div>
               </div>
             </div>
@@ -4732,33 +4837,43 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
       `;
     }).join("");
 
-    // Filtre özeti
-    const filterParts = [];
-    if (search) filterParts.push(`${lang === "en" ? "Search" : "Arama"}: "${search}"`);
-    if (statusFilter.length > 0) filterParts.push(`${t("status")}: ${statusFilter.map((s) => ORDER_STATUSES.find((x) => x.key === s)?.label || s).join(", ")}`);
-    if (customerFilter.length > 0) filterParts.push(`${t("customer")}: ${customerFilter.map((id) => customers.find((c) => c.id === id)?.name || id).join(", ")}`);
-    if (curFilter.length > 0) filterParts.push(`${lang === "en" ? "Currency" : "Para Birimi"}: ${curFilter.join(", ")}`);
+    // Filtre özeti — structured
+    const filterList = [];
+    if (search) filterList.push({ label: lang === "en" ? "Search" : "Arama", value: `"${search}"` });
+    if (statusFilter.length > 0) filterList.push({ label: t("status"), value: statusFilter.map((s) => ORDER_STATUSES.find((x) => x.key === s)?.label || s).join(", ") });
+    if (customerFilter.length > 0) filterList.push({ label: t("customer"), value: customerFilter.map((id) => customers.find((c) => c.id === id)?.name || id).join(", ") });
+    if (curFilter.length > 0) filterList.push({ label: lang === "en" ? "Currency" : "Para Birimi", value: curFilter.join(", ") });
+    if (monthFilter.length > 0) filterList.push({ label: lang === "en" ? "Month" : "Ay", value: monthFilter.join(", ") });
 
-    const totalRevenue = filtered.reduce((s, o) => s + orderTotalUSD(o, rates), 0);
+    // Sevkiyat-aware tutarlar
+    let exVatUSD = 0, vatUSD = 0, totalUSD = 0;
+    filtered.forEach((o) => {
+      const amt = getFilteredOrderAmount(o);
+      exVatUSD += toUSD(amt.exVat, o.currency, rates);
+      vatUSD += toUSD(amt.vat, o.currency, rates);
+      totalUSD += toUSD(amt.total, o.currency, rates);
+    });
     const totalShipped = filtered.filter((o) => o.actualShipmentDate).length;
+    const hasShipmentFilter = filtered.some((o) => o._visibleShipmentNos);
 
     const content = `
-      ${filterParts.length > 0 ? `<div style="font-size:10px;padding:6px 10px;background:#FFF8E7;border-left:3px solid #C9A961;margin-bottom:10px"><strong>${lang === "en" ? "Filters" : "Filtreler"}:</strong> ${filterParts.join(" · ")}</div>` : ""}
-      <div class="kpi-grid">
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Total Orders" : "Toplam Sipariş"}</div><div class="kpi-value">${filtered.length}</div></div>
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Shipped" : "Sevk Edilen"}</div><div class="kpi-value" style="color:#3E7D5A">${totalShipped}</div></div>
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Months" : "Ay Sayısı"}</div><div class="kpi-value">${sortedMonths.length}</div></div>
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Total Volume (USD)" : "Toplam Hacim (USD)"}</div><div class="kpi-value">$${totalRevenue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-      </div>
+      ${hasShipmentFilter ? `<div style="background:#B8733315;border-left:3px solid #B87333;padding:6px 10px;margin-bottom:10px;font-size:10px;color:#A88947"><strong>⚐ ${lang === "en" ? "Shipment-level filter active" : "Sevkiyat bazlı filtre aktif"}:</strong> ${lang === "en" ? "Each card represents a single shipment in its respective month." : "Her kart kendi ayında ilgili sevkiyatı temsil eder."}</div>` : ""}
       ${monthBlocks}
     `;
 
     printPDF({
       title: lang === "en" ? "Order List · Month/Week View" : "Sipariş Listesi · Ay/Hafta Görünümü",
-      subtitle: `${filtered.length} ${lang === "en" ? "orders" : "sipariş"} · ${sortedMonths.length} ${lang === "en" ? "months" : "ay"}${filterParts.length ? (lang === "en" ? " · filtered" : " · filtreli") : ""}`,
+      subtitle: `${filtered.length} ${lang === "en" ? "orders" : "sipariş"} · ${sortedMonths.length} ${lang === "en" ? "months" : "ay"}`,
       contentHtml: content,
       orientation: "portrait",
       lang,
+      filters: filterList,
+      kpiCards: [
+        { label: lang === "en" ? "Orders" : "Sipariş", value: filtered.length },
+        { label: lang === "en" ? "Shipped" : "Sevk Edilen", value: totalShipped, color: "#3E7D5A" },
+        { label: lang === "en" ? "Ex-VAT (USD)" : "KDV Hariç (USD)", value: "$" + exVatUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0}) },
+        { label: lang === "en" ? "Grand Total (USD)" : "Genel Toplam (USD)", value: "$" + totalUSD.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0}), color: "#3E7D5A" },
+      ],
     });
   };
 
@@ -7878,33 +7993,26 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
     const totalPaid = filtered.filter((p) => p.status === "paid").reduce((s, p) => s + toUSD(Number(p.amount) || 0, p.currency, rates), 0);
     const totalOverdue = filtered.filter((p) => p.status === "overdue").reduce((s, p) => s + toUSD(Number(p.amount) || 0, p.currency, rates), 0);
 
-    const filters = [];
-    if (search) filters.push(`${lang === "en" ? "Search" : "Arama"}: "${search}"`);
-    if (statusFilter.length > 0) filters.push(`${t("status")}: ${statusFilter.map((s) => PAYMENT_STATUSES.find((x) => x.key === s)?.label || s).join(", ")}`);
-    if (typeFilter.length > 0) filters.push(`${lang === "en" ? "Type" : "Tip"}: ${typeFilter.map((tp) => PAYMENT_PLAN_TYPES.find((x) => x.key === tp)?.label || tp).join(", ")}`);
-    if (methodFilter.length > 0) filters.push(`${lang === "en" ? "Method" : "Yöntem"}: ${methodFilter.map((m) => PAYMENT_METHODS.find((x) => x.key === m)?.label || m).join(", ")}`);
-    if (customerFilter.length > 0) filters.push(`${t("customer")}: ${customerFilter.map((id) => customers.find((c) => c.id === id)?.name || id).join(", ")}`);
-    if (orderFilter.length > 0) filters.push(`${t("orderNumber")}: ${orderFilter.map((id) => orders.find((o) => o.id === id)?.orderNumber || id).join(", ")}`);
+    const filterList = [];
+    if (search) filterList.push({ label: lang === "en" ? "Search" : "Arama", value: `"${search}"` });
+    if (statusFilter.length > 0) filterList.push({ label: t("status"), value: statusFilter.map((s) => PAYMENT_STATUSES.find((x) => x.key === s)?.label || s).join(", ") });
+    if (typeFilter.length > 0) filterList.push({ label: lang === "en" ? "Type" : "Tip", value: typeFilter.map((tp) => PAYMENT_PLAN_TYPES.find((x) => x.key === tp)?.label || tp).join(", ") });
+    if (methodFilter.length > 0) filterList.push({ label: lang === "en" ? "Method" : "Yöntem", value: methodFilter.map((m) => PAYMENT_METHODS.find((x) => x.key === m)?.label || m).join(", ") });
+    if (customerFilter.length > 0) filterList.push({ label: t("customer"), value: customerFilter.map((id) => customers.find((c) => c.id === id)?.name || id).join(", ") });
+    if (orderFilter.length > 0) filterList.push({ label: t("orderNumber"), value: orderFilter.map((id) => orders.find((o) => o.id === id)?.orderNumber || id).join(", ") });
 
     const content = `
-      <div class="kpi-grid">
-        <div class="kpi"><div class="kpi-label">Toplam Kayıt</div><div class="kpi-value">${filtered.length}</div></div>
-        <div class="kpi"><div class="kpi-label">Tahsil Edilen (USD)</div><div class="kpi-value" style="color:#3E7D5A">$${totalPaid.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-        <div class="kpi"><div class="kpi-label">Bekleyen (USD)</div><div class="kpi-value" style="color:#B87333">$${totalPending.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-        <div class="kpi"><div class="kpi-label">Gecikmiş (USD)</div><div class="kpi-value" style="color:#A6383D">$${totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-      </div>
-      ${filters.length ? `<div style="font-size:10px;padding:6px 10px;background:#F8F5EE;border-radius:3px;margin-bottom:8px"><strong>Filtreler:</strong> ${filters.join(" · ")}</div>` : ""}
       <table>
         <thead>
           <tr>
-            <th>Sipariş</th>
-            <th>Müşteri</th>
-            <th>Tip</th>
-            <th class="right">Tutar</th>
-            <th>Yöntem</th>
-            <th>Vade</th>
-            <th>Tahsil Tarihi</th>
-            <th>Durum</th>
+            <th>${lang === "en" ? "Order" : "Sipariş"}</th>
+            <th>${lang === "en" ? "Customer" : "Müşteri"}</th>
+            <th>${lang === "en" ? "Type" : "Tip"}</th>
+            <th class="right">${lang === "en" ? "Amount" : "Tutar"}</th>
+            <th>${lang === "en" ? "Method" : "Yöntem"}</th>
+            <th>${lang === "en" ? "Due Date" : "Vade"}</th>
+            <th>${lang === "en" ? "Paid Date" : "Tahsil Tarihi"}</th>
+            <th>${lang === "en" ? "Status" : "Durum"}</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -7912,10 +8020,18 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
     `;
 
     printPDF({
-      title: "Ödeme Listesi",
-      subtitle: `${filtered.length} ödeme${filters.length ? " · filtreli" : ""}`,
+      title: lang === "en" ? "Payment List" : "Ödeme Listesi",
+      subtitle: `${filtered.length} ${lang === "en" ? "payments" : "ödeme"}`,
       contentHtml: content,
       orientation: "landscape",
+      lang,
+      filters: filterList,
+      kpiCards: [
+        { label: lang === "en" ? "Total Records" : "Toplam Kayıt", value: filtered.length },
+        { label: lang === "en" ? "Paid (USD)" : "Tahsil (USD)", value: "$" + totalPaid.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0}), color: "#3E7D5A" },
+        { label: lang === "en" ? "Pending (USD)" : "Bekleyen (USD)", value: "$" + totalPending.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0}), color: "#B87333" },
+        { label: lang === "en" ? "Overdue (USD)" : "Gecikmiş (USD)", value: "$" + totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0}), color: "#A6383D" },
+      ],
     });
   };
 
@@ -8014,34 +8130,32 @@ function PaymentsView({ orders, setOrders, customers, payments, setPayments, ban
       `;
     }).join("");
 
-    // Filtre özeti
-    const filters = [];
-    if (search) filters.push(`${lang === "en" ? "Search" : "Arama"}: "${search}"`);
-    if (statusFilter.length > 0) filters.push(`${t("status")}: ${statusFilter.map((s) => PAYMENT_STATUSES.find((x) => x.key === s)?.label || s).join(", ")}`);
-    if (customerFilter.length > 0) filters.push(`${t("customer")}: ${customerFilter.map((id) => customers.find((c) => c.id === id)?.name || id).join(", ")}`);
-    if (orderFilter.length > 0) filters.push(`${t("orderNumber")}: ${orderFilter.map((id) => orders.find((o) => o.id === id)?.orderNumber || id).join(", ")}`);
+    // Filtre özeti — structured
+    const filterList = [];
+    if (search) filterList.push({ label: lang === "en" ? "Search" : "Arama", value: `"${search}"` });
+    if (statusFilter.length > 0) filterList.push({ label: t("status"), value: statusFilter.map((s) => PAYMENT_STATUSES.find((x) => x.key === s)?.label || s).join(", ") });
+    if (customerFilter.length > 0) filterList.push({ label: t("customer"), value: customerFilter.map((id) => customers.find((c) => c.id === id)?.name || id).join(", ") });
+    if (orderFilter.length > 0) filterList.push({ label: t("orderNumber"), value: orderFilter.map((id) => orders.find((o) => o.id === id)?.orderNumber || id).join(", ") });
 
     const totalPaid = filtered.filter((p) => p.status === "paid").reduce((s, p) => s + toUSD(Number(p.amount) || 0, p.currency, rates), 0);
     const totalPending = filtered.filter((p) => p.status === "pending").reduce((s, p) => s + toUSD(Number(p.amount) || 0, p.currency, rates), 0);
     const totalOverdue = filtered.filter((p) => p.status === "overdue").reduce((s, p) => s + toUSD(Number(p.amount) || 0, p.currency, rates), 0);
 
-    const content = `
-      ${filters.length ? `<div style="font-size:10px;padding:6px 10px;background:#FFF8E7;border-left:3px solid #C9A961;margin-bottom:10px"><strong>${lang === "en" ? "Filters" : "Filtreler"}:</strong> ${filters.join(" · ")}</div>` : ""}
-      <div class="kpi-grid">
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Orders" : "Sipariş"}</div><div class="kpi-value">${groupList.length}</div></div>
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Payment Records" : "Ödeme Kaydı"}</div><div class="kpi-value">${filtered.length}</div></div>
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Paid (USD)" : "Tahsil (USD)"}</div><div class="kpi-value" style="color:#3E7D5A">$${totalPaid.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Pending+Overdue (USD)" : "Açık (USD)"}</div><div class="kpi-value" style="color:#B87333">$${(totalPending + totalOverdue).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-      </div>
-      ${orderBlocks}
-    `;
+    const content = `${orderBlocks}`;
 
     printPDF({
       title: lang === "en" ? "Payments by Order" : "Ödemeler · Sipariş Bazlı",
-      subtitle: `${groupList.length} ${lang === "en" ? "orders" : "sipariş"} · ${filtered.length} ${lang === "en" ? "payments" : "ödeme"}${filters.length ? (lang === "en" ? " · filtered" : " · filtreli") : ""}`,
+      subtitle: `${groupList.length} ${lang === "en" ? "orders" : "sipariş"} · ${filtered.length} ${lang === "en" ? "payments" : "ödeme"}`,
       contentHtml: content,
       orientation: "portrait",
       lang,
+      filters: filterList,
+      kpiCards: [
+        { label: lang === "en" ? "Orders" : "Sipariş", value: groupList.length },
+        { label: lang === "en" ? "Records" : "Kayıt", value: filtered.length },
+        { label: lang === "en" ? "Paid (USD)" : "Tahsil (USD)", value: "$" + totalPaid.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0}), color: "#3E7D5A" },
+        { label: lang === "en" ? "Open (USD)" : "Açık (USD)", value: "$" + (totalPending + totalOverdue).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0}), color: "#B87333" },
+      ],
     });
   };
 
@@ -8556,23 +8670,16 @@ function CashFlowView({ orders, customers, payments, rates, setView, t = (k) => 
         <td class="right text-mono" style="font-weight:700">$${((m.expected || 0) + (m.overdue || 0)).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
       </tr>`).join("");
 
-    const filters = [];
+    const filterList = [];
     if (statusFilter.length > 0 && !statusFilter.includes("all")) {
       const labels = statusFilter.map((s) => s === "pending" ? t("onlyPending") : s === "overdue" ? t("onlyOverdue") : s);
-      filters.push(labels.join(", "));
+      filterList.push({ label: t("status"), value: labels.join(", ") });
     }
-    if (customerFilter.length > 0) filters.push(`${t("customer")}: ${customerFilter.map((id) => customers.find((c) => c.id === id)?.name || id).join(", ")}`);
-    if (orderSearch) filters.push(`${t("orderNumber")}: "${orderSearch}"`);
+    if (customerFilter.length > 0) filterList.push({ label: t("customer"), value: customerFilter.map((id) => customers.find((c) => c.id === id)?.name || id).join(", ") });
+    if (orderSearch) filterList.push({ label: t("orderNumber"), value: `"${orderSearch}"` });
+    filterList.push({ label: lang === "en" ? "Period" : "Dönem", value: lang === "en" ? `${period} days` : `${period} gün` });
 
     const content = `
-      <div class="kpi-grid">
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? `Next ${period} Days` : `Önümüzdeki ${period} Gün`}</div><div class="kpi-value">${filteredPayments.length} ${lang === "en" ? "payments" : "ödeme"}</div></div>
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Total (USD)" : "Toplam (USD)"}</div><div class="kpi-value">$${stats.totalExpected.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Within 7 Days" : "7 Gün İçinde"}</div><div class="kpi-value" style="color:#3E7D5A">$${stats.next7.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-        <div class="kpi"><div class="kpi-label">${lang === "en" ? "Overdue" : "Gecikmiş"}</div><div class="kpi-value" style="color:#A6383D">$${stats.totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
-      </div>
-      ${filters.length ? `<div style="font-size:10px;padding:6px 10px;background:#F8F5EE;border-radius:3px;margin-bottom:8px"><strong>${lang === "en" ? "Filters" : "Filtreler"}:</strong> ${filters.join(" · ")}</div>` : ""}
-
       ${monthlyRows ? `
       <h2>${lang === "en" ? "Monthly Collection Projection" : "Aylık Tahsilat Projeksiyonu"}</h2>
       <table>
@@ -8608,10 +8715,17 @@ function CashFlowView({ orders, customers, payments, rates, setView, t = (k) => 
 
     printPDF({
       title: lang === "en" ? "Cash Flow Projection" : "Nakit Akışı Projeksiyonu",
-      subtitle: `${lang === "en" ? `Next ${period} days` : `Önümüzdeki ${period} gün`}${filters.length ? (lang === "en" ? " · filtered" : " · filtreli") : ""}`,
+      subtitle: lang === "en" ? `Next ${period} days · ${filteredPayments.length} payments` : `Önümüzdeki ${period} gün · ${filteredPayments.length} ödeme`,
       contentHtml: content,
       orientation: "landscape",
       lang,
+      filters: filterList,
+      kpiCards: [
+        { label: lang === "en" ? "Records" : "Kayıt", value: filteredPayments.length },
+        { label: lang === "en" ? "Within 7 Days" : "7 Gün İçinde", value: "$" + stats.next7.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0}), color: "#3E7D5A" },
+        { label: lang === "en" ? "Total Expected (USD)" : "Toplam Beklenen (USD)", value: "$" + stats.totalExpected.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0}) },
+        { label: lang === "en" ? "Overdue" : "Gecikmiş", value: "$" + stats.totalOverdue.toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0}), color: "#A6383D" },
+      ],
     });
   };
 
@@ -8899,6 +9013,7 @@ function SummaryReport({ orders = [], customers = [], products = [], payments = 
     to: todayISO(),
   });
   const [dateBasis, setDateBasis] = useState("orderDate"); // orderDate, shipmentDate, paidDate
+  const [monthFilter, setMonthFilter] = useState([]);
 
   // Tarih aralığında filtrele
   const filteredOrders = useMemo(() => {
@@ -8907,9 +9022,10 @@ function SummaryReport({ orders = [], customers = [], products = [], payments = 
       if (!d) return false;
       if (dateRange.from && d < dateRange.from) return false;
       if (dateRange.to && d > dateRange.to) return false;
+      if (monthFilter.length > 0 && !monthFilter.includes(d.slice(0, 7))) return false;
       return true;
     });
-  }, [orders, dateRange, dateBasis]);
+  }, [orders, dateRange, dateBasis, monthFilter]);
 
   const filteredPayments = useMemo(() => {
     return payments.filter((p) => {
@@ -8918,9 +9034,10 @@ function SummaryReport({ orders = [], customers = [], products = [], payments = 
       if (!d) return false;
       if (dateRange.from && d < dateRange.from) return false;
       if (dateRange.to && d > dateRange.to) return false;
+      if (monthFilter.length > 0 && !monthFilter.includes(d.slice(0, 7))) return false;
       return true;
     });
-  }, [payments, dateRange]);
+  }, [payments, dateRange, monthFilter]);
 
   // Özet metrikler
   const stats = useMemo(() => {
@@ -9181,6 +9298,9 @@ function SummaryReport({ orders = [], customers = [], products = [], payments = 
             <Btn variant="primary" size="sm" icon={FileDown} onClick={exportFullReport}>Excel'e Tüm Rapor</Btn>
           </div>
         </div>
+        <div className="px-5 pb-3">
+          <MonthPicker values={monthFilter} onChange={setMonthFilter} lang="tr" />
+        </div>
       </Card>
 
       {/* Özet KPI'lar */}
@@ -9240,6 +9360,7 @@ function ShipmentReport({ orders = [], customers = [], rates = {} }) {
     from: addDays(todayISO(), -90),
     to: todayISO(),
   });
+  const [monthFilter, setMonthFilter] = useState([]);
 
   // Sadece sevk edilmiş siparişler (actualShipmentDate var olan)
   const shippedOrders = useMemo(() => {
@@ -9248,9 +9369,10 @@ function ShipmentReport({ orders = [], customers = [], rates = {} }) {
       if (!shipDate) return false;
       if (dateRange.from && shipDate < dateRange.from) return false;
       if (dateRange.to && shipDate > dateRange.to) return false;
+      if (monthFilter.length > 0 && !monthFilter.includes(shipDate.slice(0, 7))) return false;
       return true;
     });
-  }, [orders, dateRange]);
+  }, [orders, dateRange, monthFilter]);
 
   // Aylık sevkiyat dağılımı
   const monthlyShipment = useMemo(() => {
@@ -9299,6 +9421,7 @@ function ShipmentReport({ orders = [], customers = [], rates = {} }) {
         <div className="flex items-end gap-3 flex-wrap">
           <div className="text-sm font-bold flex-shrink-0" style={{ color: TOKENS.ink }}>Fiili Sevk Tarihi:</div>
           <DateRange from={dateRange.from} to={dateRange.to} onChange={setDateRange} />
+          <MonthPicker values={monthFilter} onChange={setMonthFilter} lang="tr" />
           <div className="flex gap-2 ml-auto">
             <Btn variant="ghost" size="sm" onClick={() => setDateRange({ from: addDays(todayISO(), -30), to: todayISO() })}>Son 30 gün</Btn>
             <Btn variant="ghost" size="sm" onClick={() => setDateRange({ from: addDays(todayISO(), -90), to: todayISO() })}>Son 90 gün</Btn>
@@ -9380,9 +9503,18 @@ function ShipmentReport({ orders = [], customers = [], rates = {} }) {
 }
 
 function CustomerReport({ orders = [], customers = [], payments = [], rates = {} }) {
+  const [monthFilter, setMonthFilter] = useState([]);
+  const filteredOrders = useMemo(() => {
+    if (monthFilter.length === 0) return orders;
+    return orders.filter((o) => {
+      const d = o.actualShipmentDate || o.shipmentDate || o.orderDate;
+      return d && monthFilter.includes(d.slice(0, 7));
+    });
+  }, [orders, monthFilter]);
+
   const data = useMemo(() => {
     const map = {};
-    orders.forEach((o) => {
+    filteredOrders.forEach((o) => {
       const c = customers.find((x) => x.id === o.customerId);
       const key = c?.name || "—";
       if (!map[key]) map[key] = { name: key, country: c?.country, count: 0, total: 0, paid: 0 };
@@ -9390,7 +9522,8 @@ function CustomerReport({ orders = [], customers = [], payments = [], rates = {}
       map[key].total += orderTotalUSD(o, rates);
     });
     payments.filter((p) => p.status === "paid").forEach((p) => {
-      const o = orders.find((x) => x.id === p.orderId);
+      const o = filteredOrders.find((x) => x.id === p.orderId);
+      if (!o) return;
       const c = customers.find((x) => x.id === o?.customerId);
       const key = c?.name || "—";
       if (map[key]) map[key].paid += toUSD(p.amount, p.currency, rates);
@@ -9399,31 +9532,51 @@ function CustomerReport({ orders = [], customers = [], payments = [], rates = {}
   }, [orders, customers, payments, rates]);
 
   return (
-    <Card title="Müşteri Performansı" subtitle="Ciro ve tahsilat oranı" noPadding>
-      <DataTable
-        columns={[
-          { key: "name", label: "Müşteri", render: (r) => <span className="font-medium">{r.name}</span> },
-          { key: "country", label: "Ülke" },
-          { key: "count", label: "Sipariş", align: "right" },
-          { key: "total", label: "Toplam Ciro", align: "right", render: (r) => fmtMoney(r.total, "USD", { compact: true }) },
-          { key: "paid", label: "Tahsil Edilen", align: "right", render: (r) => fmtMoney(r.paid, "USD", { compact: true }) },
-          { key: "rate", label: "Tahsilat %", align: "right", sortValue: (r) => r.total ? r.paid / r.total : 0, render: (r) => {
-            const pct = r.total > 0 ? Math.round((r.paid / r.total) * 100) : 0;
-            const color = pct >= 90 ? TOKENS.forest : pct >= 60 ? TOKENS.gold : TOKENS.oxblood;
-            return <span style={{ color }} className="font-semibold">%{pct}</span>;
-          }},
-        ]}
-        rows={data.map((r, i) => ({ ...r, _idx: i }))}
-        emptyText="Veri yok"
-      />
-    </Card>
+    <div className="space-y-4">
+      <Card>
+        <div className="flex items-end gap-3 flex-wrap">
+          <div className="text-sm font-bold flex-shrink-0" style={{ color: TOKENS.ink }}>Aya Göre Filtre:</div>
+          <MonthPicker values={monthFilter} onChange={setMonthFilter} lang="tr" />
+          <div className="text-[11px] ml-auto" style={{ color: TOKENS.muted }}>
+            {monthFilter.length > 0 ? `${filteredOrders.length} sipariş filtrede` : `${orders.length} toplam sipariş`}
+          </div>
+        </div>
+      </Card>
+      <Card title="Müşteri Performansı" subtitle="Ciro ve tahsilat oranı" noPadding>
+        <DataTable
+          columns={[
+            { key: "name", label: "Müşteri", render: (r) => <span className="font-medium">{r.name}</span> },
+            { key: "country", label: "Ülke" },
+            { key: "count", label: "Sipariş", align: "right" },
+            { key: "total", label: "Toplam Ciro", align: "right", render: (r) => fmtMoney(r.total, "USD", { compact: true }) },
+            { key: "paid", label: "Tahsil Edilen", align: "right", render: (r) => fmtMoney(r.paid, "USD", { compact: true }) },
+            { key: "rate", label: "Tahsilat %", align: "right", sortValue: (r) => r.total ? r.paid / r.total : 0, render: (r) => {
+              const pct = r.total > 0 ? Math.round((r.paid / r.total) * 100) : 0;
+              const color = pct >= 90 ? TOKENS.forest : pct >= 60 ? TOKENS.gold : TOKENS.oxblood;
+              return <span style={{ color }} className="font-semibold">%{pct}</span>;
+            }},
+          ]}
+          rows={data.map((r, i) => ({ ...r, _idx: i }))}
+          emptyText="Veri yok"
+        />
+      </Card>
+    </div>
   );
 }
 
 function ProductReport({ orders = [], products = [], rates = {} }) {
+  const [monthFilter, setMonthFilter] = useState([]);
+  const filteredOrders = useMemo(() => {
+    if (monthFilter.length === 0) return orders;
+    return orders.filter((o) => {
+      const d = o.actualShipmentDate || o.shipmentDate || o.orderDate;
+      return d && monthFilter.includes(d.slice(0, 7));
+    });
+  }, [orders, monthFilter]);
+
   const data = useMemo(() => {
     const map = {};
-    orders.forEach((o) => {
+    filteredOrders.forEach((o) => {
       (o.items || []).forEach((i) => {
         const key = i.productCode || "—";
         if (!map[key]) map[key] = { code: key, name: i.nameTr || i.nameEn || "—", qty: 0, count: 0, total: 0 };
@@ -9433,30 +9586,50 @@ function ProductReport({ orders = [], products = [], rates = {} }) {
       });
     });
     return Object.values(map).sort((a, b) => b.total - a.total);
-  }, [orders, rates]);
+  }, [filteredOrders, rates]);
 
   return (
-    <Card title="Ürün Performansı" subtitle="Adet ve ciro bazında" noPadding>
-      <DataTable
-        columns={[
-          { key: "code", label: "Ürün Kodu", render: (r) => <span className="font-mono font-semibold" style={{ color: TOKENS.navy }}>{r.code}</span> },
-          { key: "name", label: "İsim" },
-          { key: "count", label: "Sipariş", align: "right" },
-          { key: "qty", label: "Toplam Adet", align: "right", render: (r) => fmtNum(r.qty) },
-          { key: "total", label: "Ciro (USD)", align: "right", render: (r) => fmtMoney(r.total, "USD", { compact: true }) },
-        ]}
-        rows={data}
-        keyField="code"
-        emptyText="Veri yok"
-      />
-    </Card>
+    <div className="space-y-4">
+      <Card>
+        <div className="flex items-end gap-3 flex-wrap">
+          <div className="text-sm font-bold flex-shrink-0" style={{ color: TOKENS.ink }}>Aya Göre Filtre:</div>
+          <MonthPicker values={monthFilter} onChange={setMonthFilter} lang="tr" />
+          <div className="text-[11px] ml-auto" style={{ color: TOKENS.muted }}>
+            {monthFilter.length > 0 ? `${filteredOrders.length} sipariş filtrede` : `${orders.length} toplam sipariş`}
+          </div>
+        </div>
+      </Card>
+      <Card title="Ürün Performansı" subtitle="Adet ve ciro bazında" noPadding>
+        <DataTable
+          columns={[
+            { key: "code", label: "Ürün Kodu", render: (r) => <span className="font-mono font-semibold" style={{ color: TOKENS.navy }}>{r.code}</span> },
+            { key: "name", label: "İsim" },
+            { key: "count", label: "Sipariş", align: "right" },
+            { key: "qty", label: "Toplam Adet", align: "right", render: (r) => fmtNum(r.qty) },
+            { key: "total", label: "Ciro (USD)", align: "right", render: (r) => fmtMoney(r.total, "USD", { compact: true }) },
+          ]}
+          rows={data}
+          keyField="code"
+          emptyText="Veri yok"
+        />
+      </Card>
+    </div>
   );
 }
 
 function CountryReport({ orders = [], customers = [], rates = {} }) {
+  const [monthFilter, setMonthFilter] = useState([]);
+  const filteredOrders = useMemo(() => {
+    if (monthFilter.length === 0) return orders;
+    return orders.filter((o) => {
+      const d = o.actualShipmentDate || o.shipmentDate || o.orderDate;
+      return d && monthFilter.includes(d.slice(0, 7));
+    });
+  }, [orders, monthFilter]);
+
   const data = useMemo(() => {
     const map = {};
-    orders.forEach((o) => {
+    filteredOrders.forEach((o) => {
       const c = customers.find((x) => x.id === o.customerId);
       const key = c?.country || "—";
       if (!map[key]) map[key] = { country: key, count: 0, customers: new Set(), total: 0 };
@@ -9465,29 +9638,49 @@ function CountryReport({ orders = [], customers = [], rates = {} }) {
       map[key].total += orderTotalUSD(o, rates);
     });
     return Object.values(map).map((r) => ({ ...r, customerCount: r.customers.size })).sort((a, b) => b.total - a.total);
-  }, [orders, customers, rates]);
+  }, [filteredOrders, customers, rates]);
 
   return (
-    <Card title="Ülke Bazlı" subtitle="İhracat dağılımı" noPadding>
-      <DataTable
-        columns={[
-          { key: "country", label: "Ülke", render: (r) => <span className="font-medium">📍 {r.country}</span> },
-          { key: "customerCount", label: "Müşteri", align: "right" },
-          { key: "count", label: "Sipariş", align: "right" },
-          { key: "total", label: "Ciro (USD)", align: "right", render: (r) => fmtMoney(r.total, "USD", { compact: true }) },
-        ]}
-        rows={data}
-        keyField="country"
-        emptyText="Veri yok"
-      />
-    </Card>
+    <div className="space-y-4">
+      <Card>
+        <div className="flex items-end gap-3 flex-wrap">
+          <div className="text-sm font-bold flex-shrink-0" style={{ color: TOKENS.ink }}>Aya Göre Filtre:</div>
+          <MonthPicker values={monthFilter} onChange={setMonthFilter} lang="tr" />
+          <div className="text-[11px] ml-auto" style={{ color: TOKENS.muted }}>
+            {monthFilter.length > 0 ? `${filteredOrders.length} sipariş filtrede` : `${orders.length} toplam sipariş`}
+          </div>
+        </div>
+      </Card>
+      <Card title="Ülke Bazlı" subtitle="İhracat dağılımı" noPadding>
+        <DataTable
+          columns={[
+            { key: "country", label: "Ülke", render: (r) => <span className="font-medium">📍 {r.country}</span> },
+            { key: "customerCount", label: "Müşteri", align: "right" },
+            { key: "count", label: "Sipariş", align: "right" },
+            { key: "total", label: "Ciro (USD)", align: "right", render: (r) => fmtMoney(r.total, "USD", { compact: true }) },
+          ]}
+          rows={data}
+          keyField="country"
+          emptyText="Veri yok"
+        />
+      </Card>
+    </div>
   );
 }
 
 function MethodReport({ payments = [], rates = {} }) {
+  const [monthFilter, setMonthFilter] = useState([]);
+  const filteredPayments = useMemo(() => {
+    if (monthFilter.length === 0) return payments;
+    return payments.filter((p) => {
+      const d = p.paidDate || p.dueDate;
+      return d && monthFilter.includes(d.slice(0, 7));
+    });
+  }, [payments, monthFilter]);
+
   const data = useMemo(() => {
     const map = {};
-    payments.filter((p) => p.status !== "cancelled").forEach((p) => {
+    filteredPayments.filter((p) => p.status !== "cancelled").forEach((p) => {
       const key = p.method;
       if (!map[key]) map[key] = { method: key, label: PAYMENT_METHODS.find((x) => x.key === key)?.label || key, count: 0, paid: 0, pending: 0 };
       map[key].count++;
@@ -9496,40 +9689,70 @@ function MethodReport({ payments = [], rates = {} }) {
       else map[key].pending += usd;
     });
     return Object.values(map).sort((a, b) => (b.paid + b.pending) - (a.paid + a.pending));
-  }, [payments, rates]);
+  }, [filteredPayments, rates]);
 
   return (
-    <Card title="Ödeme Yöntemi Analizi" subtitle="Yöntem bazında tahsilat ve bekleyen" noPadding>
-      <DataTable
-        columns={[
-          { key: "label", label: "Yöntem" },
-          { key: "count", label: "Kayıt", align: "right" },
-          { key: "paid", label: "Tahsil Edilen", align: "right", render: (r) => fmtMoney(r.paid, "USD", { compact: true }) },
-          { key: "pending", label: "Bekleyen", align: "right", render: (r) => fmtMoney(r.pending, "USD", { compact: true }) },
-          { key: "total", label: "Toplam", align: "right", sortValue: (r) => r.paid + r.pending, render: (r) => <strong>{fmtMoney(r.paid + r.pending, "USD", { compact: true })}</strong> },
-        ]}
-        rows={data}
-        keyField="method"
-        emptyText="Veri yok"
-      />
-    </Card>
+    <div className="space-y-4">
+      <Card>
+        <div className="flex items-end gap-3 flex-wrap">
+          <div className="text-sm font-bold flex-shrink-0" style={{ color: TOKENS.ink }}>Aya Göre Filtre:</div>
+          <MonthPicker values={monthFilter} onChange={setMonthFilter} lang="tr" />
+          <div className="text-[11px] ml-auto" style={{ color: TOKENS.muted }}>
+            {monthFilter.length > 0 ? `${filteredPayments.length} ödeme filtrede` : `${payments.length} toplam ödeme`}
+          </div>
+        </div>
+      </Card>
+      <Card title="Ödeme Yöntemi Analizi" subtitle="Yöntem bazında tahsilat ve bekleyen" noPadding>
+        <DataTable
+          columns={[
+            { key: "label", label: "Yöntem" },
+            { key: "count", label: "Kayıt", align: "right" },
+            { key: "paid", label: "Tahsil Edilen", align: "right", render: (r) => fmtMoney(r.paid, "USD", { compact: true }) },
+            { key: "pending", label: "Bekleyen", align: "right", render: (r) => fmtMoney(r.pending, "USD", { compact: true }) },
+            { key: "total", label: "Toplam", align: "right", sortValue: (r) => r.paid + r.pending, render: (r) => <strong>{fmtMoney(r.paid + r.pending, "USD", { compact: true })}</strong> },
+          ]}
+          rows={data}
+          keyField="method"
+          emptyText="Veri yok"
+        />
+      </Card>
+    </div>
   );
 }
 
 function StatusReport({ orders = [], rates = {} }) {
+  const [monthFilter, setMonthFilter] = useState([]);
+  const filteredOrders = useMemo(() => {
+    if (monthFilter.length === 0) return orders;
+    return orders.filter((o) => {
+      const d = o.actualShipmentDate || o.shipmentDate || o.orderDate;
+      return d && monthFilter.includes(d.slice(0, 7));
+    });
+  }, [orders, monthFilter]);
+
   const data = useMemo(() => {
     const map = {};
-    orders.forEach((o) => {
+    filteredOrders.forEach((o) => {
       const key = o.status;
       if (!map[key]) map[key] = { status: key, label: ORDER_STATUSES.find((x) => x.key === key)?.label || key, count: 0, total: 0 };
       map[key].count++;
       map[key].total += orderTotalUSD(o, rates);
     });
     return Object.values(map).sort((a, b) => b.total - a.total);
-  }, [orders, rates]);
+  }, [filteredOrders, rates]);
 
   return (
-    <Card title="Sipariş Durumu" subtitle="Aşamalara göre dağılım" noPadding>
+    <div className="space-y-4">
+      <Card>
+        <div className="flex items-end gap-3 flex-wrap">
+          <div className="text-sm font-bold flex-shrink-0" style={{ color: TOKENS.ink }}>Aya Göre Filtre:</div>
+          <MonthPicker values={monthFilter} onChange={setMonthFilter} lang="tr" />
+          <div className="text-[11px] ml-auto" style={{ color: TOKENS.muted }}>
+            {monthFilter.length > 0 ? `${filteredOrders.length} sipariş filtrede` : `${orders.length} toplam sipariş`}
+          </div>
+        </div>
+      </Card>
+      <Card title="Sipariş Durumu" subtitle="Aşamalara göre dağılım" noPadding>
       <DataTable
         columns={[
           { key: "label", label: "Durum", render: (r) => { const s = ORDER_STATUSES.find((x) => x.key === r.status); return <Badge color={s?.color} dot>{s?.label}</Badge>; } },
@@ -9541,6 +9764,7 @@ function StatusReport({ orders = [], rates = {} }) {
         emptyText="Veri yok"
       />
     </Card>
+    </div>
   );
 }
 

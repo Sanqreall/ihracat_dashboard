@@ -2205,7 +2205,11 @@ export default function App() {
   }, [payments]);
 
   // ----- Tüm modüllere geçilen context -----
-  // ----- Auth durumu — düzenleme yetkisi -----
+  // ----- Auth durumu — giriş zorunlu, rol bazlı izinler -----
+  // viewer  → sadece okuma
+  // editor  → okuma + düzenleme
+  // admin   → okuma + düzenleme + ayarlar
+  const canView = !!currentUser;
   const canEdit = !!(currentUser && (currentUser.role === "admin" || currentUser.role === "editor"));
   const isAdmin = currentUser?.role === "admin";
 
@@ -2226,13 +2230,28 @@ export default function App() {
   };
 
   // ----- Yükleniyor ekranı -----
-  if (!loaded) {
+  if (!loaded || !authReady) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: TOKENS.bg, fontFamily: FONT_BODY }}>
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 mb-3" style={{ borderColor: TOKENS.gold, borderTopColor: "transparent" }} />
           <div className="text-sm" style={{ color: TOKENS.muted }}>Veriler yükleniyor…</div>
         </div>
+      </div>
+    );
+  }
+
+  // ----- Giriş zorunlu — oturum yoksa login ekranı göster -----
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: TOKENS.bg, fontFamily: FONT_BODY }}>
+        <LoginModal
+          open={true}
+          onClose={null}
+          setCurrentUser={setCurrentUser}
+          showToast={showToast}
+        />
+        <Toast toast={toast} onDismiss={() => setToast(null)} />
       </div>
     );
   }
@@ -2454,7 +2473,7 @@ function Sidebar({ view, setView, storageMode, storageLabel, currentUser, onLogi
 }
 
 // ============================================================================
-// LOGIN MODAL — ilk kullanıcı kurulumu + normal giriş
+// LOGIN MODAL — zorunlu giriş (misafir erişimi kapalı)
 // ============================================================================
 
 function LoginModal({ open, onClose, setCurrentUser, showToast }) {
@@ -2478,11 +2497,11 @@ function LoginModal({ open, onClose, setCurrentUser, showToast }) {
     }
     setCurrentUser(result.session.user);
     showToast(`Hoş geldin ${result.session.user.name}`, "success");
-    onClose();
+    if (onClose) onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(15, 26, 46, 0.7)", backdropFilter: "blur(6px)" }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(15, 26, 46, 0.85)", backdropFilter: "blur(6px)" }}>
       <div className="w-full max-w-md rounded-lg overflow-hidden shadow-2xl" style={{ background: "white", border: `1px solid ${TOKENS.border}` }}>
         <div className="px-6 py-5" style={{ background: TOKENS.ink, borderBottom: `2px solid ${TOKENS.gold}` }}>
           <div className="flex items-center gap-3 mb-1">
@@ -2495,7 +2514,7 @@ function LoginModal({ open, onClose, setCurrentUser, showToast }) {
             </div>
           </div>
           <p className="text-[11px]" style={{ color: "#94a3b8" }}>
-            Düzenleme yapmak için giriş yap. Misafirler sadece görüntüleyebilir.
+            Bu sisteme erişmek için giriş yapmanız gerekiyor.
           </p>
         </div>
 
@@ -2511,13 +2530,8 @@ function LoginModal({ open, onClose, setCurrentUser, showToast }) {
           <Btn variant="accent" size="lg" onClick={handleLogin} disabled={busy} className="w-full">
             {busy ? "Giriş yapılıyor..." : "Giriş Yap"}
           </Btn>
-          <div className="text-center pt-2">
-            <button onClick={onClose} className="text-[11px] underline font-semibold" style={{ color: TOKENS.muted, background: "transparent", border: "none", cursor: "pointer" }}>
-              Misafir olarak devam et (sadece görüntüleme)
-            </button>
-          </div>
           <div className="text-[10px] p-2 rounded mt-3" style={{ background: TOKENS.gold + "12", color: TOKENS.ink, border: `1px solid ${TOKENS.gold}40` }}>
-            💡 <strong>Kullanıcı yönetimi:</strong> Yeni kullanıcılar Supabase Dashboard'dan eklenir. Authentication → Users → Add user.
+            💡 <strong>Kullanıcı yönetimi:</strong> Yeni kullanıcılar Supabase Dashboard'dan eklenir. Authentication → Users → Add user. Rol için User Metadata: <code>{`{"role": "editor"}`}</code>
           </div>
         </div>
       </div>

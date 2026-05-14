@@ -4532,6 +4532,35 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
     return result;
   }, [orders, customers, search, statusFilter, customerFilter, curFilter, dateRange, monthFilter]);
 
+  // Filtrelenen siparişin tutarını hesapla
+  // Eğer _shipment ile geldiyse: sadece o sevkiyatın kalemlerinin tutarı (kalem dağılımına göre)
+  // Yoksa: tüm siparişin tutarı (calcOrderTotals)
+  const getFilteredOrderAmount = (o) => {
+    const sh = o._shipment;
+    if (!sh || !o._shipmentFiltered) {
+      // Tek sevkiyat veya tarih filtresi yok — tüm sipariş tutarı
+      const totals = calcOrderTotals(o);
+      return {
+        exVat: (totals.subtotal - totals.discount) + (totals.additionalCosts || 0),
+        vat: totals.vatAmount + (totals.additionalCostsVat || 0),
+        total: totals.total,
+      };
+    }
+    // Sadece bu sevkiyatın kalemleri
+    let subEx = 0;
+    (o.items || []).forEach((it) => {
+      const dist = it.shipmentDistribution
+        || (it.shipmentNo ? { [it.shipmentNo]: Math.floor(Number(it.quantity) || 0) } : { 1: Math.floor(Number(it.quantity) || 0) });
+      const qty = Math.floor(Number(dist[sh.no]) || 0);
+      if (qty > 0) {
+        subEx += (qty * (Number(it.unitPrice) || 0)) * (1 - (Number(it.discount) || 0) / 100);
+      }
+    });
+    const vatRate = Number(o.vatRate) || 0;
+    const vat = subEx * vatRate / 100;
+    return { exVat: subEx, vat, total: subEx + vat };
+  };
+
   // Yeni sipariş otomatik numaralandırma: SP-YIL-XXXX
   const nextOrderNumber = () => {
     const year = new Date().getFullYear();
@@ -4664,44 +4693,31 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
       const remaining = fullTotal - paid;
       const st = ORDER_STATUSES.find((s) => s.key === o.status);
       const usdAmt = toUSD(amt.total, o.currency, rates);
-      const isFilteredShipment = !!o._visibleShipmentNos;
+      const sh = o._shipment;
+      const isFilteredShipment = !!o._shipmentFiltered;
       const shipmentCount = (o.shipments || []).length;
-      const visibleCount = o._visibleShipmentNos ? o._visibleShipmentNos.length : shipmentCount;
-      // Sevk tarihi tek sevkiyatlıysa o, çoklu için "X sevkiyat"
-      const shipmentInfo = shipmentCount > 0
-        ? (isFilteredShipment
-            ? `${visibleCount}/${shipmentCount} ${lang === "en" ? "ship" : "sevk"}`
-            : `${shipmentCount} ${lang === "en" ? "ship" : "sevk"}`)
-        : "—";
-      // Planlanan/Fiili: en erken sevkiyatın tarihi
-      const visibleShipments = o.shipments && o.shipments.length > 0
-        ? (o._visibleShipmentNos ? o.shipments.filter((sh) => o._visibleShipmentNos.includes(sh.no)) : o.shipments)
-        : null;
-      const planDate = visibleShipments
-        ? visibleShipments.map((s) => s.shipmentDate).filter(Boolean).sort()[0] || o.shipmentDate
-        : o.shipmentDate;
-      const actualDate = visibleShipments
-        ? visibleShipments.map((s) => s.actualShipmentDate).filter(Boolean).sort()[0] || o.actualShipmentDate
-        : o.actualShipmentDate;
+      // Plan/Fiili tarih
+      const planDate = sh ? sh.shipmentDate : o.shipmentDate;
+      const actualDate = sh ? sh.actualShipmentDate : o.actualShipmentDate;
       return `
         <tr>
-          <td class="text-mono">${htmlEscape(o.orderNumber)}${isFilteredShipment ? `<div style="font-size:8px;color:#B87333;font-weight:700">⚐ filtreli sevk</div>` : ""}</td>
+          <td class="text-mono">${htmlEscape(o.orderNumber)}${sh && isFilteredShipment ? `<div style="font-size:8px;color:#A88947;font-weight:700">🚛 ${htmlEscape(sh.name || ('#'+sh.no))}</div>` : ""}</td>
           <td><div style="font-weight:700">${htmlEscape(c?.name || "—")}</div><div style="font-size:9px;color:#7A736A">${htmlEscape(c?.country || "")}</div></td>
           <td>${fmtDate(o.orderDate)}<div style="font-size:9px;color:#7A736A">W${getISOWeek(o.orderDate) || "—"}</div></td>
-          <td>${planDate ? fmtDate(planDate) : "—"}${planDate ? `<div style="font-size:9px;color:#7A736A">W${getISOWeek(planDate)}</div>` : ""}${shipmentCount > 1 ? `<div style="font-size:8px;color:#A88947">${shipmentInfo}</div>` : ""}</td>
+          <td>${planDate ? fmtDate(planDate) : "—"}${planDate ? `<div style="font-size:9px;color:#7A736A">W${getISOWeek(planDate)}</div>` : ""}${shipmentCount > 1 && !isFilteredShipment ? `<div style="font-size:8px;color:#A88947">${shipmentCount} ${lang === "en" ? "shipments" : "sevkiyat"}</div>` : ""}</td>
           <td>${actualDate ? `<span class="text-success">${fmtDate(actualDate)}</span><div style="font-size:9px;color:#3E7D5A">W${getISOWeek(actualDate)}</div>` : "—"}</td>
           <td class="center">${(o.items || []).length}</td>
           <td class="right text-mono">${fmtMoneyPDF(amt.exVat, o.currency)}</td>
           <td class="right text-mono" style="color:#A88947">${amt.vat > 0 ? fmtMoneyPDF(amt.vat, o.currency) : "—"}</td>
           <td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(amt.total, o.currency)}</td>
-          <td class="right text-mono text-success">${paid > 0 ? fmtMoneyPDF(paid, o.currency) : "—"}</td>
-          <td class="right text-mono ${remaining > 0.01 ? 'text-warning' : 'text-success'}">${remaining > 0.01 ? fmtMoneyPDF(remaining, o.currency) : "✓"}</td>
+          <td class="right text-mono text-success">${!isFilteredShipment && paid > 0 ? fmtMoneyPDF(paid, o.currency) : "—"}</td>
+          <td class="right text-mono ${remaining > 0.01 && !isFilteredShipment ? 'text-warning' : 'text-success'}">${!isFilteredShipment ? (remaining > 0.01 ? fmtMoneyPDF(remaining, o.currency) : "✓") : "—"}</td>
           <td class="right text-mono" style="color:#7A736A">$${(usdAmt || 0).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
           <td>${st?.label || o.status}</td>
         </tr>`;
     }).join("");
 
-    // KPI: alt toplam kartı ile aynı mantık
+    // KPI: tüm satırların tutarlarını topla
     let exVatUSD = 0, vatUSD = 0, totalUSD = 0;
     dataToUse.forEach((o) => {
       const amt = getFilteredOrderAmount(o);
@@ -4709,8 +4725,7 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
       vatUSD += toUSD(amt.vat, o.currency, rates);
       totalUSD += toUSD(amt.total, o.currency, rates);
     });
-    const totalPaidUSD = dataToUse.reduce((s, o) => s + toUSD(orderPaidAmount(o, payments), o.currency, rates), 0);
-    const hasShipmentFilter = dataToUse.some((o) => o._visibleShipmentNos);
+    const hasShipmentFilter = dataToUse.some((o) => o._shipmentFiltered);
 
     // Filtre özeti — structured
     const filterList = [];
@@ -4765,27 +4780,18 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
   const printCalendar = () => {
     if (!filtered.length) return showToast(lang === "en" ? "No orders to print" : "Yazdırılacak sipariş yok", "error");
 
-    // Ay bazında grupla — sevkiyat-aware (her sevkiyat kendi ayına dağıtılır)
+    // Ay bazında grupla — filtered zaten sevkiyat-aware satırlar içeriyor
     const grouped = {};
     filtered.forEach((o) => {
-      const shipments = o.shipments || [];
-      const visibleNos = o._visibleShipmentNos;
-      if (shipments.length > 0) {
-        shipments.forEach((sh) => {
-          if (visibleNos && !visibleNos.includes(sh.no)) return;
-          const d = sh.actualShipmentDate || sh.shipmentDate || o.orderDate;
-          if (!d) return;
-          const key = d.slice(0, 7);
-          if (!grouped[key]) grouped[key] = [];
-          grouped[key].push({ ...o, _shipment: sh });
-        });
-      } else {
-        const d = o.actualShipmentDate || o.shipmentDate || o.orderDate || o.createdAt;
-        if (!d) return;
-        const key = d.slice(0, 7);
-        if (!grouped[key]) grouped[key] = [];
-        grouped[key].push({ ...o, _shipment: null });
-      }
+      const sh = o._shipment;
+      // Tarih: sevkiyat varsa onun tarihi, yoksa sipariş tarihi
+      const d = sh
+        ? (sh.actualShipmentDate || sh.shipmentDate || o.orderDate)
+        : (o.actualShipmentDate || o.shipmentDate || o.orderDate || o.createdAt);
+      if (!d) return;
+      const key = d.slice(0, 7);
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(o); // o zaten _shipment ile geliyor
     });
     Object.keys(grouped).forEach((k) => grouped[k].sort((a, b) => {
       const da = (a._shipment ? a._shipment.actualShipmentDate || a._shipment.shipmentDate : null) || a.actualShipmentDate || a.shipmentDate || a.orderDate || "";
@@ -5017,8 +5023,11 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
       vatUSD += toUSD(amt.vat, o.currency, rates);
       totalUSD += toUSD(amt.total, o.currency, rates);
     });
-    const totalShipped = filtered.filter((o) => o.actualShipmentDate).length;
-    const hasShipmentFilter = filtered.some((o) => o._visibleShipmentNos);
+    const totalShipped = filtered.filter((o) => {
+      const sh = o._shipment;
+      return sh ? !!sh.actualShipmentDate : !!o.actualShipmentDate;
+    }).length;
+    const hasShipmentFilter = filtered.some((o) => o._shipmentFiltered);
 
     const content = `
       ${hasShipmentFilter ? `<div style="background:#B8733315;border-left:3px solid #B87333;padding:6px 10px;margin-bottom:10px;font-size:10px;color:#A88947"><strong>⚐ ${lang === "en" ? "Shipment-level filter active" : "Sevkiyat bazlı filtre aktif"}:</strong> ${lang === "en" ? "Each card represents a single shipment in its respective month." : "Her kart kendi ayında ilgili sevkiyatı temsil eder."}</div>` : ""}

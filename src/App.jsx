@@ -21,6 +21,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   LayoutDashboard, Package, FileText, CreditCard, TrendingUp, Settings,
   Plus, Pencil, Trash2, Search, X, Check, ArrowUp, ArrowDown, ArrowUpDown,
@@ -944,41 +945,48 @@ const fmtDateWithWeek = (d) => {
 // Kullanıcı "PDF olarak kaydet" seçeneğini seçebilir.
 
 function printPDF({ title, subtitle, contentHtml, orientation = "portrait", lang, filters, kpiCards }) {
-  const w = window.open("", "_blank", "width=1000,height=750");
-  // Eğer lang parametresi verilmediyse localStorage'dan otomatik oku
+  // window.open hemen senkron çağrılmalı (popup blocker sebebiyle)
+  const w = window.open("", "_blank", "width=1100,height=800");
   const activeLang = lang || getStoredLang();
-  if (!w) { alert(activeLang === "en" ? "Popup blocked. Please allow popups for this site." : "Popup engellendi. Tarayıcı ayarlarından bu site için popup'a izin ver."); return; }
 
-  const t = (key) => tr(activeLang, key);
-  const brandTitle = activeLang === "en" ? "Export Operations" : "İhracat Operasyonları";
-  const brandSub = activeLang === "en" ? "Management System" : "Yönetim Sistemi";
+  // window.open başarısız → blob URL fallback (en sondaki blok)
+  const useBlobFallback = !w || w.closed || typeof w.document === "undefined";
+  if (useBlobFallback) {
+    // Doğrudan fallback bloğuna atla
+  } else {
+  try {
+    const t = (key) => tr(activeLang, key);
+    const brandTitle = activeLang === "en" ? "Export Operations" : "İhracat Operasyonları";
+    const brandSub = activeLang === "en" ? "Management System" : "Yönetim Sistemi";
+    const safeTitle = String(title || (activeLang === "en" ? "Report" : "Rapor"));
+    const safeSubtitle = subtitle ? String(subtitle) : "";
 
-  // Filtre özeti HTML'i (varsa)
-  const filtersHtml = (filters && filters.length > 0) ? `
-    <div style="background:#FFF8E7;border:1px solid #C9A961;border-left:3px solid #C9A961;border-radius:3px;padding:6px 10px;margin-bottom:10px;font-size:10px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
-      <strong style="color:#A88947;text-transform:uppercase;letter-spacing:0.04em;font-size:9px">🔍 ${activeLang === "en" ? "Active Filters" : "Aktif Filtreler"}:</strong>
-      ${filters.map((f) => `<span style="background:white;padding:2px 8px;border-radius:3px;border:1px solid #E8D9A8;color:#0F1A2E"><strong>${f.label}:</strong> ${f.value}</span>`).join("")}
-    </div>
-  ` : "";
+    // Filtre özeti HTML'i (varsa)
+    const filtersHtml = (filters && Array.isArray(filters) && filters.length > 0) ? `
+      <div style="background:#FFF8E7;border:1px solid #C9A961;border-left:3px solid #C9A961;border-radius:3px;padding:6px 10px;margin-bottom:10px;font-size:10px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <strong style="color:#A88947;text-transform:uppercase;letter-spacing:0.04em;font-size:9px">🔍 ${activeLang === "en" ? "Active Filters" : "Aktif Filtreler"}:</strong>
+        ${filters.map((f) => `<span style="background:white;padding:2px 8px;border-radius:3px;border:1px solid #E8D9A8;color:#0F1A2E"><strong>${String(f.label || "")}:</strong> ${String(f.value || "")}</span>`).join("")}
+      </div>
+    ` : "";
 
-  // KPI kartları HTML'i (varsa)
-  const kpiHtml = (kpiCards && kpiCards.length > 0) ? `
-    <div class="kpi-grid" style="grid-template-columns:repeat(${Math.min(kpiCards.length, 4)}, 1fr)">
-      ${kpiCards.map((k) => `
-        <div class="kpi"${k.color ? ` style="border-left-color:${k.color}"` : ""}>
-          <div class="kpi-label">${k.label}</div>
-          <div class="kpi-value"${k.color ? ` style="color:${k.color}"` : ""}>${k.value}</div>
-          ${k.sub ? `<div style="font-size:9px;color:#7A736A;margin-top:2px">${k.sub}</div>` : ""}
-        </div>
-      `).join("")}
-    </div>
-  ` : "";
+    // KPI kartları HTML'i (varsa)
+    const kpiHtml = (kpiCards && Array.isArray(kpiCards) && kpiCards.length > 0) ? `
+      <div class="kpi-grid" style="grid-template-columns:repeat(${Math.min(kpiCards.length, 4)}, 1fr)">
+        ${kpiCards.map((k) => `
+          <div class="kpi"${k.color ? ` style="border-left-color:${k.color}"` : ""}>
+            <div class="kpi-label">${String(k.label || "")}</div>
+            <div class="kpi-value"${k.color ? ` style="color:${k.color}"` : ""}>${k.value !== undefined && k.value !== null ? String(k.value) : ""}</div>
+            ${k.sub ? `<div style="font-size:9px;color:#7A736A;margin-top:2px">${String(k.sub)}</div>` : ""}
+          </div>
+        `).join("")}
+      </div>
+    ` : "";
 
   const html = `<!DOCTYPE html>
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<title>${title}</title>
+<title>${safeTitle}</title>
 <style>
   @page { size: A4 ${orientation}; margin: 1.2cm; }
   * { box-sizing: border-box; }
@@ -1033,7 +1041,7 @@ function printPDF({ title, subtitle, contentHtml, orientation = "portrait", lang
   <script>
     function downloadAsHTML() {
       // Sayfanın HTML içeriğini dosya olarak indir
-      const filename = ${JSON.stringify(title.replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_\- ]/g, "_") + "_" + new Date().toISOString().slice(0,10))};
+      const filename = ${JSON.stringify(safeTitle.replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_\- ]/g, "_") + "_" + new Date().toISOString().slice(0,10))};
       const printBtn = document.querySelector('.toolbar');
       if (printBtn) printBtn.style.display = 'none';
       const blob = new Blob(['<!DOCTYPE html>' + document.documentElement.outerHTML], { type: 'text/html;charset=utf-8' });
@@ -1050,8 +1058,8 @@ function printPDF({ title, subtitle, contentHtml, orientation = "portrait", lang
   </script>
   <div class="doc-header">
     <div class="left">
-      <h1>${title}</h1>
-      ${subtitle ? `<div class="subtitle">${subtitle}</div>` : ""}
+      <h1>${safeTitle}</h1>
+      ${safeSubtitle ? `<div class="subtitle">${safeSubtitle}</div>` : ""}
     </div>
     <div class="right">
       <div class="brand">${brandTitle}</div>
@@ -1071,8 +1079,113 @@ function printPDF({ title, subtitle, contentHtml, orientation = "portrait", lang
 </body>
 </html>`;
 
-  w.document.write(html);
-  w.document.close();
+    w.document.write(html);
+    w.document.close();
+  } catch (err) {
+    // Hata olduğunda kullanıcıya açıklayıcı mesaj göster
+    console.error("PDF oluşturma hatası:", err);
+    try {
+      w.document.write(`<!DOCTYPE html><html><head><title>Hata</title></head><body style="font-family:sans-serif;padding:40px"><h2 style="color:#A6383D">PDF Oluşturma Hatası</h2><p>Bir hata oluştu. Tarayıcı konsolunu (F12) kontrol edin.</p><pre style="background:#F8F5EE;padding:10px;border-radius:4px;font-size:11px">${String(err.message || err).replace(/</g, "&lt;")}</pre></body></html>`);
+      w.document.close();
+    } catch (e) {
+      alert(activeLang === "en" ? "PDF generation failed. Check browser console." : "PDF oluşturulamadı. Tarayıcı konsolunu kontrol edin.");
+    }
+  }
+  return;
+  } // else kapanış
+
+  // BLOB URL FALLBACK — popup engellendiyse veya başarısızsa
+  try {
+    const t = (key) => tr(activeLang, key);
+    const brandTitle = activeLang === "en" ? "Export Operations" : "İhracat Operasyonları";
+    const brandSub = activeLang === "en" ? "Management System" : "Yönetim Sistemi";
+    const safeTitle = String(title || (activeLang === "en" ? "Report" : "Rapor"));
+    const safeSubtitle = subtitle ? String(subtitle) : "";
+
+    const filtersHtml = (filters && Array.isArray(filters) && filters.length > 0) ? `
+      <div style="background:#FFF8E7;border:1px solid #C9A961;border-left:3px solid #C9A961;border-radius:3px;padding:6px 10px;margin-bottom:10px;font-size:10px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <strong style="color:#A88947;text-transform:uppercase;letter-spacing:0.04em;font-size:9px">🔍 ${activeLang === "en" ? "Active Filters" : "Aktif Filtreler"}:</strong>
+        ${filters.map((f) => `<span style="background:white;padding:2px 8px;border-radius:3px;border:1px solid #E8D9A8;color:#0F1A2E"><strong>${String(f.label || "")}:</strong> ${String(f.value || "")}</span>`).join("")}
+      </div>
+    ` : "";
+
+    const kpiHtml = (kpiCards && Array.isArray(kpiCards) && kpiCards.length > 0) ? `
+      <div style="display:grid;grid-template-columns:repeat(${Math.min(kpiCards.length, 4)}, 1fr);gap:8px;margin-bottom:12px">
+        ${kpiCards.map((k) => `
+          <div style="padding:8px 10px;background:#F8F5EE;border:1px solid #ddd;border-left:3px solid ${k.color || "#C9A961"};border-radius:3px">
+            <div style="font-size:9px;color:#7A736A;text-transform:uppercase;font-weight:700">${String(k.label || "")}</div>
+            <div style="font-size:14px;font-weight:700;color:${k.color || "#0F1A2E"};margin-top:2px">${k.value !== undefined && k.value !== null ? String(k.value) : ""}</div>
+            ${k.sub ? `<div style="font-size:9px;color:#7A736A;margin-top:2px">${String(k.sub)}</div>` : ""}
+          </div>
+        `).join("")}
+      </div>
+    ` : "";
+
+    // Aynı içeriği blob olarak hazırla
+    const blobHtml = `<!DOCTYPE html><html lang="${activeLang}"><head><meta charset="UTF-8"><title>${safeTitle}</title>
+<style>
+  @page { size: A4 ${orientation}; margin: 1.2cm; }
+  * { box-sizing: border-box; }
+  body { font-family: Calibri, Carlito, Arial, sans-serif; font-size: 11px; color: #0F1A2E; margin: 0; padding: 20px; line-height: 1.45; background: white; }
+  .doc-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #C9A961; padding-bottom: 10px; margin-bottom: 14px; }
+  .doc-header .left h1 { font-size: 17px; margin: 0 0 3px; color: #0F1A2E; font-weight: 700; }
+  .doc-header .left .subtitle { font-size: 10px; color: #7A736A; }
+  .doc-header .right { text-align: right; font-size: 9px; color: #7A736A; line-height: 1.4; }
+  .doc-header .right .brand { font-size: 11px; font-weight: 700; color: #1E3A5F; margin-bottom: 2px; }
+  h2 { font-size: 12px; margin: 14px 0 6px; padding-bottom: 3px; border-bottom: 1px solid #C9A961; color: #1E3A5F; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 10px; page-break-inside: avoid; }
+  th { padding: 6px 8px; border: 1px solid #ccc; background: #F8F5EE; text-align: left; font-weight: 700; color: #0F1A2E; font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; }
+  td { padding: 5px 8px; border: 1px solid #ccc; vertical-align: top; }
+  td.right, th.right { text-align: right; }
+  td.center, th.center { text-align: center; }
+  .text-success { color: #3E7D5A; font-weight: 700; }
+  .text-warning { color: #B87333; font-weight: 700; }
+  .text-danger  { color: #A6383D; font-weight: 700; }
+  .text-mono    { font-family: Consolas, "Courier New", monospace; font-weight: 700; }
+  .toolbar { position: fixed; top: 10px; right: 10px; display: flex; gap: 8px; z-index: 100; }
+  .print-btn { padding: 10px 18px; color: white; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 12px; }
+  .btn-print { background: #1E3A5F; }
+  .btn-download { background: #C9A961; color: #0F1A2E; }
+  @media print { .no-print { display: none !important; } body { padding: 0; } }
+</style></head>
+<body>
+<div class="toolbar no-print">
+  <button class="print-btn btn-print" onclick="window.print()">🖨️ ${activeLang === "en" ? "Print" : "Yazdır"}</button>
+</div>
+<div class="doc-header">
+  <div class="left">
+    <h1>${safeTitle}</h1>
+    ${safeSubtitle ? `<div class="subtitle">${safeSubtitle}</div>` : ""}
+  </div>
+  <div class="right">
+    <div class="brand">${brandTitle}</div>
+    <div>${brandSub}</div>
+    <div style="margin-top:4px;color:#0F1A2E;font-weight:600">${fmtDateLong(todayISO())}</div>
+  </div>
+</div>
+${filtersHtml}
+${kpiHtml}
+${contentHtml || ""}
+</body></html>`;
+
+    const blob = new Blob([blobHtml], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 60000);
+  } catch (err) {
+    console.error("PDF blob fallback hatası:", err);
+    alert(activeLang === "en"
+      ? "Could not open PDF. Please allow popups for this site."
+      : "PDF açılamadı. Lütfen tarayıcı popup ayarlarını kontrol edin.");
+  }
 }
 
 // HTML escape — XSS koruma + karakter sorunlarını engeller
@@ -1469,10 +1582,10 @@ function PageHeader({ title, subtitle, breadcrumb, children }) {
 }
 
 // Kart — tüm modüllerde panel için
-function Card({ title, subtitle, children, action, className = "", noPadding }) {
+function Card({ title, subtitle, children, action, className = "", noPadding, allowOverflow = false }) {
   return (
     <div
-      className={`rounded-lg overflow-hidden transition-shadow hover:shadow-sm ${className}`}
+      className={`rounded-lg transition-shadow hover:shadow-sm ${allowOverflow ? "" : "overflow-hidden"} ${className}`}
       style={{ background: "white", border: `1px solid ${TOKENS.border}` }}
     >
       {(title || action) && (
@@ -1735,7 +1848,7 @@ function MultiSelect({ values = [], onChange, options = [], placeholder = "Tüm�
         </div>
       </button>
       {open && (
-        <div className="absolute z-20 mt-1 max-h-72 overflow-hidden rounded-md shadow-lg flex flex-col" style={{ background: "white", border: `1px solid ${TOKENS.border}`, minWidth: "100%" }}>
+        <div className="absolute mt-1 max-h-72 overflow-hidden rounded-md shadow-xl flex flex-col" style={{ background: "white", border: `1px solid ${TOKENS.border}`, minWidth: "100%", zIndex: 50 }}>
           {/* Arama input */}
           {searchable && options.length > 5 && (
             <div className="p-2 border-b" style={{ borderColor: TOKENS.border, background: TOKENS.cream + "60" }}>
@@ -1825,13 +1938,49 @@ function DateRange({ from, to, onChange }) {
 // onChange: (newArray) => void
 function MonthPicker({ values = [], onChange, monthsBack = 12, monthsForward = 6, lang = "tr" }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 260 });
   const ref = useRef(null);
+  const dropdownRef = useRef(null);
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const handler = (e) => {
+      // Hem button hem dropdown dışında tıklandıysa kapat
+      if (
+        ref.current && !ref.current.contains(e.target) &&
+        dropdownRef.current && !dropdownRef.current.contains(e.target)
+      ) setOpen(false);
+    };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  // Açıldığında button'un konumunu hesapla
+  useEffect(() => {
+    if (!open || !ref.current) return;
+    const updatePos = () => {
+      const r = ref.current.getBoundingClientRect();
+      const dropdownWidth = 280;
+      const dropdownMaxHeight = 320;
+      // Ekran sağına taşıyorsa sola hizala
+      let left = r.left;
+      if (left + dropdownWidth > window.innerWidth - 16) {
+        left = Math.max(16, window.innerWidth - dropdownWidth - 16);
+      }
+      // Ekran altına taşıyorsa yukarı aç
+      let top = r.bottom + 4;
+      if (top + dropdownMaxHeight > window.innerHeight - 16) {
+        top = Math.max(16, r.top - dropdownMaxHeight - 4);
+      }
+      setPos({ top, left, width: dropdownWidth });
+    };
+    updatePos();
+    window.addEventListener("scroll", updatePos, true);
+    window.addEventListener("resize", updatePos);
+    return () => {
+      window.removeEventListener("scroll", updatePos, true);
+      window.removeEventListener("resize", updatePos);
+    };
   }, [open]);
 
   // Şu andan geriye ve ileriye ayları üret
@@ -1888,9 +2037,23 @@ function MonthPicker({ values = [], onChange, monthsBack = 12, monthsForward = 6
           <ChevronDown size={12} style={{ color: TOKENS.muted, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
         </div>
       </button>
-      {open && (
-        <div className="absolute z-20 mt-1 rounded-md shadow-lg p-2" style={{ background: "white", border: `1px solid ${TOKENS.border}`, minWidth: "220px" }}>
-          <div className="grid grid-cols-3 gap-1 max-h-64 overflow-auto">
+      {open && typeof document !== "undefined" && createPortal(
+        <div
+          ref={dropdownRef}
+          className="rounded-md shadow-xl p-3"
+          style={{
+            position: "fixed",
+            top: pos.top,
+            left: pos.left,
+            width: pos.width,
+            maxHeight: "320px",
+            background: "white",
+            border: `1px solid ${TOKENS.border}`,
+            zIndex: 9999,
+            overflow: "hidden",
+          }}
+        >
+          <div className="grid grid-cols-3 gap-1.5 overflow-auto" style={{ maxHeight: "280px" }}>
             {months.map((m) => {
               const sel = values.includes(m.key);
               return (
@@ -1898,7 +2061,7 @@ function MonthPicker({ values = [], onChange, monthsBack = 12, monthsForward = 6
                   key={m.key}
                   type="button"
                   onClick={() => toggle(m.key)}
-                  className="px-2 py-1.5 text-[11px] font-bold rounded transition"
+                  className="px-2 py-2 text-[11px] font-bold rounded transition whitespace-nowrap"
                   style={{
                     background: sel ? TOKENS.gold : (m.isCurrent ? TOKENS.cream : "white"),
                     color: sel ? TOKENS.ink : TOKENS.ink,
@@ -1912,7 +2075,8 @@ function MonthPicker({ values = [], onChange, monthsBack = 12, monthsForward = 6
               );
             })}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -9276,7 +9440,7 @@ function SummaryReport({ orders = [], customers = [], products = [], payments = 
 
   return (
     <div className="space-y-4">
-      <Card>
+      <Card allowOverflow>
         <div className="flex items-end gap-3 flex-wrap">
           <div className="w-32">
             <Label>Bazda</Label>
@@ -9417,7 +9581,7 @@ function ShipmentReport({ orders = [], customers = [], rates = {} }) {
 
   return (
     <div className="space-y-4">
-      <Card>
+      <Card allowOverflow>
         <div className="flex items-end gap-3 flex-wrap">
           <div className="text-sm font-bold flex-shrink-0" style={{ color: TOKENS.ink }}>Fiili Sevk Tarihi:</div>
           <DateRange from={dateRange.from} to={dateRange.to} onChange={setDateRange} />
@@ -9533,7 +9697,7 @@ function CustomerReport({ orders = [], customers = [], payments = [], rates = {}
 
   return (
     <div className="space-y-4">
-      <Card>
+      <Card allowOverflow>
         <div className="flex items-end gap-3 flex-wrap">
           <div className="text-sm font-bold flex-shrink-0" style={{ color: TOKENS.ink }}>Aya Göre Filtre:</div>
           <MonthPicker values={monthFilter} onChange={setMonthFilter} lang="tr" />
@@ -9590,7 +9754,7 @@ function ProductReport({ orders = [], products = [], rates = {} }) {
 
   return (
     <div className="space-y-4">
-      <Card>
+      <Card allowOverflow>
         <div className="flex items-end gap-3 flex-wrap">
           <div className="text-sm font-bold flex-shrink-0" style={{ color: TOKENS.ink }}>Aya Göre Filtre:</div>
           <MonthPicker values={monthFilter} onChange={setMonthFilter} lang="tr" />
@@ -9642,7 +9806,7 @@ function CountryReport({ orders = [], customers = [], rates = {} }) {
 
   return (
     <div className="space-y-4">
-      <Card>
+      <Card allowOverflow>
         <div className="flex items-end gap-3 flex-wrap">
           <div className="text-sm font-bold flex-shrink-0" style={{ color: TOKENS.ink }}>Aya Göre Filtre:</div>
           <MonthPicker values={monthFilter} onChange={setMonthFilter} lang="tr" />
@@ -9693,7 +9857,7 @@ function MethodReport({ payments = [], rates = {} }) {
 
   return (
     <div className="space-y-4">
-      <Card>
+      <Card allowOverflow>
         <div className="flex items-end gap-3 flex-wrap">
           <div className="text-sm font-bold flex-shrink-0" style={{ color: TOKENS.ink }}>Aya Göre Filtre:</div>
           <MonthPicker values={monthFilter} onChange={setMonthFilter} lang="tr" />
@@ -9743,7 +9907,7 @@ function StatusReport({ orders = [], rates = {} }) {
 
   return (
     <div className="space-y-4">
-      <Card>
+      <Card allowOverflow>
         <div className="flex items-end gap-3 flex-wrap">
           <div className="text-sm font-bold flex-shrink-0" style={{ color: TOKENS.ink }}>Aya Göre Filtre:</div>
           <MonthPicker values={monthFilter} onChange={setMonthFilter} lang="tr" />

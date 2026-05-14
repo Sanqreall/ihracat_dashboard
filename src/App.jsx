@@ -5568,6 +5568,23 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
 // Plan kalemleri → Ödemeler tablosuna otomatik kayıt
 // Bu sayede sipariş kaydederken bir kez plan girersin, ödemeler modülünde
 // her kalem ayrı satır olarak takip edilir.
+
+// Bir sevkiyatın mal bedeli ve KDV tutarını hesapla
+function calcShipmentTotals(order, shipmentNo) {
+  let sub = 0;
+  (order.items || []).forEach((it) => {
+    const dist = it.shipmentDistribution
+      || (it.shipmentNo ? { [it.shipmentNo]: Math.floor(Number(it.quantity) || 0) } : { 1: Math.floor(Number(it.quantity) || 0) });
+    const qty = Math.floor(Number(dist[shipmentNo]) || 0);
+    if (qty > 0) {
+      sub += qty * (Number(it.unitPrice) || 0) * (1 - (Number(it.discount) || 0) / 100);
+    }
+  });
+  const vatRate = Number(order.vatRate) || 0;
+  const vat = +(sub * vatRate / 100).toFixed(2);
+  return { sub: +sub.toFixed(2), vat, total: +(sub + vat).toFixed(2) };
+}
+
 function syncPaymentsFromPlan(order, currentPayments, setPayments) {
   const existingForOrder = currentPayments.filter((p) => p.orderId === order.id);
   const orderPlanIds = new Set((order.paymentPlan || []).map((p) => p.id));
@@ -5584,6 +5601,7 @@ function syncPaymentsFromPlan(order, currentPayments, setPayments) {
       id: uid(),
       orderId: order.id,
       planItemId: plan.id,
+      shipmentNo: plan.shipmentNo || null,
       type: plan.type,
       method: plan.method || "bank_transfer",
       amount: plan.amount,
@@ -5599,16 +5617,12 @@ function syncPaymentsFromPlan(order, currentPayments, setPayments) {
   }).filter(Boolean);
 
   setPayments((arr) => {
-    // Mevcutlardan: bu siparişe ait olmayanlar veya paid olanlar veya planı hâlâ var olanlar kalır
-    // Pending olanların dueDate'i plan kalemindeki güncel tarihe güncellenir
     const filtered = arr.filter((p) => {
       if (p.orderId !== order.id) return true;
-      if (!p.planItemId) return true; // Manuel kayıt, koru
-      if (p.status === "paid") return true; // Tahsil edilmiş, asla silme
-      // Pending: plan kalemi hâlâ var ise koru, yoksa sil
+      if (!p.planItemId) return true;
+      if (p.status === "paid") return true;
       return orderPlanIds.has(p.planItemId);
     }).map((p) => {
-      // Sadece bu siparişe ait, pending, plan kalemi olan kayıtların tarihini güncelle
       if (
         p.orderId === order.id &&
         p.status !== "paid" &&
@@ -5616,7 +5630,7 @@ function syncPaymentsFromPlan(order, currentPayments, setPayments) {
         planById[p.planItemId]
       ) {
         const planItem = planById[p.planItemId];
-        return { ...p, dueDate: planItem.dueDate, amount: planItem.amount, type: planItem.type };
+        return { ...p, dueDate: planItem.dueDate, amount: planItem.amount, type: planItem.type, shipmentNo: planItem.shipmentNo || p.shipmentNo || null };
       }
       return p;
     });
@@ -5624,49 +5638,87 @@ function syncPaymentsFromPlan(order, currentPayments, setPayments) {
   });
 }
 
-// Sipariş tarih değişikliğinde ödeme planı vade tarihlerini otomatik hesapla
-// Kurallar:
-//   - prepayment  → sipariş tarihi (orderDate)
-//   - preShipment, deferred, vat → fiili sevk tarihi varsa fiili, yoksa planlanan sevk tarihi
-//   - deferred → sevk tarihine vade günü eklenir
-//   - paid olanlar dokunulmaz
+// Ödeme planı tarihlerini sipariş/sevkiyat tarihlerine göre yeniden hesapla
+// Her plan kalemi kendi shipmentNo'suna bakarak doğru sevkiyat tarihini alır
 function recalcPaymentPlanDates(paymentPlan, order, customers) {
   if (!paymentPlan || paymentPlan.length === 0) return paymentPlan;
   const customer = customers.find((c) => c.id === order.customerId);
   const vade = Number(customer?.defaultPaymentTerms) || 30;
-
-  // Siparişin efektif sevk tarihi: fiili varsa fiili, yoksa planlanan
-  // Çoklu sevkiyat varsa ilk sevkiyatın tarihini baz al (veya sipariş seviyesi)
-  const effectiveShipDate =
-    order.actualShipmentDate ||
-    (order.shipments && order.shipments.length > 0
-      ? (order.shipments[0].actualShipmentDate || order.shipments[0].shipmentDate)
-      : null) ||
-    order.shipmentDate ||
-    order.orderDate ||
-    todayISO();
-
   const orderDate = order.orderDate || todayISO();
+  const shipments = order.shipments || [];
+
+  const getShipDate = (shNo) => {
+    if (shNo && shipments.length > 0) {
+      const sh = shipments.find((s) => s.no === shNo);
+      if (sh) return sh.actualShipmentDate || sh.shipmentDate || order.shipmentDate || orderDate;
+    }
+    return order.actualShipmentDate ||
+      (shipments.length > 0 ? (shipments[0].actualShipmentDate || shipments[0].shipmentDate) : null) ||
+      order.shipmentDate || orderDate;
+  };
 
   return paymentPlan.map((item) => {
-    let newDueDate = item.dueDate; // varsayılan: değişme
+    const effectiveShipDate = getShipDate(item.shipmentNo || null);
+    let newDueDate = item.dueDate;
 
     if (item.type === "prepayment") {
-      // Ön ödeme → sipariş tarihine sabitlenir
       newDueDate = orderDate;
     } else if (item.type === "preShipment") {
-      // Sevk öncesi → sevk tarihi
       newDueDate = effectiveShipDate;
     } else if (item.type === "deferred") {
-      // Vadeli → sevk tarihinden itibaren vade günü
       newDueDate = addDays(effectiveShipDate, vade);
     } else if (item.type === "vat") {
-      // KDV → genelde sevk tarihinde ödenir
       newDueDate = effectiveShipDate;
     }
 
     return { ...item, dueDate: newDueDate };
   });
+}
+
+// Sevkiyat bazlı ödeme planı otomatik oluştur
+// Her sevkiyat için o sevkiyatın tutarına göre ayrı plan kalemleri üretir
+function buildShipmentBasedPlan(order, customers) {
+  const shipments = order.shipments || [];
+  if (shipments.length === 0) return [];
+
+  const customer = customers.find((c) => c.id === order.customerId);
+  const vade = Number(customer?.defaultPaymentTerms) || 30;
+  const method = customer?.defaultPaymentMethod || "bank_transfer";
+  const orderDate = order.orderDate || todayISO();
+  const template = order.paymentPlanTemplate || {};
+
+  const prepPct = Number(template.prepPct) || 0;
+  const preShipPct = Number(template.preShipPct) || 0;
+  const defPct = Number(template.defPct) || 0;
+  const plan = [];
+
+  shipments.forEach((sh) => {
+    const effectiveDate = sh.actualShipmentDate || sh.shipmentDate || orderDate;
+    const totals = calcShipmentTotals(order, sh.no);
+    const base = totals.sub;
+    const vatAmt = totals.vat;
+    if (base <= 0 && vatAmt <= 0) return;
+
+    const shLabel = sh.name || `${sh.no}. Sevkiyat`;
+
+    if (prepPct > 0) {
+      plan.push({ id: uid(), type: "prepayment", shipmentNo: sh.no, percentage: prepPct, amount: +(base * prepPct / 100).toFixed(2), method, dueDate: orderDate, notes: `${shLabel} — ön ödeme` });
+    }
+    if (preShipPct > 0) {
+      plan.push({ id: uid(), type: "preShipment", shipmentNo: sh.no, percentage: preShipPct, amount: +(base * preShipPct / 100).toFixed(2), method, dueDate: effectiveDate, notes: `${shLabel} — sevk öncesi` });
+    }
+    if (defPct > 0) {
+      plan.push({ id: uid(), type: "deferred", shipmentNo: sh.no, percentage: defPct, amount: +(base * defPct / 100).toFixed(2), method, dueDate: addDays(effectiveDate, vade), notes: `${shLabel} — vadeli (${vade} gün)` });
+    }
+    if (prepPct === 0 && preShipPct === 0 && defPct === 0 && base > 0) {
+      plan.push({ id: uid(), type: "deferred", shipmentNo: sh.no, percentage: 100, amount: base, method, dueDate: addDays(effectiveDate, vade), notes: `${shLabel} — vadeli (${vade} gün)` });
+    }
+    if (vatAmt > 0) {
+      plan.push({ id: uid(), type: "vat", shipmentNo: sh.no, percentage: 100, amount: vatAmt, method, dueDate: effectiveDate, notes: `${shLabel} — KDV` });
+    }
+  });
+
+  return plan;
 }
 
 // ============================================================================
@@ -6435,75 +6487,202 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
                 </span>
               )}
             </div>
-            <Btn variant="secondary" size="xs" icon={Plus} onClick={() => addPlanItem()}>Plan Kalemi Ekle</Btn>
-          </div>
-
-          {/* Hızlı şablonlar — en yaygın senaryolar */}
-          <div className="rounded-md p-3 mb-3 flex items-center gap-2 flex-wrap" style={{ background: TOKENS.gold + "10", border: `1px solid ${TOKENS.gold}30` }}>
-            <span className="text-[11px] font-semibold" style={{ color: TOKENS.goldDark }}>Hızlı Şablon:</span>
-            {(() => {
-              const customer = customers.find((c) => c.id === editing.customerId);
-              const hasDefault = customer && (
-                (Number(customer.defaultPrepaymentPct) || 0) +
-                (Number(customer.defaultPreShipmentPct) || 0) +
-                (Number(customer.defaultDeferredPct) || 0) > 0
-              );
-              return hasDefault ? (
-                <button onClick={() => applyPreset("customer-default")} className="px-2 py-1 text-[11px] rounded-md hover:bg-white transition font-semibold" style={{ border: `1px solid ${TOKENS.gold}`, background: TOKENS.gold + "20", color: TOKENS.ink }}>
-                  ⭐ Müşteri Varsayılanı (%{customer.defaultPrepaymentPct || 0} / %{customer.defaultPreShipmentPct || 0} / %{customer.defaultDeferredPct || 0})
+            <div className="flex items-center gap-2">
+              {/* Ödeme bazı seçici */}
+              <div className="flex items-center rounded-md overflow-hidden text-[11px] font-semibold" style={{ border: `1px solid ${TOKENS.border}` }}>
+                <button
+                  onClick={() => setEditing({ ...editing, paymentBasis: "order" })}
+                  className="px-2.5 py-1.5 transition"
+                  style={{
+                    background: (!editing.paymentBasis || editing.paymentBasis === "order") ? TOKENS.ink : "white",
+                    color: (!editing.paymentBasis || editing.paymentBasis === "order") ? "white" : TOKENS.muted,
+                  }}
+                  title="Ödemeler siparişin toplam tutarına göre takip edilir"
+                >
+                  Sipariş Bazlı
                 </button>
-              ) : null;
-            })()}
-            <button onClick={() => applyPreset("30-40-30")} className="px-2 py-1 text-[11px] rounded-md hover:bg-white transition" style={{ border: `1px solid ${TOKENS.gold}50`, color: TOKENS.ink }}>%30 ön + %40 sevk öncesi + %30 vadeli</button>
-            <button onClick={() => applyPreset("50-50")} className="px-2 py-1 text-[11px] rounded-md hover:bg-white transition" style={{ border: `1px solid ${TOKENS.gold}50`, color: TOKENS.ink }}>%50 ön + %50 sevk öncesi</button>
-            <button onClick={() => applyPreset("100-cash")} className="px-2 py-1 text-[11px] rounded-md hover:bg-white transition" style={{ border: `1px solid ${TOKENS.gold}50`, color: TOKENS.ink }}>%100 peşin</button>
-            <button onClick={() => applyPreset("100-lc")} className="px-2 py-1 text-[11px] rounded-md hover:bg-white transition" style={{ border: `1px solid ${TOKENS.gold}50`, color: TOKENS.ink }}>%100 akreditif (L/C)</button>
-            <button onClick={() => applyPreset("100-deferred")} className="px-2 py-1 text-[11px] rounded-md hover:bg-white transition" style={{ border: `1px solid ${TOKENS.gold}50`, color: TOKENS.ink }}>%100 vadeli</button>
+                <button
+                  onClick={() => {
+                    if ((editing.shipments || []).length < 2) {
+                      alert("Sevkiyat bazlı ödeme için önce en az 2 sevkiyat tanımlanmalıdır.");
+                      return;
+                    }
+                    setEditing({ ...editing, paymentBasis: "shipment", paymentPlan: [] });
+                  }}
+                  className="px-2.5 py-1.5 transition"
+                  style={{
+                    background: editing.paymentBasis === "shipment" ? TOKENS.navy : "white",
+                    color: editing.paymentBasis === "shipment" ? "white" : TOKENS.muted,
+                  }}
+                  title="Her sevkiyat kendi tutarına göre ayrı ödeme planı oluşturur"
+                >
+                  Sevkiyat Bazlı
+                </button>
+              </div>
+              {editing.paymentBasis !== "shipment" && (
+                <Btn variant="secondary" size="xs" icon={Plus} onClick={() => addPlanItem()}>Plan Kalemi Ekle</Btn>
+              )}
+            </div>
           </div>
 
-          {(editing.paymentPlan || []).length === 0 ? (
-            <div className="text-center py-8 text-xs rounded-md" style={{ color: TOKENS.muted, background: TOKENS.cream, border: `1px dashed ${TOKENS.border}` }}>
-              Ödeme planı boş. Yukarıdan hızlı şablon seç veya manuel "Plan Kalemi Ekle" ile başla.
-              <br /><span className="text-[10px] mt-1 inline-block">Plan kayıt edilince Ödemeler modülünde her kalem ayrı satır olarak çıkar; tahsilat alındığında oradan işaretlersin.</span>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {editing.paymentPlan.map((p, idx) => {
-                const tp = PAYMENT_PLAN_TYPES.find((t) => t.key === p.type);
+          {/* SEVKİYAT BAZLI MOD — şablon seçici */}
+          {editing.paymentBasis === "shipment" ? (
+            <div className="space-y-3">
+              <div className="rounded-md p-3" style={{ background: TOKENS.navy + "08", border: `1px solid ${TOKENS.navy}25` }}>
+                <div className="text-[11px] font-semibold mb-2" style={{ color: TOKENS.navy }}>
+                  Her sevkiyat için ödeme dağılımı (%  — toplamı 100 olmalı)
+                </div>
+                <div className="grid grid-cols-4 gap-2 mb-2">
+                  <div>
+                    <Label hint="sipariş onayında">Ön Ödeme %</Label>
+                    <Input type="number" min="0" max="100" step="1"
+                      value={editing.paymentPlanTemplate?.prepPct ?? 0}
+                      onChange={(e) => setEditing({ ...editing, paymentPlanTemplate: { ...(editing.paymentPlanTemplate || {}), prepPct: Number(e.target.value) } })} />
+                  </div>
+                  <div>
+                    <Label hint="sevk tarihinde">Sevk Öncesi %</Label>
+                    <Input type="number" min="0" max="100" step="1"
+                      value={editing.paymentPlanTemplate?.preShipPct ?? 0}
+                      onChange={(e) => setEditing({ ...editing, paymentPlanTemplate: { ...(editing.paymentPlanTemplate || {}), preShipPct: Number(e.target.value) } })} />
+                  </div>
+                  <div>
+                    <Label hint="sevk + vade günü">Vadeli %</Label>
+                    <Input type="number" min="0" max="100" step="1"
+                      value={editing.paymentPlanTemplate?.defPct ?? 0}
+                      onChange={(e) => setEditing({ ...editing, paymentPlanTemplate: { ...(editing.paymentPlanTemplate || {}), defPct: Number(e.target.value) } })} />
+                  </div>
+                  <div className="flex items-end">
+                    <Btn variant="primary" size="xs" onClick={() => {
+                      const plan = buildShipmentBasedPlan(editing, customers);
+                      if (plan.length === 0) { alert("Plan oluşturulamadı. Sevkiyatlara kalem atandığından emin ol."); return; }
+                      setEditing({ ...editing, paymentPlan: plan });
+                    }}>Planı Oluştur</Btn>
+                  </div>
+                </div>
+                <div className="text-[10px]" style={{ color: TOKENS.muted }}>
+                  Hızlı: &nbsp;
+                  {[["30-40-30", 30, 40, 30], ["50-50", 50, 50, 0], ["100 vadeli", 0, 0, 100], ["100 peşin", 100, 0, 0]].map(([label, pre, preS, def]) => (
+                    <button key={label} onClick={() => {
+                      const tpl = { prepPct: pre, preShipPct: preS, defPct: def };
+                      const plan = buildShipmentBasedPlan({ ...editing, paymentPlanTemplate: tpl }, customers);
+                      setEditing({ ...editing, paymentPlanTemplate: tpl, paymentPlan: plan });
+                    }} className="mr-2 underline" style={{ color: TOKENS.navy, background: "transparent", border: "none", cursor: "pointer" }}>{label}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sevkiyat bazlı plan özet tablosu */}
+              {(editing.shipments || []).map((sh) => {
+                const shTotals = calcShipmentTotals(editing, sh.no);
+                const shPlan = (editing.paymentPlan || []).filter((p) => p.shipmentNo === sh.no);
+                const effectiveDate = sh.actualShipmentDate || sh.shipmentDate;
                 return (
-                  <div key={p.id} className="rounded-md p-3" style={{ background: "white", border: `1px solid ${TOKENS.border}` }}>
-                    <div className="flex items-start gap-2">
-                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-1" style={{ background: TOKENS[tp?.color] + "20", color: TOKENS[tp?.color] }}>
-                        {idx + 1}
-                      </div>
-                      <div className="flex-1 grid grid-cols-12 gap-2">
-                        <div className="col-span-2"><Label>Tip</Label>
-                          <Select value={p.type} onChange={(e) => updatePlanItem(idx, { type: e.target.value })}>
-                            {PAYMENT_PLAN_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-                          </Select>
-                        </div>
-                        <div className="col-span-2"><Label>%</Label>
-                          <Input type="number" step="0.1" value={p.percentage} onChange={(e) => updatePlanItem(idx, { percentage: e.target.value })} />
-                        </div>
-                        <div className="col-span-2"><Label>Tutar ({editing.currency})</Label>
-                          <Input type="number" step="0.01" value={p.amount} onChange={(e) => updatePlanItem(idx, { amount: e.target.value })} />
-                        </div>
-                        <div className="col-span-3"><Label>Yöntem</Label>
-                          <Select value={p.method} onChange={(e) => updatePlanItem(idx, { method: e.target.value })}>
-                            {PAYMENT_METHODS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
-                          </Select>
-                        </div>
-                        <div className="col-span-3"><Label hint="vade">Tarih</Label><Input type="date" value={p.dueDate} onChange={(e) => updatePlanItem(idx, { dueDate: e.target.value })} /></div>
-                        <div className="col-span-12"><Label>Açıklama</Label><Input value={p.notes} onChange={(e) => updatePlanItem(idx, { notes: e.target.value })} placeholder="Sipariş onayında, sevk evrakı sonrası, ..." /></div>
-                      </div>
-                      <button onClick={() => removePlanItem(idx)} className="p-1.5 rounded mt-5 transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}>
-                        <Trash2 size={14} />
-                      </button>
+                  <div key={sh.id} className="rounded-md overflow-hidden" style={{ border: `1px solid ${TOKENS.border}` }}>
+                    <div className="px-3 py-2 flex items-center justify-between text-[11px] font-bold" style={{ background: TOKENS.cream }}>
+                      <span>{sh.name || `${sh.no}. Sevkiyat`}</span>
+                      <span style={{ color: TOKENS.muted }}>
+                        {effectiveDate ? fmtDate(effectiveDate) : <span style={{ color: TOKENS.terracotta }}>Tarih girilmedi</span>}
+                        &nbsp;·&nbsp;{fmtMoney(shTotals.sub, editing.currency)}
+                        {shTotals.vat > 0 && <> + KDV {fmtMoney(shTotals.vat, editing.currency)}</>}
+                      </span>
                     </div>
+                    {shPlan.length > 0 ? (
+                      <div className="divide-y" style={{ borderTop: `1px solid ${TOKENS.border}` }}>
+                        {shPlan.map((p, idx) => {
+                          const tp = PAYMENT_PLAN_TYPES.find((t) => t.key === p.type);
+                          const globalIdx = (editing.paymentPlan || []).indexOf(p);
+                          return (
+                            <div key={p.id} className="px-3 py-2 flex items-center gap-2 text-[11px]">
+                              <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0" style={{ background: TOKENS[tp?.color] + "20", color: TOKENS[tp?.color] }}>{idx + 1}</span>
+                              <span className="font-semibold w-20" style={{ color: TOKENS[tp?.color] }}>{tp?.label}</span>
+                              <span className="font-mono">{fmtMoney(p.amount, editing.currency)}</span>
+                              <span style={{ color: TOKENS.muted }}>{p.dueDate ? fmtDate(p.dueDate) : "—"}</span>
+                              <span className="flex-1 text-[10px]" style={{ color: TOKENS.muted }}>{p.notes}</span>
+                              <div className="flex gap-1">
+                                <Input type="date" value={p.dueDate} onChange={(e) => updatePlanItem(globalIdx, { dueDate: e.target.value })} className="text-[10px] h-6 py-0 px-1 w-32" />
+                                <button onClick={() => removePlanItem(globalIdx)} className="p-1 rounded" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.color = TOKENS.muted; }}><Trash2 size={12} /></button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="px-3 py-2 text-[11px]" style={{ color: TOKENS.muted }}>Henüz plan yok — yukarıdan oluştur.</div>
+                    )}
                   </div>
                 );
               })}
             </div>
+          ) : (
+            <>
+              {/* SİPARİŞ BAZLI MOD — mevcut şablon seçici + liste */}
+              <div className="rounded-md p-3 mb-3 flex items-center gap-2 flex-wrap" style={{ background: TOKENS.gold + "10", border: `1px solid ${TOKENS.gold}30` }}>
+                <span className="text-[11px] font-semibold" style={{ color: TOKENS.goldDark }}>Hızlı Şablon:</span>
+                {(() => {
+                  const customer = customers.find((c) => c.id === editing.customerId);
+                  const hasDefault = customer && (
+                    (Number(customer.defaultPrepaymentPct) || 0) +
+                    (Number(customer.defaultPreShipmentPct) || 0) +
+                    (Number(customer.defaultDeferredPct) || 0) > 0
+                  );
+                  return hasDefault ? (
+                    <button onClick={() => applyPreset("customer-default")} className="px-2 py-1 text-[11px] rounded-md hover:bg-white transition font-semibold" style={{ border: `1px solid ${TOKENS.gold}`, background: TOKENS.gold + "20", color: TOKENS.ink }}>
+                      ⭐ Müşteri Varsayılanı (%{customer.defaultPrepaymentPct || 0} / %{customer.defaultPreShipmentPct || 0} / %{customer.defaultDeferredPct || 0})
+                    </button>
+                  ) : null;
+                })()}
+                <button onClick={() => applyPreset("30-40-30")} className="px-2 py-1 text-[11px] rounded-md hover:bg-white transition" style={{ border: `1px solid ${TOKENS.gold}50`, color: TOKENS.ink }}>%30 ön + %40 sevk öncesi + %30 vadeli</button>
+                <button onClick={() => applyPreset("50-50")} className="px-2 py-1 text-[11px] rounded-md hover:bg-white transition" style={{ border: `1px solid ${TOKENS.gold}50`, color: TOKENS.ink }}>%50 ön + %50 sevk öncesi</button>
+                <button onClick={() => applyPreset("100-cash")} className="px-2 py-1 text-[11px] rounded-md hover:bg-white transition" style={{ border: `1px solid ${TOKENS.gold}50`, color: TOKENS.ink }}>%100 peşin</button>
+                <button onClick={() => applyPreset("100-lc")} className="px-2 py-1 text-[11px] rounded-md hover:bg-white transition" style={{ border: `1px solid ${TOKENS.gold}50`, color: TOKENS.ink }}>%100 akreditif (L/C)</button>
+                <button onClick={() => applyPreset("100-deferred")} className="px-2 py-1 text-[11px] rounded-md hover:bg-white transition" style={{ border: `1px solid ${TOKENS.gold}50`, color: TOKENS.ink }}>%100 vadeli</button>
+              </div>
+
+              {(editing.paymentPlan || []).length === 0 ? (
+                <div className="text-center py-8 text-xs rounded-md" style={{ color: TOKENS.muted, background: TOKENS.cream, border: `1px dashed ${TOKENS.border}` }}>
+                  Ödeme planı boş. Yukarıdan hızlı şablon seç veya manuel "Plan Kalemi Ekle" ile başla.
+                  <br /><span className="text-[10px] mt-1 inline-block">Plan kayıt edilince Ödemeler modülünde her kalem ayrı satır olarak çıkar; tahsilat alındığında oradan işaretlersin.</span>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {editing.paymentPlan.map((p, idx) => {
+                    const tp = PAYMENT_PLAN_TYPES.find((t) => t.key === p.type);
+                    return (
+                      <div key={p.id} className="rounded-md p-3" style={{ background: "white", border: `1px solid ${TOKENS.border}` }}>
+                        <div className="flex items-start gap-2">
+                          <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-1" style={{ background: TOKENS[tp?.color] + "20", color: TOKENS[tp?.color] }}>
+                            {idx + 1}
+                          </div>
+                          <div className="flex-1 grid grid-cols-12 gap-2">
+                            <div className="col-span-2"><Label>Tip</Label>
+                              <Select value={p.type} onChange={(e) => updatePlanItem(idx, { type: e.target.value })}>
+                                {PAYMENT_PLAN_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+                              </Select>
+                            </div>
+                            <div className="col-span-2"><Label>%</Label>
+                              <Input type="number" step="0.1" value={p.percentage} onChange={(e) => updatePlanItem(idx, { percentage: e.target.value })} />
+                            </div>
+                            <div className="col-span-2"><Label>Tutar ({editing.currency})</Label>
+                              <Input type="number" step="0.01" value={p.amount} onChange={(e) => updatePlanItem(idx, { amount: e.target.value })} />
+                            </div>
+                            <div className="col-span-3"><Label>Yöntem</Label>
+                              <Select value={p.method} onChange={(e) => updatePlanItem(idx, { method: e.target.value })}>
+                                {PAYMENT_METHODS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+                              </Select>
+                            </div>
+                            <div className="col-span-3"><Label hint="vade">Tarih</Label><Input type="date" value={p.dueDate} onChange={(e) => updatePlanItem(idx, { dueDate: e.target.value })} /></div>
+                            <div className="col-span-12"><Label>Açıklama</Label><Input value={p.notes} onChange={(e) => updatePlanItem(idx, { notes: e.target.value })} placeholder="Sipariş onayında, sevk evrakı sonrası, ..." /></div>
+                          </div>
+                          <button onClick={() => removePlanItem(idx)} className="p-1.5 rounded mt-5 transition" style={{ color: TOKENS.muted }} onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}>
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
 
           {!planMatch && itemsTotal > 0 && (editing.paymentPlan || []).length > 0 && (

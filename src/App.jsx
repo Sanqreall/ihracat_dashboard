@@ -10723,6 +10723,14 @@ function SettingsView({ customers, setCustomers, products, setProducts, bankAcco
             Sistemde {bankAccounts.length} banka hesabı var. Banka hesabı zorunlu değil — tahsilat girerken opsiyonel olarak seçebilirsin.
           </p>
         </Card>
+
+ {/* Kullanıcılar — Supabase Auth ile yönetilir */}
+        <Card title="Kullanıcı Yönetimi"
+          <div className="space-y-3 text-sm" style={{ color: TOKENS.ink }}>
+            <div className="p-3 rounded-md" style={{ background: TOKENS.gold + "12", border: `1px solid ${TOKENS.gold}40` }}>
+              <strong>Mevcut oturum:</strong> {currentUser ? `${currentUser.name} (${currentUser.email}) — ${USER_ROLES.find((r) => r.key === currentUser.role)?.label || currentUser.role}` : "Misafir (sadece görüntüleme)"}
+            </div>
+          </Card>
         
  {/* Veri özeti */}
         <Card title="Veri Özeti">

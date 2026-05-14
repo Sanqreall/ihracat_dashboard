@@ -10724,11 +10724,29 @@ function SettingsView({ customers, setCustomers, products, setProducts, bankAcco
           </p>
         </Card>
         
-         <div key={m.label} className="rounded-md p-3" style={{ background: TOKENS.cream }}>
+ {/* Veri özeti */}
+        <Card title="Veri Özeti">
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-3 text-center">
+            {[
+              { label: "Müşteri", value: customers.length, icon: Users },
+              { label: "Ürün", value: products.length, icon: Package },
+              { label: "Banka", value: bankAccounts.length, icon: Landmark },
+              { label: "Sipariş", value: orders.length, icon: FileText },
+              { label: "Ödeme", value: payments.length, icon: CreditCard },
+              { label: "Tahsil Edilen", value: payments.filter((p) => p.status === "paid").length, icon: CheckCircle2 },
+            ].map((m) => {
+              const Icon = m.icon;
+              return (
+                <div key={m.label} className="rounded-md p-3" style={{ background: TOKENS.cream }}>
                   <Icon size={14} className="mx-auto mb-1" style={{ color: TOKENS.gold }} />
                   <div className="text-xl font-bold" style={{ color: TOKENS.ink, fontFamily: FONT_DISPLAY }}>{m.value}</div>
                   <div className="text-[10px] uppercase tracking-wider" style={{ color: TOKENS.muted }}>{m.label}</div>
                 </div>
+              );
+            })}
+          </div>
+        </Card>
+
         
 
         <div className="text-center text-[11px] py-4" style={{ color: TOKENS.muted }}>

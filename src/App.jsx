@@ -1639,10 +1639,12 @@ function Modal({ open, onClose, title, subtitle, children, size = "md", footer }
 // Tablo — sıralama, satır tıklama, eylem sütunu
 function DataTable({ columns, rows, keyField = "id", onRowClick, emptyText = "Kayıt yok", emptyHint, actions, defaultSort, rowStyle, onSortedChange }) {
   const [sort, setSort] = useState(defaultSort || { key: null, dir: "asc" });
+  const columnsRef = useRef(columns);
+  columnsRef.current = columns;
 
   const sorted = useMemo(() => {
     if (!sort.key) return rows;
-    const col = columns.find((c) => c.key === sort.key);
+    const col = columnsRef.current.find((c) => c.key === sort.key);
     return [...rows].sort((a, b) => {
       const av = col?.sortValue ? col.sortValue(a) : a[sort.key];
       const bv = col?.sortValue ? col.sortValue(b) : b[sort.key];
@@ -1654,7 +1656,7 @@ function DataTable({ columns, rows, keyField = "id", onRowClick, emptyText = "Ka
         ? String(av).localeCompare(String(bv), "tr")
         : String(bv).localeCompare(String(av), "tr");
     });
-  }, [rows, sort, columns]);
+  }, [rows, sort]);
 
   // Sıralama değiştiğinde parent'a haber ver (PDF için)
   useEffect(() => {
@@ -4516,8 +4518,8 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
       const shipments = o.shipments || [];
       const hasDateFilter = dateRange.from || dateRange.to || monthFilter.length > 0;
 
-      if (shipments.length > 1) {
-        // Her sevkiyat her zaman ayrı satır — fiili varsa onu, yoksa planlananı kullan
+      if (shipments.length > 1 && (hasDateFilter || viewMode !== "list")) {
+        // Takvim/PDF modunda veya tarih filtresi varsa her sevkiyat ayrı satır
         shipments.forEach((sh) => {
           const shDate = sh.actualShipmentDate || sh.shipmentDate || "";
           if (hasDateFilter) {
@@ -4542,7 +4544,7 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
       }
     });
     return result;
-  }, [orders, customers, search, statusFilter, customerFilter, curFilter, dateRange, monthFilter]);
+  }, [orders, customers, search, statusFilter, customerFilter, curFilter, dateRange, monthFilter, viewMode]);
 
   // Filtrelenen siparişin tutarını hesapla
   // Eğer _shipment ile geldiyse: sadece o sevkiyatın kalemlerinin tutarı (kalem dağılımına göre)
@@ -5259,10 +5261,10 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
       );
     }},
     { key: "totalUSD", label: "USD", align: "right", sortValue: (r) => toUSD(total(r), r.currency, rates), render: (r) => <span className="text-[11px] font-semibold" style={{ color: TOKENS.muted }}>{fmtMoney(toUSD(total(r), r.currency, rates), "USD", { compact: true })}</span> },
-    { key: "paid", label: "Tahsil", align: "right", sortValue: (r) => orderPaidAmount(r, payments) / (total(r) || 1), render: (r) => {
-      const t = total(r);
+    { key: "paid", label: "Tahsil", align: "right", sortValue: (r) => orderPaidAmount(r, payments) / (orderTotal(r) || 1), render: (r) => {
       const paid = orderPaidAmount(r, payments);
-      const pct = t > 0 ? Math.round((paid / t) * 100) : 0;
+      const fullTotal = orderTotal(r);
+      const pct = fullTotal > 0 ? Math.round((paid / fullTotal) * 100) : 0;
       const color = pct === 100 ? TOKENS.forest : pct >= 50 ? TOKENS.gold : pct > 0 ? TOKENS.copper : TOKENS.muted;
       return (
         <div className="inline-flex flex-col items-end">

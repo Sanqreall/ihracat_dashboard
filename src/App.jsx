@@ -4933,7 +4933,7 @@ function OrdersView({ customers, products, orders, setOrders, payments, setPayme
             </div>
             ${(o.shipments || []).length > 0 ? `
               <div style="padding:6px 8px;background:white">
-                ${o.shipments.map((sh) => {
+                ${(o._shipment ? [o._shipment] : o.shipments).map((sh) => {
                   const shItems = (o.items || [])
                     .map((it) => {
                       const dist = it.shipmentDistribution || (it.shipmentNo ? { [it.shipmentNo]: Math.floor(Number(it.quantity) || 0) } : { 1: Math.floor(Number(it.quantity) || 0) });

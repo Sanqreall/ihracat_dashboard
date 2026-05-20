@@ -4099,7 +4099,7 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
 
   const openNew = () => {
     setEditing({ id: null, productCode: "", manufacturingCode: "", nameTr: "", nameEn: "", category: "",
-      unit: "adet", defaultPrice: 0, defaultCurrency: "USD", notes: "" });
+      unit: "adet", defaultPrice: 0, defaultCurrency: "USD", notes: "", packages: [] });
     setOpen(true);
   };
 
@@ -4180,6 +4180,19 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
     )},
     { key: "category", label: "Kategori", render: (r) => r.category ? <Badge color="navy">{r.category}</Badge> : "—" },
     { key: "defaultPrice", label: "Fiyat", align: "right", render: (r) => fmtMoney(r.defaultPrice, r.defaultCurrency) },
+    { key: "packages", label: "Paket", align: "center", sortable: false, render: (r) => {
+      const pkgs = r.packages || [];
+      if (!pkgs.length) return <span style={{ color: TOKENS.muted }}>—</span>;
+      const totalVol = pkgs.reduce((s, p) => s + ((Number(p.width)||0)*(Number(p.depth)||0)*(Number(p.height)||0))/1e6, 0);
+      return (
+        <div className="text-center">
+          <span className="text-xs font-semibold px-1.5 py-0.5 rounded" style={{ background: TOKENS.navy+"18", color: TOKENS.navy }}>
+            {pkgs.length} koli
+          </span>
+          {totalVol > 0 && <div className="text-[10px] mt-0.5" style={{ color: TOKENS.muted }}>{totalVol.toFixed(3)} m³</div>}
+        </div>
+      );
+    }},
     { key: "totalQty", label: "Toplam Satış", align: "right", render: (r) => <span style={{ color: r.totalQty > 0 ? TOKENS.ink : TOKENS.muted }}>{fmtNum(r.totalQty)} {r.unit}</span> },
     { key: "totalUSD", label: "Ciro", align: "right", render: (r) => <span style={{ color: TOKENS.muted }}>{fmtMoney(r.totalUSD, "USD", { compact: true })}</span> },
   ];
@@ -4280,7 +4293,7 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
         )}
       </div>
 
-      <Modal open={open && !!editing} onClose={() => { setOpen(false); setEditing(null); }} title={editing?.id ? "Ürünü Düzenle" : "Yeni Ürün"} size="md"
+      <Modal open={open && !!editing} onClose={() => { setOpen(false); setEditing(null); }} title={editing?.id ? "Ürünü Düzenle" : "Yeni Ürün"} size="lg"
         footer={<><Btn variant="ghost" onClick={() => { setOpen(false); setEditing(null); }}>İptal</Btn><Btn variant="primary" icon={Save} onClick={save}>Kaydet</Btn></>}
       >
         {editing && (
@@ -4296,6 +4309,134 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
               <div><Label>Para Birimi</Label><Select value={editing.defaultCurrency} onChange={(e) => setEditing({ ...editing, defaultCurrency: e.target.value })}>{CURRENCIES.map((c) => <option key={c}>{c}</option>)}</Select></div>
             </div>
             <div><Label>Notlar</Label><Textarea value={editing.notes} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} /></div>
+
+            {/* PAKET BİLGİLERİ */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <span className="text-sm font-bold" style={{ color: TOKENS.ink }}>Paket / Koli Bilgileri</span>
+                  <span className="ml-2 text-xs" style={{ color: TOKENS.muted }}>Her koli için boyut ve ağırlık tanımla</span>
+                </div>
+                <Btn size="sm" variant="secondary" icon={Plus} onClick={() => setEditing((prev) => ({
+                  ...prev,
+                  packages: [...(prev.packages || []), { id: uid(), name: "", width: "", depth: "", height: "", grossWeight: "", netWeight: "", quantityPerPackage: 1, notes: "" }]
+                }))}>Koli Ekle</Btn>
+              </div>
+
+              {(editing.packages || []).length === 0 ? (
+                <div className="rounded-lg border-2 border-dashed text-center py-6 text-sm" style={{ borderColor: TOKENS.border, color: TOKENS.muted }}>
+                  Henüz paket tanımı yok — "Koli Ekle" ile başla
+                </div>
+              ) : (
+                <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${TOKENS.border}` }}>
+                  {/* Başlık satırı */}
+                  <div className="grid text-[10px] font-bold uppercase tracking-wide px-3 py-2" style={{ background: TOKENS.cream, color: TOKENS.muted, gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr auto" }}>
+                    <span>Koli Adı / İçerik</span>
+                    <span className="text-center">En (cm)</span>
+                    <span className="text-center">Boy (cm)</span>
+                    <span className="text-center">Yük. (cm)</span>
+                    <span className="text-center">Hacim (m³)</span>
+                    <span className="text-center">Brüt (kg)</span>
+                    <span className="text-center">Net (kg)</span>
+                    <span className="text-center">Adet/Koli</span>
+                    <span></span>
+                  </div>
+
+                  {(editing.packages || []).map((pkg, idx) => {
+                    const vol = ((Number(pkg.width)||0) * (Number(pkg.depth)||0) * (Number(pkg.height)||0)) / 1e6;
+                    const updatePkg = (field, val) => setEditing((prev) => ({
+                      ...prev,
+                      packages: prev.packages.map((p, i) => i === idx ? { ...p, [field]: val } : p)
+                    }));
+                    const removePkg = () => setEditing((prev) => ({
+                      ...prev,
+                      packages: prev.packages.filter((_, i) => i !== idx)
+                    }));
+                    return (
+                      <div key={pkg.id} className="grid items-center gap-1.5 px-3 py-2" style={{ gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr auto", borderTop: idx > 0 ? `1px solid ${TOKENS.border}` : "none" }}>
+                        {/* Koli Adı */}
+                        <Input
+                          value={pkg.name}
+                          onChange={(e) => updatePkg("name", e.target.value)}
+                          placeholder={`Koli ${idx + 1}`}
+                          style={{ fontSize: 12, padding: "4px 8px", height: 30 }}
+                        />
+                        {/* En */}
+                        <Input type="number" min="0" step="0.1"
+                          value={pkg.width}
+                          onChange={(e) => updatePkg("width", e.target.value)}
+                          style={{ fontSize: 12, padding: "4px 6px", height: 30, textAlign: "center" }}
+                        />
+                        {/* Boy */}
+                        <Input type="number" min="0" step="0.1"
+                          value={pkg.depth}
+                          onChange={(e) => updatePkg("depth", e.target.value)}
+                          style={{ fontSize: 12, padding: "4px 6px", height: 30, textAlign: "center" }}
+                        />
+                        {/* Yükseklik */}
+                        <Input type="number" min="0" step="0.1"
+                          value={pkg.height}
+                          onChange={(e) => updatePkg("height", e.target.value)}
+                          style={{ fontSize: 12, padding: "4px 6px", height: 30, textAlign: "center" }}
+                        />
+                        {/* Hacim (auto) */}
+                        <div className="text-center text-xs font-mono font-semibold" style={{ color: vol > 0 ? TOKENS.navy : TOKENS.muted }}>
+                          {vol > 0 ? vol.toFixed(4) : "—"}
+                        </div>
+                        {/* Brüt */}
+                        <Input type="number" min="0" step="0.01"
+                          value={pkg.grossWeight}
+                          onChange={(e) => updatePkg("grossWeight", e.target.value)}
+                          style={{ fontSize: 12, padding: "4px 6px", height: 30, textAlign: "center" }}
+                        />
+                        {/* Net */}
+                        <Input type="number" min="0" step="0.01"
+                          value={pkg.netWeight}
+                          onChange={(e) => updatePkg("netWeight", e.target.value)}
+                          style={{ fontSize: 12, padding: "4px 6px", height: 30, textAlign: "center" }}
+                        />
+                        {/* Adet/Koli */}
+                        <Input type="number" min="1" step="1"
+                          value={pkg.quantityPerPackage}
+                          onChange={(e) => updatePkg("quantityPerPackage", e.target.value)}
+                          style={{ fontSize: 12, padding: "4px 6px", height: 30, textAlign: "center" }}
+                        />
+                        {/* Sil */}
+                        <button onClick={removePkg} className="p-1 rounded transition" style={{ color: TOKENS.oxblood }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = TOKENS.oxblood + "15"}
+                          onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+                          <X size={14} />
+                        </button>
+                      </div>
+                    );
+                  })}
+
+                  {/* Toplam satırı */}
+                  {(editing.packages || []).length > 1 && (() => {
+                    const pkgs = editing.packages || [];
+                    const totalVol = pkgs.reduce((s, p) => s + ((Number(p.width)||0)*(Number(p.depth)||0)*(Number(p.height)||0))/1e6, 0);
+                    const totalGross = pkgs.reduce((s, p) => s + (Number(p.grossWeight)||0), 0);
+                    const totalNet = pkgs.reduce((s, p) => s + (Number(p.netWeight)||0), 0);
+                    return (
+                      <div className="grid items-center px-3 py-2 text-xs font-bold" style={{ gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr auto", background: TOKENS.cream, borderTop: `1px solid ${TOKENS.border}`, color: TOKENS.navy }}>
+                        <span>{pkgs.length} koli toplam</span>
+                        <span></span><span></span><span></span>
+                        <span className="text-center font-mono">{totalVol > 0 ? totalVol.toFixed(4) : "—"}</span>
+                        <span className="text-center font-mono">{totalGross > 0 ? totalGross.toFixed(2) : "—"}</span>
+                        <span className="text-center font-mono">{totalNet > 0 ? totalNet.toFixed(2) : "—"}</span>
+                        <span></span><span></span>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {(editing.packages || []).length > 0 && (
+                <p className="text-[11px] mt-1.5" style={{ color: TOKENS.muted }}>
+                  💡 Birden fazla ürün aynı koliye giriyorsa Koli Adı alanına açıklama yaz (örn. "Ahşap Kasa — PRD-001 + PRD-002")
+                </p>
+              )}
+            </div>
           </div>
         )}
       </Modal>

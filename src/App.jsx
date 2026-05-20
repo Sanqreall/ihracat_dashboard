@@ -4131,43 +4131,120 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
 
   const handleExport = () => {
     if (!products.length) return showToast("Aktarılacak ürün yok", "error");
-    exportToExcel(enriched.map((p) => ({
+    // Sheet 1: Ürünler
+    const mainRows = enriched.map((p) => ({
       "Ürün Kodu": p.productCode, "Mamul Kodu": p.manufacturingCode || "",
       "Türkçe İsim": p.nameTr || "", "İngilizce İsim": p.nameEn || "",
       "Kategori": p.category || "", "Birim": p.unit || "adet",
       "Varsayılan Fiyat": p.defaultPrice, "Para Birimi": p.defaultCurrency,
       "Toplam Satış Adedi": p.totalQty, "Sipariş Sayısı": p.orderCount,
       "Toplam Ciro (USD)": p.totalUSD.toFixed(2), "Notlar": p.notes || "",
-    })), `urunler_${todayISO()}.xlsx`, "Ürünler");
+      "Koli Sayısı": (p.packages || []).length,
+    }));
+    // Sheet 2: Paket Bilgileri
+    const pkgRows = [];
+    enriched.forEach((p) => {
+      (p.packages || []).forEach((pkg, i) => {
+        const vol = ((Number(pkg.width)||0)*(Number(pkg.depth)||0)*(Number(pkg.height)||0))/1e6;
+        pkgRows.push({
+          "Ürün Kodu": p.productCode,
+          "Koli No": i + 1,
+          "Koli Adı": pkg.name || "",
+          "En (cm)": Number(pkg.width) || "",
+          "Boy (cm)": Number(pkg.depth) || "",
+          "Yükseklik (cm)": Number(pkg.height) || "",
+          "Hacim (m³)": vol > 0 ? parseFloat(vol.toFixed(6)) : "",
+          "Brüt Ağırlık (kg)": Number(pkg.grossWeight) || "",
+          "Net Ağırlık (kg)": Number(pkg.netWeight) || "",
+          "Adet/Koli": Number(pkg.quantityPerPackage) || 1,
+          "Not": pkg.notes || "",
+        });
+      });
+    });
+    const ws1 = XLSX.utils.json_to_sheet(mainRows);
+    const ws2 = pkgRows.length > 0 ? XLSX.utils.json_to_sheet(pkgRows) : XLSX.utils.json_to_sheet([{
+      "Ürün Kodu": "", "Koli No": "", "Koli Adı": "", "En (cm)": "", "Boy (cm)": "", "Yükseklik (cm)": "", "Hacim (m³)": "", "Brüt Ağırlık (kg)": "", "Net Ağırlık (kg)": "", "Adet/Koli": "", "Not": "",
+    }]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws1, "Ürünler");
+    XLSX.utils.book_append_sheet(wb, ws2, "Paket Bilgileri");
+    const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    downloadBlob(out, `urunler_${todayISO()}.xlsx`, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     showToast("Excel'e aktarıldı", "success");
   };
 
   const handleImport = async (file) => {
     if (!file) return;
     try {
-      const rows = await importFromExcel(file);
-      const added = rows.map((r) => ({
-        id: uid(),
-        productCode: String(r["Ürün Kodu"] || "").trim(),
-        manufacturingCode: String(r["Mamul Kodu"] || ""),
-        nameTr: String(r["Türkçe İsim"] || ""),
-        nameEn: String(r["İngilizce İsim"] || ""),
-        category: String(r["Kategori"] || ""),
-        unit: String(r["Birim"] || "adet"),
-        defaultPrice: Number(r["Varsayılan Fiyat"] || 0),
-        defaultCurrency: String(r["Para Birimi"] || "USD").toUpperCase(),
-        notes: String(r["Notlar"] || ""),
-        createdAt: todayISO(),
-      })).filter((p) => p.productCode);
-      setProducts((arr) => [...arr, ...added]);
-      showToast(`${added.length} ürün içe aktarıldı`, "success");
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const wb = XLSX.read(e.target.result, { type: "array" });
+          // Sheet 1: ürünler
+          const mainRows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+          // Sheet 2: paket bilgileri (varsa)
+          const pkgSheet = wb.SheetNames.find((n) => n === "Paket Bilgileri" || n === "Paketler");
+          const pkgRows = pkgSheet ? XLSX.utils.sheet_to_json(wb.Sheets[pkgSheet]) : [];
+          // Paketleri ürün koduna göre grupla
+          const pkgByCode = {};
+          pkgRows.forEach((row) => {
+            const code = String(row["Ürün Kodu"] || "").trim();
+            if (!code) return;
+            if (!pkgByCode[code]) pkgByCode[code] = [];
+            pkgByCode[code].push({
+              id: uid(),
+              name: String(row["Koli Adı"] || ""),
+              width: Number(row["En (cm)"] || 0) || "",
+              depth: Number(row["Boy (cm)"] || 0) || "",
+              height: Number(row["Yükseklik (cm)"] || 0) || "",
+              grossWeight: Number(row["Brüt Ağırlık (kg)"] || 0) || "",
+              netWeight: Number(row["Net Ağırlık (kg)"] || 0) || "",
+              quantityPerPackage: Number(row["Adet/Koli"] || 1) || 1,
+              notes: String(row["Not"] || ""),
+            });
+          });
+          const added = mainRows.map((r) => {
+            const code = String(r["Ürün Kodu"] || "").trim();
+            return {
+              id: uid(),
+              productCode: code,
+              manufacturingCode: String(r["Mamul Kodu"] || ""),
+              nameTr: String(r["Türkçe İsim"] || ""),
+              nameEn: String(r["İngilizce İsim"] || ""),
+              category: String(r["Kategori"] || ""),
+              unit: String(r["Birim"] || "adet"),
+              defaultPrice: Number(r["Varsayılan Fiyat"] || 0),
+              defaultCurrency: String(r["Para Birimi"] || "USD").toUpperCase(),
+              notes: String(r["Notlar"] || ""),
+              packages: pkgByCode[code] || [],
+              createdAt: todayISO(),
+            };
+          }).filter((p) => p.productCode);
+          setProducts((arr) => [...arr, ...added]);
+          const pkgCount = added.reduce((s, p) => s + p.packages.length, 0);
+          showToast(`${added.length} ürün${pkgCount > 0 ? `, ${pkgCount} paket bilgisi` : ""} içe aktarıldı`, "success");
+        } catch (err) { showToast("Hata: " + err.message, "error"); }
+      };
+      reader.onerror = () => showToast("Dosya okunamadı", "error");
+      reader.readAsArrayBuffer(file);
     } catch (e) { showToast("Hata: " + e.message, "error"); }
   };
 
-  const downloadTemplate = () => exportToExcel([{
-    "Ürün Kodu": "PRD-001", "Mamul Kodu": "MM-A1", "Türkçe İsim": "Örnek", "İngilizce İsim": "Sample",
-    "Kategori": "Tekstil", "Birim": "adet", "Varsayılan Fiyat": 100, "Para Birimi": "USD", "Notlar": "",
-  }], "urun_sablonu.xlsx", "Şablon");
+  const downloadTemplate = () => {
+    const ws1 = XLSX.utils.json_to_sheet([{
+      "Ürün Kodu": "PRD-001", "Mamul Kodu": "MM-A1", "Türkçe İsim": "Örnek Ürün", "İngilizce İsim": "Sample Product",
+      "Kategori": "Tekstil", "Birim": "adet", "Varsayılan Fiyat": 100, "Para Birimi": "USD", "Notlar": "",
+    }]);
+    const ws2 = XLSX.utils.json_to_sheet([
+      { "Ürün Kodu": "PRD-001", "Koli No": 1, "Koli Adı": "Koli 1", "En (cm)": 60, "Boy (cm)": 40, "Yükseklik (cm)": 30, "Hacim (m³)": 0.072, "Brüt Ağırlık (kg)": 12.5, "Net Ağırlık (kg)": 10, "Adet/Koli": 6, "Not": "" },
+      { "Ürün Kodu": "PRD-001", "Koli No": 2, "Koli Adı": "Koli 2", "En (cm)": 60, "Boy (cm)": 40, "Yükseklik (cm)": 30, "Hacim (m³)": 0.072, "Brüt Ağırlık (kg)": 12.5, "Net Ağırlık (kg)": 10, "Adet/Koli": 6, "Not": "" },
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws1, "Ürünler");
+    XLSX.utils.book_append_sheet(wb, ws2, "Paket Bilgileri");
+    const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    downloadBlob(out, "urun_sablonu.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  };
 
   const columns = [
     { key: "productCode", label: "Ürün Kodu", render: (r) => <span className="font-mono text-xs font-semibold" style={{ color: TOKENS.navy }}>{r.productCode}</span> },
@@ -4203,7 +4280,57 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
 
     const list = sortedFiltered && sortedFiltered.length === filtered.length ? sortedFiltered : filtered;
 
-    const rows = list.map((p) => `
+    const rows = list.map((p) => {
+      const pkgs = p.packages || [];
+      const pkgHtml = pkgs.length > 0 ? `
+        <tr class="pkg-rows">
+          <td colspan="8" style="padding:0 0 6px 16px">
+            <table style="width:100%;font-size:8.5px;border-collapse:collapse">
+              <thead>
+                <tr style="background:#EAE6DF">
+                  <th style="padding:3px 6px;text-align:left;font-weight:600;color:#7A736A">Koli Adı</th>
+                  <th style="padding:3px 6px;text-align:center;font-weight:600;color:#7A736A">En (cm)</th>
+                  <th style="padding:3px 6px;text-align:center;font-weight:600;color:#7A736A">Boy (cm)</th>
+                  <th style="padding:3px 6px;text-align:center;font-weight:600;color:#7A736A">Yük. (cm)</th>
+                  <th style="padding:3px 6px;text-align:center;font-weight:600;color:#7A736A">Hacim (m³)</th>
+                  <th style="padding:3px 6px;text-align:center;font-weight:600;color:#7A736A">Brüt (kg)</th>
+                  <th style="padding:3px 6px;text-align:center;font-weight:600;color:#7A736A">Net (kg)</th>
+                  <th style="padding:3px 6px;text-align:center;font-weight:600;color:#7A736A">Adet/Koli</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${pkgs.map((pkg, i) => {
+                  const vol = ((Number(pkg.width)||0)*(Number(pkg.depth)||0)*(Number(pkg.height)||0))/1e6;
+                  return `<tr style="background:${i%2===0?"#FDFCFA":"#F5F2EE"}">
+                    <td style="padding:3px 6px">${htmlEscape(pkg.name || `Koli ${i+1}`)}</td>
+                    <td style="padding:3px 6px;text-align:center">${pkg.width || "—"}</td>
+                    <td style="padding:3px 6px;text-align:center">${pkg.depth || "—"}</td>
+                    <td style="padding:3px 6px;text-align:center">${pkg.height || "—"}</td>
+                    <td style="padding:3px 6px;text-align:center;font-weight:600">${vol > 0 ? vol.toFixed(4) : "—"}</td>
+                    <td style="padding:3px 6px;text-align:center">${pkg.grossWeight || "—"}</td>
+                    <td style="padding:3px 6px;text-align:center">${pkg.netWeight || "—"}</td>
+                    <td style="padding:3px 6px;text-align:center">${pkg.quantityPerPackage || 1}</td>
+                  </tr>`;
+                }).join("")}
+                ${pkgs.length > 1 ? (() => {
+                  const tv = pkgs.reduce((s,pk)=>s+((Number(pk.width)||0)*(Number(pk.depth)||0)*(Number(pk.height)||0))/1e6,0);
+                  const tg = pkgs.reduce((s,pk)=>s+(Number(pk.grossWeight)||0),0);
+                  const tn = pkgs.reduce((s,pk)=>s+(Number(pk.netWeight)||0),0);
+                  return `<tr style="background:#E4DED6;font-weight:700">
+                    <td style="padding:3px 6px">${pkgs.length} koli toplam</td>
+                    <td colspan="3"></td>
+                    <td style="padding:3px 6px;text-align:center">${tv > 0 ? tv.toFixed(4) : "—"}</td>
+                    <td style="padding:3px 6px;text-align:center">${tg > 0 ? tg.toFixed(2) : "—"}</td>
+                    <td style="padding:3px 6px;text-align:center">${tn > 0 ? tn.toFixed(2) : "—"}</td>
+                    <td></td>
+                  </tr>`;
+                })() : ""}
+              </tbody>
+            </table>
+          </td>
+        </tr>` : "";
+
+      return `
       <tr>
         <td class="text-mono">${htmlEscape(p.productCode)}</td>
         <td class="text-mono" style="color:#7A736A">${htmlEscape(p.manufacturingCode || "—")}</td>
@@ -4213,7 +4340,8 @@ function ProductsView({ products, setProducts, orders, rates, canEdit, showToast
         <td class="right text-mono" style="font-weight:700">${fmtMoneyPDF(p.defaultPrice, p.defaultCurrency)}</td>
         <td class="right text-mono">${(p.totalQty || 0).toLocaleString("tr-TR")} ${htmlEscape(p.unit || "")}</td>
         <td class="right text-mono" style="color:#7A736A">$${(p.totalUSD || 0).toLocaleString("tr-TR", {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
-      </tr>`).join("");
+      </tr>${pkgHtml}`;
+    }).join("");
 
     const totalCiro = list.reduce((s, p) => s + (p.totalUSD || 0), 0);
     const cats = [...new Set(list.map((p) => p.category).filter(Boolean))].length;

@@ -867,10 +867,11 @@ const PAYMENT_METHODS = [
 
 // Ödeme planı kalemi tipi — bir siparişin ödemesi bu üç ana parçadan oluşur
 const PAYMENT_PLAN_TYPES = [
-  { key: "prepayment",  label: "Ön Ödeme",      desc: "Sipariş onayında alınan", color: "gold" },
-  { key: "preShipment", label: "Sevk Öncesi",   desc: "Sevkiyattan önce alınan", color: "copper" },
-  { key: "deferred",    label: "Vadeli",        desc: "Sevkten sonra X gün",     color: "navy" },
-  { key: "vat",         label: "KDV",           desc: "Mal bedeli üzerine ayrı KDV ödemesi", color: "navy" },
+  { key: "prepayment",     label: "Ön Ödeme",      desc: "Sipariş onayında alınan", color: "gold" },
+  { key: "preShipment",    label: "Sevk Öncesi",   desc: "Sevkiyattan önce alınan", color: "copper" },
+  { key: "deferred",       label: "Vadeli",        desc: "Sevkten sonra X gün",     color: "navy" },
+  { key: "vat",            label: "KDV",           desc: "Mal bedeli üzerine ayrı KDV ödemesi", color: "navy" },
+  { key: "additionalCost", label: "İlave Maliyet", desc: "Otomatik eklenen ek maliyet kalemi",  color: "copper" },
 ];
 
 // Ödeme durumu — sistem tarafından otomatik güncellenir (vade geçince "overdue")
@@ -6740,7 +6741,20 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
             </div>
             <Btn variant="secondary" size="xs" icon={Plus} onClick={() => {
               const cur = editing.additionalCosts || [];
-              setEditing({ ...editing, additionalCosts: [...cur, { id: uid(), description: "", amount: 0, vatRate: 0 }] });
+              const newCost = { id: uid(), description: "", amount: 0, vatRate: 0 };
+              const autoNote = [editing.orderNumber, "İlave Maliyet"].filter(Boolean).join(" - ");
+              const newPlanEntry = {
+                id: uid(),
+                type: "additionalCost",
+                percentage: 0,
+                amount: 0,
+                method: (editing.paymentPlan || [])[0]?.method || "bank_transfer",
+                dueDate: "",
+                notes: autoNote,
+                _additionalCostId: newCost.id,
+                _notesManuallyEdited: false,
+              };
+              setEditing({ ...editing, additionalCosts: [...cur, newCost], paymentPlan: [...(editing.paymentPlan || []), newPlanEntry] });
             }}>Maliyet Ekle</Btn>
           </div>
 
@@ -6770,9 +6784,11 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
                           onChange={(e) => {
                             const arr = [...(editing.additionalCosts || [])];
                             arr[idx] = { ...arr[idx], description: e.target.value };
-                            // Eğer ödeme planında bu ilave maliyete ait bir kalem varsa açıklamayı güncelle
+                            const autoNote = [editing.orderNumber, e.target.value || "İlave Maliyet"].filter(Boolean).join(" - ");
                             const updatedPlan = (editing.paymentPlan || []).map((p) =>
-                              p._additionalCostId === c.id ? { ...p, notes: e.target.value } : p
+                              p._additionalCostId === c.id && !p._notesManuallyEdited
+                                ? { ...p, notes: autoNote }
+                                : p
                             );
                             setEditing({ ...editing, additionalCosts: arr, paymentPlan: updatedPlan });
                           }}
@@ -6782,8 +6798,14 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
                         <Input type="number" step="0.01" value={c.amount ?? 0}
                           onChange={(e) => {
                             const arr = [...(editing.additionalCosts || [])];
-                            arr[idx] = { ...arr[idx], amount: parseNumber(e.target.value) };
-                            setEditing({ ...editing, additionalCosts: arr });
+                            const newAmt = parseNumber(e.target.value);
+                            arr[idx] = { ...arr[idx], amount: newAmt };
+                            const vatAmt = newAmt * (Number(arr[idx].vatRate) || 0) / 100;
+                            const totalAmt = +(newAmt + vatAmt).toFixed(2);
+                            const updatedPlan = (editing.paymentPlan || []).map((p) =>
+                              p._additionalCostId === c.id ? { ...p, amount: totalAmt } : p
+                            );
+                            setEditing({ ...editing, additionalCosts: arr, paymentPlan: updatedPlan });
                           }}
                           className="text-right tabular-nums" />
                       </td>
@@ -6794,15 +6816,24 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
                               <Input type="number" step="1" min="0" max="100" value={c.vatRate ?? 0}
                                 onChange={(e) => {
                                   const arr = [...(editing.additionalCosts || [])];
-                                  arr[idx] = { ...arr[idx], vatRate: parseNumber(e.target.value) };
-                                  setEditing({ ...editing, additionalCosts: arr });
+                                  const newVat = parseNumber(e.target.value);
+                                  arr[idx] = { ...arr[idx], vatRate: newVat };
+                                  const vatAmt = (Number(arr[idx].amount) || 0) * newVat / 100;
+                                  const totalAmt = +((Number(arr[idx].amount) || 0) + vatAmt).toFixed(2);
+                                  const updatedPlan = (editing.paymentPlan || []).map((p) =>
+                                    p._additionalCostId === c.id ? { ...p, amount: totalAmt } : p
+                                  );
+                                  setEditing({ ...editing, additionalCosts: arr, paymentPlan: updatedPlan });
                                 }}
                                 className="text-right tabular-nums w-14" />
                               <span className="text-[10px] font-bold" style={{ color: TOKENS.muted }}>%</span>
                               <button onClick={() => {
                                 const arr = [...(editing.additionalCosts || [])];
                                 arr[idx] = { ...arr[idx], vatRate: 0 };
-                                setEditing({ ...editing, additionalCosts: arr });
+                                const updatedPlan = (editing.paymentPlan || []).map((p) =>
+                                  p._additionalCostId === c.id ? { ...p, amount: Number(arr[idx].amount) || 0 } : p
+                                );
+                                setEditing({ ...editing, additionalCosts: arr, paymentPlan: updatedPlan });
                               }} className="p-0.5 rounded" style={{ color: TOKENS.muted, background: "transparent", border: "none", cursor: "pointer" }} title="KDV kaldır">
                                 <Trash2 size={10} />
                               </button>
@@ -6824,7 +6855,8 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
                       <td className="px-2">
                         <button onClick={() => {
                           const arr = (editing.additionalCosts || []).filter((_, i) => i !== idx);
-                          setEditing({ ...editing, additionalCosts: arr });
+                          const updatedPlan = (editing.paymentPlan || []).filter((p) => p._additionalCostId !== c.id);
+                          setEditing({ ...editing, additionalCosts: arr, paymentPlan: updatedPlan });
                         }} className="p-1 rounded transition" style={{ color: TOKENS.muted, background: "transparent", border: "none" }}
                           onMouseEnter={(e) => { e.currentTarget.style.background = TOKENS.oxblood + "15"; e.currentTarget.style.color = TOKENS.oxblood; }}
                           onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = TOKENS.muted; }}>
@@ -6999,8 +7031,10 @@ function OrderEditModal({ open, onClose, editing, setEditing, customers, product
                                 <Input type="date" value={p.dueDate} onChange={(e) => updatePlanItem(globalIdx, { dueDate: e.target.value })} className="text-[10px] h-6 py-0 px-2 w-36" />
                               </div>
                               <div className="flex flex-col gap-0.5 flex-1">
-                                <span className="text-[9px] uppercase tracking-wider" style={{ color: TOKENS.muted }}>Açıklama</span>
-                                <Input value={p.notes} onChange={(e) => updatePlanItem(globalIdx, { notes: e.target.value })} className="text-[10px] h-6 py-0 px-2" placeholder="Açıklama..." />
+                                <span className="text-[9px] uppercase tracking-wider" style={{ color: TOKENS.muted }}>
+                                  Açıklama{p._additionalCostId && !p._notesManuallyEdited ? <span style={{ color: TOKENS.copper }}> · otomatik</span> : p._additionalCostId ? <span style={{ color: TOKENS.navy }}> · düzenlendi</span> : ""}
+                                </span>
+                                <Input value={p.notes} onChange={(e) => updatePlanItem(globalIdx, { notes: e.target.value, ...(p._additionalCostId ? { _notesManuallyEdited: true } : {}) })} className="text-[10px] h-6 py-0 px-2" placeholder="Açıklama..." />
                               </div>
                             </div>
                           </div>

@@ -1,52 +1,26 @@
 {
-  "name": "yonga-erp",
-  "version": "0.1.0",
+  "name": "export-flow",
   "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "İhracat Yönetim Sistemi - Sipariş, ödeme ve nakit akışı takibi",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "next": "15.5.20",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "@supabase/ssr": "^0.5.1",
-    "@supabase/supabase-js": "^2.45.4",
-    "@tanstack/react-table": "^8.20.5",
-    "react-hook-form": "^7.53.0",
-    "@hookform/resolvers": "^3.9.0",
-    "zod": "^3.23.8",
+    "lucide-react": "^0.383.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "recharts": "^2.12.7",
-    "framer-motion": "^11.11.9",
-    "zustand": "^5.0.0",
-    "lucide-react": "^0.453.0",
-    "date-fns": "^4.1.0",
-    "xlsx": "^0.18.5",
-    "pdf-lib": "^1.17.1",
-    "clsx": "^2.1.1",
-    "tailwind-merge": "^2.5.4",
-    "class-variance-authority": "^0.7.0",
-    "sonner": "^1.5.0",
-    "@radix-ui/react-dialog": "^1.1.2",
-    "@radix-ui/react-dropdown-menu": "^2.1.2",
-    "@radix-ui/react-label": "^2.1.0",
-    "@radix-ui/react-select": "^2.1.2",
-    "@radix-ui/react-tabs": "^1.1.1",
-    "@radix-ui/react-checkbox": "^1.1.2",
-    "@radix-ui/react-avatar": "^1.1.1",
-    "@radix-ui/react-tooltip": "^1.1.4"
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "typescript": "^5.6.3",
-    "@types/node": "^22.7.9",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "tailwindcss": "^3.4.14",
-    "postcss": "^8.4.47",
-    "autoprefixer": "^10.4.20",
-    "eslint": "^8.57.1",
-    "eslint-config-next": "15.5.20"
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.39",
+    "tailwindcss": "^3.4.6",
+    "vite": "^5.3.4"
   }
 }

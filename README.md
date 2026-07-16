@@ -1,229 +1,129 @@
-# Export-Flow · İhracat Yönetim Sistemi
+# Yonga ERP
 
-Türkiye'den ihracat yapan firmalar için sipariş, müşteri ve nakit akışı yönetimi. Tek sayfada çalışır, Excel'e aktarır, paylaşımlı buluta bağlanır.
+Next.js 15 + Supabase tabanlı, Yonga iç pazar operasyonları için ERP / dashboard sistemi.
 
-## Neyi Yönetir
+Bu **Faz 3 (tam sürüm)** teslimatıdır — tüm modüller uçtan uca çalışır durumda:
 
-- **Müşteriler** — Kod, ülke, tercih edilen para birimi, vade, kredi limiti
-- **Ürünler** — Ürün kodu, mamul kodu, TR/EN isim, varsayılan fiyat
-- **Banka Hesapları** — IBAN, SWIFT, para birimi bazlı tahsilat takibi
-- **Siparişler** — Müşteriye bağlı, çok kalemli, Incoterms, sevkiyat bilgileri
-- **Ödeme Planı** — Sipariş içinde ön ödeme + sevk öncesi + vadeli yapısı
-- **Ödemeler** — Plan kalemlerinden otomatik oluşur, banka hesabı bazlı tahsilat
-- **Nakit Akışı** — Haftalık projeksiyon, gecikmiş alarmı, yöntem bazlı dağılım
-- **Raporlar** — Müşteri / ürün / ülke / ödeme yöntemi / durum bazında
+- **Panel** — KPI kartları (stok değeri, kritik stok, brüt/net satış, ortalama sipariş değeri) + aylık satış grafiği
+- **Ürünler** — tam CRUD, Excel içe/dışa aktarma + şablon, toplu silme, sütun görünürlüğü
+- **Stok** — ürün bazlı stok özeti (mevcut/üretimde/rezerve/kullanılabilir/stok değeri) + hareket ledger'ı
+  + manuel stok düzeltmesi, Excel export
+- **Üretim** — Kuyruk → Üretimde → Tamamlandı → Stoğa Aktarıldı akışı, kısmi üretim (tamamlanan adet
+  planlanandan farklı olabilir), birim maliyet stok hareketine yazılır
+- **Siparişler** — çoklu ürün satırı, satır + sipariş indirimi, kargo, KDV, canlı toplam; onaylanan
+  sipariş stoğu düşer, düzenleme/iptal/silme stoğu geri alır
+- **İadeler** — sipariş seçince ürünler otomatik dolar, iade nedeni, tek tıkla stoğa geri transfer,
+  silinen aktarılmış iadenin stok etkisi geri alınır
+- **Müşteriler** — tam CRUD, arama, toplu silme
+- **Platformlar** — CRUD, komisyon oranı, aktif/pasif geçişi
+- **Giderler** — kategori bazlı gider girişi, bu ay özeti kartları, toplu silme, Excel export
+- **Raporlar** — aylık brüt/net satış, kâr/zarar (gelir − gider), platform pastası, en çok satanlar,
+  iade nedenleri; tek tıkla çok sayfalı Excel raporu
+- **Ayarlar** — firma bilgileri (KDV, desi başına kargo), kategori/seri yönetimi, kullanıcı rolleri
 
-## Bu Sürümde Yeni Olan Ne?
+## Neden faz faz?
 
-- **Müşteri modülü eklendi** (eskiden sipariş içinde serbest metindi). Müşteri seçince ülke, para birimi, vade ve Incoterm otomatik geliyor.
-- **Banka hesapları** ayrı modül oldu — tahsilat hangi hesaba geldi takip ediliyor.
-- **9 farklı ödeme yöntemi** (banka havalesi, akreditif/L/C, vesaik mukabili, peşin, açık hesap, çek, kredi kartı, konsinye, diğer).
-- **Sipariş içinde ödeme planı** — % bazlı, otomatik tutar hesaplama, hızlı şablonlar (30-40-30, 50-50, %100 L/C vb.). Plan kaydedilince ödemeler modülünde her kalem ayrı satır olarak çıkar.
-- **Kredi limiti & risk göstergesi** — açık hesap satışta görsel uyarı.
-- **Tahsilat anındaki kur kaydı** — kur farkı kâr/zararı için.
-- **Paylaşımlı bulut (Supabase)** — sadece API anahtarlarıyla aktif olur.
-
----
-
-## Hızlı Başlangıç (Yerel Test)
-
-**1. Node.js kur** (eğer yoksa): [nodejs.org](https://nodejs.org/) → "LTS" sürümünü indir, kur.
-
-**2. Bağımlılıkları yükle:**
-```bash
-cd export-flow
-npm install
-```
-
-**3. Çalıştır:**
-```bash
-npm run dev
-```
-
-Tarayıcı `http://localhost:5173` adresinde açılır. **Ayarlar → Demo Yükle** ile sistem örnek verilerle dolar.
-
----
-
-## GitHub'a Yükleme
-
-### 1. GitHub hesabı
-
-[github.com](https://github.com) → Sign up (zaten varsa giriş yap).
-
-### 2. Yeni repo oluştur
-
-- Sağ üst **+** → **New repository**
-- İsim: `export-flow`
-- **Private** seçili (sadece davet ettiğin kişiler görür)
-- README/.gitignore eklemeyi atla → **Create repository**
-
-### 3. Yerel projeyi gönder
-
-Git kurulu değilse: [git-scm.com](https://git-scm.com/) → indir, kur.
-
-Proje klasöründe terminalde sırayla:
-
-```bash
-git init
-git add .
-git commit -m "İlk sürüm"
-git branch -M main
-git remote add origin https://github.com/SENIN_KULLANICI_ADIN/export-flow.git
-git push -u origin main
-```
-
-> İlk push'ta GitHub kullanıcı adı ve şifre (veya kişisel access token) sorabilir.
-
-### 4. Ekibi davet et
-
-Repo → **Settings → Collaborators → Add people** → ekip arkadaşlarının GitHub kullanıcı adlarını ekle.
-
----
-
-## Vercel'e Deploy (Canlıya Çıkma)
-
-### 1. Vercel hesabı
-
-[vercel.com](https://vercel.com) → **Sign Up** → **Continue with GitHub** ile bağla. Ücretsiz plan yeterli.
-
-### 2. Projeyi içe aktar
-
-- Dashboard'da **Add New → Project**
-- `export-flow` repo'sunu seç → **Import**
-- Ayarlar otomatik gelir (Vite framework). Hiçbir şey değiştirme.
-- **Deploy** butonuna bas.
-
-1-2 dakika sonra `https://export-flow-xxx.vercel.app` URL'ini alırsın.
-
-### 3. Otomatik dağıtım
-
-GitHub'a her `git push` attığında Vercel otomatik yeni sürümü canlıya alır.
-
----
-
-## Paylaşımlı Veritabanı (Supabase) — 3-5 Kişi Aynı Veriyi Görsün
-
-Bu kısım **opsiyoneldir**. Atlanırsa veriler her kullanıcının kendi tarayıcısında saklanır (yerel mod).
-
-### 1. Supabase hesabı
-
-[supabase.com](https://supabase.com) → **Start your project** → e-posta veya GitHub ile kayıt ol.
-
-### 2. Yeni proje oluştur
-
-- **New project**
-- İsim: `export-flow`
-- Veritabanı şifresi: güçlü bir şifre belirle, **bir yere yaz**.
-- Bölge: **Frankfurt** veya **London** (Türkiye'ye yakın, hız için).
-- **Create new project** → 1-2 dakika beklersin, hazırlanır.
-
-### 3. SQL'i çalıştır
-
-- Sol menü → **SQL Editor** → **New query**
-- Proje klasöründeki `supabase-setup.sql` dosyasını aç, içeriğini kopyala
-- Editor'a yapıştır → **Run** butonu (sağ alt)
-- "Success" mesajını gör
-
-### 4. API anahtarlarını al
-
-- Sol menü → **Project Settings** (en alttaki ⚙️ ikonu) → **API**
-- İki şeyi kopyala:
-  - **Project URL** (örnek: `https://abcdefgh.supabase.co`)
-  - **anon / public key** (uzun bir karakter dizisi, "eyJh..." ile başlar)
-
-### 5. Vercel'e ekle
-
-- Vercel'de projene git → **Settings → Environment Variables**
-- İki yeni değişken ekle:
-  - Name: `VITE_SUPABASE_URL`, Value: az önce kopyaladığın Project URL
-  - Name: `VITE_SUPABASE_ANON_KEY`, Value: anon/public key
-- **Save**
-- Sol menü → **Deployments** → en üstteki deploy'da **⋯ → Redeploy**
-
-Yeniden açtığında sol altta **"Bulut · Paylaşımlı"** yazısını göreceksin. Aynı URL'i ekibinle paylaş; herkes aynı veriyi görecek.
-
-### Yerel geliştirmede de bulut kullanmak için
-
-Proje klasörünün kök dizininde `.env` adında bir dosya oluştur:
-
-```
-VITE_SUPABASE_URL=https://senin-projen.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJh...senin-anahtarın
-```
-
-`npm run dev` ile çalıştırdığında bulut moduna geçer.
-
-> Not: `.env` dosyası `.gitignore` sayesinde GitHub'a yüklenmez (anahtarların güvende kalır).
-
----
-
-## Veri Yedekleme
-
-**Bulut moduna geçmeden önce mevcut verini kaybetme:**
-
-1. **Ayarlar → Tam Yedek Al** → JSON dosyası iner
-2. Bulut modu kurduktan sonra → **Ayarlar → Yedekten Yükle** → aynı dosyayı seç
-
-Aynı yöntem, tarayıcı değiştirirken de işe yarar.
-
----
-
-## İki Mod Karşılaştırma
-
-|  | **Yerel Mod** | **Bulut Mod (Supabase)** |
-|---|---|---|
-| Kurulum | Hiçbir şey gerekmez | 5 dakikalık SQL + anahtar yapıştırma |
-| Veriler nerede | Kullanıcının tarayıcısında | Supabase'de paylaşımlı |
-| Çoklu kullanıcı | Hayır | Evet, gerçek zamanlı |
-| Maliyet | Ücretsiz | Ücretsiz (500 MB'a kadar) |
-| Cihaz değişince | Yedek alıp aktarman gerek | Otomatik aynı veriyi görürsün |
-
----
-
-## Klasör Yapısı
-
-```
-export-flow/
-├── src/
-│   ├── App.jsx              # Tüm sistem mantığı
-│   ├── main.jsx             # React giriş noktası
-│   └── index.css            # Tailwind direktifleri
-├── index.html               # HTML şablonu
-├── package.json             # Bağımlılıklar
-├── vite.config.js           # Build yapılandırması
-├── tailwind.config.js       # Tailwind ayarları
-├── postcss.config.js        # PostCSS ayarları
-├── vercel.json              # Vercel SPA yönlendirme
-├── supabase-setup.sql       # Supabase için hazır SQL
-├── .env.example             # .env şablonu
-└── .gitignore
-```
+Bu ölçekte bir ERP'yi (~50+ ekran, onlarca tablo, tüm iş mantığı) tek seferde "bitmiş" olarak üretmek
+gerçekçi değil — sonuç test edilmemiş, deploy edilemeyen bir kod yığını olurdu. Bunun yerine sağlam bir
+temel (auth, tasarım sistemi, veritabanı, tam çalışan bir modül) kurduk; her sonraki modül aynı deseni
+kopyalayarak hızlıca eklenebilir.
 
 ## Teknoloji
 
-- **React 18** + **Vite** (modern build)
-- **Tailwind CSS** (utility-first stil)
-- **Recharts** (grafikler)
-- **Lucide React** (ikonlar)
-- **SheetJS / xlsx** (Excel)
-- **Supabase** (opsiyonel; REST API üzerinden, ek paket gerekmez)
+- Next.js 15 (App Router) + React 19 + TypeScript
+- Tailwind CSS + elle yazılmış shadcn-tarzı bileşenler (Radix primitives)
+- Supabase (PostgreSQL + Auth + RLS)
+- TanStack Table, React Hook Form + Zod, Recharts, Zustand, xlsx, pdf-lib
 
----
+## Kurulum (tarayıcı üzerinden, terminal gerekmez)
 
-## Sıkça Karşılaşılan Sorunlar
+### 1) Supabase projesi
 
-**"npm: command not found"** → Node.js kurulu değil. [nodejs.org](https://nodejs.org/) → LTS indir.
+1. https://supabase.com üzerinde yeni proje oluşturun.
+2. **SQL Editor** → New query → `supabase/migrations/0001_init.sql` dosyasının tamamını yapıştırıp **Run**.
+3. Aynı şekilde `supabase/seed/0001_seed.sql` dosyasını çalıştırın (başlangıç platformları, kategoriler vb.).
+4. **Authentication → Providers**'da Email/Password aktif olsun (varsayılan olarak açıktır).
+5. **Authentication → Users**'dan ilk kullanıcınızı manuel ekleyin (Add user → email + password).
+   Bu kullanıcı otomatik olarak `profiles` tablosuna `employee` rolüyle düşer; rolü admin yapmak isterseniz
+   SQL Editor'de:
+   ```sql
+   update public.profiles set role = 'admin' where id = 'KULLANICI-UUID';
+   ```
+6. **Project Settings → API**'den `Project URL` ve `anon public key` değerlerini kopyalayın.
 
-**"Permission denied" git push'ta** → GitHub kullanıcı adı/şifre yerine "personal access token" iste. GitHub → Settings → Developer settings → Personal access tokens → "classic" → "Generate new token" → repo izinleri seç → token'ı kopyala, şifre yerine yapıştır.
+### 2) GitHub'a yükleme
 
-**Vercel'de "Build failed"** → Logları oku; çoğu zaman tekrar Redeploy yapmak çözer.
+1. GitHub'da yeni bir boş repo oluşturun (README eklemeden).
+2. Bu klasördeki tüm dosyaları repo'ya yükleyin (GitHub web arayüzünde "Add file → Upload files"
+   ile sürükle-bırak yapabilirsiniz; `node_modules` ve `.next` zaten `.gitignore` ile hariç tutulur,
+   onları yüklemeyin).
 
-**Supabase'de veriler görünmüyor** → SQL'i çalıştırdın mı? Anahtarları doğru kopyaladın mı? Vercel'de Redeploy attın mı? Sol alttaki rozette "Bulut" mu yazıyor?
+### 3) Vercel'e deploy
 
-**Demo veriler silinmiyor** → Ayarlar → "Tüm Veriyi Sil" iki kez onay ister.
+1. https://vercel.com → New Project → GitHub reponuzu seçin.
+2. Environment Variables kısmına ekleyin:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+3. Deploy'a basın.
 
----
+Deploy sonrası `/login` sayfasından Supabase'te oluşturduğunuz kullanıcıyla giriş yapabilirsiniz.
 
-## Lisans
+## Klasör yapısı
 
-Özel kullanım için hazırlandı.
+```
+app/
+  (auth)/login/           giriş sayfası
+  (dashboard)/            korumalı alan (sidebar + topbar layout)
+    dashboard/            KPI paneli + satış grafiği
+    products/             TAM ÇALIŞAN: liste, arama/filtre/sıralama/sayfalama,
+                           sütun görünürlüğü, toplu silme, Excel içe/dışa aktarma
+    inventory/ …           yol haritası ekranları (sonraki faz)
+    orders/ production/ returns/ customers/ platforms/ expenses/ reports/ settings/
+components/
+  ui/                     buton, input, dialog, select, tablo vb. temel bileşenler
+  layout/                 sidebar, topbar, tema sağlayıcı
+  dashboard/              KPI kartı, satış grafiği
+lib/
+  supabase/               client / server / middleware Supabase istemcileri
+  validations/            Zod şemaları
+  types.ts                veritabanı tipleri (elle yazıldı — supabase gen types ile değiştirilebilir)
+supabase/
+  migrations/0001_init.sql   tüm tablolar, enum'lar, trigger'lar, RLS politikaları
+  seed/0001_seed.sql         başlangıç verisi (platformlar, kategoriler, gider kategorileri)
+```
+
+## Veritabanı mimarisi notları
+
+- Tüm giriş yapmış kullanıcılar aynı veriyi paylaşır (kullanıcı bazlı izolasyon yok), RLS politikaları
+  buna göre "authenticated ise okuyabilir/yazabilir" şeklinde kurulmuştur.
+- `stock_movements` tablosu bir **ledger**'dır (append-only); her satır eklendiğinde trigger otomatik
+  olarak `products.current_stock` (veya üretimse `production_stock`) değerini günceller. Stok her zaman
+  bu hareketlerden türetilir, elle stok sayısını değiştirmek yerine bir `adjustment` hareketi ekleyin
+  (`adjustStock` server action'ı bunu yapıyor).
+- Soft delete: `deleted_at` dolu olan kayıtlar listelerde görünmez ama veritabanından silinmez.
+- `audit_logs` tablosu hazır; ileride trigger'larla otomatik doldurulabilir.
+
+## Stok ledger mantığı (önemli)
+
+Tüm stok değişimleri `stock_movements` tablosuna yazılır (append-only); trigger her satırda
+`products.current_stock`'u (üretim hareketlerinde `production_stock`'u) günceller. Hiçbir hareket
+silinmez — geri almalar `cancellation` telafi kaydıyla yapılır, böylece ledger toplamı her zaman
+gerçek stoğa eşittir.
+
+- **Sipariş**: `confirmed / processing / shipped / delivered` durumları stok düşer (`sale`, negatif).
+  `draft` ve `cancelled` etkilemez. Düzenleme/iptal/silme önce net etkiyi sıfırlar.
+- **İade**: "Stoğa aktar" butonu pozitif `return` hareketi ekler; aktarılmış iade silinirse etki geri alınır.
+- **Üretim**: tamamlanan parti "Stoğa aktar" ile `transfer` hareketi olarak satılabilir stoğa geçer,
+  birim maliyet (toplam maliyet / tamamlanan adet) harekete yazılır.
+- **Manuel düzeltme**: Stok sayfasından pozitif/negatif `adjustment` girilir.
+
+## Olası sonraki geliştirmeler
+
+- Talep tahmini (hareketli ortalama + mevsimsellik) ve önerilen üretim adedi
+- Sipariş PDF çıktısı (pdf-lib altyapısı hazır)
+- Raporlarda tarih aralığı ve platform filtresi
+- Ürün görselleri (Supabase Storage)
+- Denetim kayıtlarının (audit_logs) trigger'larla otomatik doldurulması
+
+Her modül `app/(dashboard)/products/` klasöründeki desen (actions.ts + *-table.tsx + *-form.tsx)
+kopyalanarak hızlıca eklenebilir.

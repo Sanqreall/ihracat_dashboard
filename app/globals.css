@@ -1,0 +1,198 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Design tokens — Yonga ERP
+  Palette inspired by the product itself (furniture: walnut, oak, brass hardware)
+  rather than generic AI-tool defaults. Warm, low-saturation neutrals with a
+  muted copper accent (not Anthropic's clay), plus a slate-blue secondary for
+  data-dense enterprise surfaces.
+*/
+
+@layer base {
+  :root {
+    --background: 32 20% 97%;        /* #FAF7F3 warm linen */
+    --foreground: 25 15% 15%;        /* #2B2521 walnut ink */
+
+    --card: 0 0% 100%;
+    --card-foreground: 25 15% 15%;
+
+    --primary: 24 45% 42%;           /* #A6683B muted copper */
+    --primary-foreground: 32 30% 98%;
+
+    --secondary: 210 20% 30%;        /* #3E4B5C slate */
+    --secondary-foreground: 32 30% 98%;
+
+    --muted: 30 15% 93%;
+    --muted-foreground: 25 10% 42%;
+
+    --accent: 30 25% 90%;
+    --accent-foreground: 25 15% 15%;
+
+    --destructive: 4 62% 45%;
+    --destructive-foreground: 32 30% 98%;
+
+    --success: 142 40% 32%;
+    --success-foreground: 32 30% 98%;
+
+    --warning: 38 75% 45%;
+    --warning-foreground: 32 30% 98%;
+
+    --border: 30 15% 87%;
+    --input: 30 15% 87%;
+    --ring: 24 45% 42%;
+
+    --radius: 0.625rem;
+
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+    --font-display: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+  }
+
+  .dark {
+    --background: 25 12% 9%;         /* #191512 dark walnut */
+    --foreground: 30 15% 92%;
+
+    --card: 25 12% 12%;
+    --card-foreground: 30 15% 92%;
+
+    --primary: 24 55% 55%;
+    --primary-foreground: 25 15% 10%;
+
+    --secondary: 210 18% 22%;
+    --secondary-foreground: 30 15% 92%;
+
+    --muted: 25 10% 16%;
+    --muted-foreground: 30 10% 65%;
+
+    --accent: 25 10% 18%;
+    --accent-foreground: 30 15% 92%;
+
+    --destructive: 4 55% 48%;
+    --destructive-foreground: 30 15% 95%;
+
+    --success: 142 35% 42%;
+    --success-foreground: 30 15% 95%;
+
+    --warning: 38 65% 50%;
+    --warning-foreground: 25 15% 10%;
+
+    --border: 25 10% 20%;
+    --input: 25 10% 20%;
+    --ring: 24 55% 55%;
+  }
+
+  /* ============================================================
+     RENK TEMALARI — data-theme ile seçilir. Her tema açık/koyu
+     modda çalışır. Yalnızca vurgu renkleri (primary, secondary,
+     accent, ring) değişir; nötr zeminler ortak kalır ki tüm
+     temalar tutarlı ve göze uyumlu görünsün.
+     ============================================================ */
+
+  /* Okyanus — sakin slate-mavi */
+  :root[data-theme='ocean'] {
+    --primary: 200 50% 37%;          /* #2F6F8F */
+    --primary-foreground: 200 30% 98%;
+    --secondary: 205 25% 32%;
+    --secondary-foreground: 200 30% 98%;
+    --accent: 200 35% 90%;
+    --accent-foreground: 205 30% 20%;
+    --ring: 200 50% 37%;
+  }
+  .dark[data-theme='ocean'] {
+    --primary: 199 60% 55%;
+    --primary-foreground: 205 30% 10%;
+    --secondary: 205 25% 26%;
+    --secondary-foreground: 200 20% 92%;
+    --accent: 205 25% 18%;
+    --accent-foreground: 200 20% 92%;
+    --ring: 199 60% 55%;
+  }
+
+  /* Orman — doğal yeşil */
+  :root[data-theme='forest'] {
+    --primary: 146 35% 36%;          /* #3E7C54 */
+    --primary-foreground: 140 30% 98%;
+    --secondary: 150 18% 30%;
+    --secondary-foreground: 140 30% 98%;
+    --accent: 145 30% 89%;
+    --accent-foreground: 150 30% 18%;
+    --ring: 146 35% 36%;
+  }
+  .dark[data-theme='forest'] {
+    --primary: 146 42% 50%;
+    --primary-foreground: 150 30% 10%;
+    --secondary: 150 18% 24%;
+    --secondary-foreground: 140 20% 92%;
+    --accent: 150 20% 17%;
+    --accent-foreground: 140 20% 92%;
+    --ring: 146 42% 50%;
+  }
+
+  /* Üzüm — zarif mor */
+  :root[data-theme='grape'] {
+    --primary: 275 30% 46%;          /* #7A5299 */
+    --primary-foreground: 280 30% 98%;
+    --secondary: 270 20% 34%;
+    --secondary-foreground: 280 30% 98%;
+    --accent: 280 30% 91%;
+    --accent-foreground: 275 30% 22%;
+    --ring: 275 30% 46%;
+  }
+  .dark[data-theme='grape'] {
+    --primary: 275 45% 64%;
+    --primary-foreground: 275 30% 10%;
+    --secondary: 270 20% 28%;
+    --secondary-foreground: 280 20% 92%;
+    --accent: 275 22% 20%;
+    --accent-foreground: 280 20% 92%;
+    --ring: 275 45% 64%;
+  }
+
+  /* Antrasit — minimal nötr gri-mavi */
+  :root[data-theme='graphite'] {
+    --primary: 218 12% 39%;          /* #5A6270 */
+    --primary-foreground: 220 20% 98%;
+    --secondary: 218 12% 30%;
+    --secondary-foreground: 220 20% 98%;
+    --accent: 220 14% 90%;
+    --accent-foreground: 218 15% 22%;
+    --ring: 218 12% 39%;
+  }
+  .dark[data-theme='graphite'] {
+    --primary: 218 18% 62%;
+    --primary-foreground: 218 15% 10%;
+    --secondary: 218 12% 26%;
+    --secondary-foreground: 220 15% 92%;
+    --accent: 218 12% 18%;
+    --accent-foreground: 220 15% 92%;
+    --ring: 218 18% 62%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  ::selection {
+    @apply bg-primary/20;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-card/70 backdrop-blur-md border border-border/60;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/30 rounded-full;
+  }
+}

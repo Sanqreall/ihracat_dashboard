@@ -1,7 +1,7 @@
 # İhracat ERP
 
 İhracat operasyonları için ERP — **Next.js 15 + Supabase (SSR) + shadcn/ui** üzerine,
-Yonga ERP'nin mimarisiyle aynı düzende kuruldu. Bu, **Faz 1 (iskelet + veri şeması)**.
+Yonga ERP'nin mimarisiyle aynı düzende kuruldu. Bu sürüm: **Faz 1–4** — iskelet + şema, Müşteriler & Ürünler, Siparişler, Tahsilat & Nakit Akışı.
 
 ## Ne var (Faz 1)
 - Next.js 15 App Router, Supabase SSR kimlik doğrulama, RLS, yetki (admin/manager/employee).
@@ -10,9 +10,9 @@ Yonga ERP'nin mimarisiyle aynı düzende kuruldu. Bu, **Faz 1 (iskelet + veri ş
 - Giriş, panel kabuğu, sol menü.
 
 ## Sıradaki fazlar
-2. Müşteriler + Ürünler + Kurlar/Banka (CRUD + Excel + PDF)
-3. Siparişler (kalem + sevkiyat + ödeme planı)
-4. Tahsilat + Nakit Akışı
+2. ✓ Müşteriler + Ürünler (CRUD) — tamam · (Kurlar/Banka + Excel/PDF sıradaki)
+3. ✓ Siparişler (kalem + ek maliyet + ödeme planı, müşteri varsayılanından plan) — tamam · (çoklu sevkiyat düzenlemesi sonraki pasta)
+4. ✓ Tahsilat (plandan üretim, gecikme takibi, tahsil işaretleme) + Nakit Akışı (vade bucket'ları) — tamam
 5. Raporlar + Dashboard KPI + PDF/Excel çıktılar
 6. Mevcut verinin taşınması (legacy_id eşlemeli)
 

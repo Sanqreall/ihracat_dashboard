@@ -14,7 +14,7 @@ Yonga ERP'nin mimarisiyle aynı düzende kuruldu. Bu sürüm: **Faz 1–5** — 
 3. ✓ Siparişler (kalem + ek maliyet + ödeme planı, müşteri varsayılanından plan) — tamam · (çoklu sevkiyat düzenlemesi sonraki pasta)
 4. ✓ Tahsilat (plandan üretim, gecikme takibi, tahsil işaretleme) + Nakit Akışı (vade bucket'ları) — tamam
 5. ✓ Dashboard KPI + Raporlar (müşteri/durum bazlı ciro, jsPDF+DejaVu ile Türkçe PDF, xlsx Excel) — tamam
-6. Mevcut verinin taşınması (legacy_id eşlemeli)
+6. ✓ Mevcut verinin taşınması (legacy_id eşlemeli) — `0002_data_migration.sql` hazır ve gerçek Postgres'te doğrulandı
 
 ## Kurulum
 
@@ -27,6 +27,11 @@ Yonga ERP'nin mimarisiyle aynı düzende kuruldu. Bu sürüm: **Faz 1–5** — 
 - SQL Editor → New query → `supabase/migrations/0001_init.sql` içeriğini yapıştır → **Run**.
 - Authentication → Users → **Add user** ile kendine bir kullanıcı ekle.
   - "Raw User Meta Data" alanına: `{"role":"admin"}` (yönetici yetkisi için)
+
+### 2b) Veri taşıma (mevcut ihracat verisi)
+- SQL Editor → New query → `supabase/migrations/0002_data_migration.sql` içeriğini yapıştır → **Run**.
+- Bu, yedekteki 16 müşteri, 573 ürün, 119 sipariş (676 kalem, 23 sevkiyat, 12 ek maliyet, 256 ödeme planı) ve 279 ödemeyi aktarır. Kurlar da yüklenir.
+- Tekrar çalıştırmaya güvenlidir (ON CONFLICT DO NOTHING). En sonda doğrulama sorgusu yorumdadır.
 
 ### 3) Ortam değişkenleri (Vercel → Settings → Environment Variables)
 `.env.example` dosyasındaki değişkenleri Supabase → Project Settings → API'den doldur:

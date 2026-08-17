@@ -46,6 +46,14 @@ const paymentPlanItemSchema = z.object({
   sort_order: z.coerce.number().int().default(0),
 });
 
+const shipmentSchema = z.object({
+  shipment_no: z.coerce.number().int().min(1),
+  name: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  shipment_date: z.string().optional().nullable(),
+  actual_shipment_date: z.string().optional().nullable(),
+});
+
 export const orderSchema = z.object({
   order_number: z.string().optional().nullable(),
   customer_id: z.string().uuid({ message: 'Müşteri seçin' }),
@@ -66,6 +74,7 @@ export const orderSchema = z.object({
   discount_value: z.coerce.number().min(0).default(0),
   payment_basis: z.string().default('order'),
   items: z.array(orderItemSchema).default([]),
+  shipments: z.array(shipmentSchema).default([]),
   additional_costs: z.array(additionalCostSchema).default([]),
   payment_plan: z.array(paymentPlanItemSchema).default([]),
 });

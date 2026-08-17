@@ -46,3 +46,16 @@ Yonga ERP'nin mimarisiyle aynı düzende kuruldu. Bu sürüm: **Faz 1–5** — 
 - Yazma işlemleri `lib/auth/permissions.ts` → `requireEdit()` ile korunur.
 - Veri erişimi server action'lar (`'use server'`) + `lib/supabase/server.ts`.
 - Form doğrulama `zod` (`lib/validations/*` — modüllerle birlikte eklenecek).
+
+
+## Faz 7 — Eksik modüller + sevkiyata bölme
+- **Döviz Kurları** (`/exchange-rates`): kur ekle/düzenle/sil, satır içi düzenleme. USD tabanlı (1 birim = X USD).
+- **Banka Hesapları** (`/bank-accounts`): tam CRUD, tahsilatlarda kullanılır.
+- **Ayarlar** (`/settings`): firma bilgileri + varsayılanlar (`app_settings` içinde JSON).
+- **Sipariş → sevkiyata bölme**: sipariş formunda "Sevkiyatlar (Partiler)" bölümü; her kalem ve ödeme planı satırı bir partiye (#no) atanabilir. `order_shipments` kaydı sipariş kaydıyla birlikte yazılır.
+
+
+## Faz 8 — Görsel netlik (veri sunumu)
+- **Sipariş listesi**: üstte özet şeridi (toplam değer USD + para birimi kırılımı, tahsil edilen, kalan). Her satırda kalem sayısı, **Tutar / Ödenen** ilerleme çubuğu (% ve kalan tutar), USD karşılığı, durum filtresi ve çok sevkiyatlı siparişlerde parti rozeti.
+- **Tahsilat**: üstte Bekleyen / Gecikmiş / Tahsil özet kartları (adet + para birimi bazında tutar), gecikmiş satır vurgusu (kırmızı) ve kırmızı vade tarihi, filtre butonlarında sayaç.
+- **Nakit Akışı** ve **Panel**: kova/KPI düzeni korunur (gecikmiş kırmızı, para birimi bazında toplamlar).

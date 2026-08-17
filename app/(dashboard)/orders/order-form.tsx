@@ -29,7 +29,7 @@ const emptyDefaults = (): OrderInput => ({
   incoterms: '', order_date: new Date().toISOString().slice(0, 10), shipment_date: '', actual_shipment_date: '',
   shipping_method: '', port_of_loading: '', port_of_discharge: '', bill_of_lading: '', invoice_number: '', notes: '',
   discount_type: null, discount_value: 0, payment_basis: 'order',
-  items: [], additional_costs: [], payment_plan: [],
+  items: [], shipments: [], additional_costs: [], payment_plan: [],
 });
 
 export function OrderForm({
@@ -47,6 +47,7 @@ export function OrderForm({
   const items = useFieldArray({ control, name: 'items' });
   const costs = useFieldArray({ control, name: 'additional_costs' });
   const plan = useFieldArray({ control, name: 'payment_plan' });
+  const shipments = useFieldArray({ control, name: 'shipments' });
 
   useEffect(() => {
     if (!open) return;
@@ -76,6 +77,7 @@ export function OrderForm({
           quantity: it.quantity ?? 0, unit_price: it.unit_price ?? 0, discount: it.discount ?? 0,
           shipment_no: it.shipment_no ?? null, sort_order: it.sort_order ?? 0,
         })),
+        shipments: (order.order_shipments ?? []).map((s2: Lite) => ({ shipment_no: s2.shipment_no, name: s2.name ?? '', notes: s2.notes ?? '', shipment_date: s2.shipment_date ?? '', actual_shipment_date: s2.actual_shipment_date ?? '' })),
         additional_costs: (order.order_additional_costs ?? []).map((c: Lite) => ({ description: c.description, amount: c.amount })),
         payment_plan: (order.payment_plan_items ?? []).map((p: Lite) => ({
           type: p.type, amount: p.amount, percentage: p.percentage ?? null, due_date: p.due_date ?? '',
@@ -96,6 +98,8 @@ export function OrderForm({
     additional_costs: (watched.additional_costs ?? []) as any,
   }), [watched]);
   const currency = watched.currency ?? 'USD';
+  const shipmentNos: number[] = ((watched.shipments ?? []) as any[])
+    .map((x) => Number(x?.shipment_no)).filter((n) => Number.isFinite(n) && n > 0);
 
   const onPickProduct = (index: number, productId: string) => {
     const p = products.find((x) => x.id === productId);
@@ -218,6 +222,37 @@ export function OrderForm({
             </div>
           </div>
 
+          {/* SEVKİYATLAR */}
+          <div className="rounded-lg border border-border p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold">Sevkiyatlar (Partiler)</h3>
+                <p className="text-xs text-muted-foreground">Sipariş birden çok sevkiyata bölünüyorsa parti ekleyin; aşağıda kalem ve ödemeleri bu partilere atarsınız.</p>
+              </div>
+              <Button type="button" size="sm" variant="outline" onClick={() => shipments.append({ shipment_no: (shipmentNos.length ? Math.max(...shipmentNos) : 0) + 1, name: '', shipment_date: '', actual_shipment_date: '', notes: '' } as any)}>
+                <Plus className="mr-1 h-4 w-4" /> Parti
+              </Button>
+            </div>
+            {shipments.fields.length > 0 && (
+              <div className="mb-1 grid grid-cols-12 gap-2 px-1 text-[11px] text-muted-foreground">
+                <span className="col-span-1">No</span><span className="col-span-4">Parti adı</span>
+                <span className="col-span-3">Planlanan tarih</span><span className="col-span-3">Gerçekleşen tarih</span>
+              </div>
+            )}
+            <div className="space-y-2">
+              {shipments.fields.map((f, i) => (
+                <div key={f.id} className="grid grid-cols-12 items-center gap-2">
+                  <Input className="col-span-1" type="number" min={1} placeholder="No" {...register(`shipments.${i}.shipment_no`)} />
+                  <Input className="col-span-4" placeholder="örn. 1. Konteyner" {...register(`shipments.${i}.name`)} />
+                  <Input className="col-span-3" type="date" {...register(`shipments.${i}.shipment_date`)} />
+                  <Input className="col-span-3" type="date" {...register(`shipments.${i}.actual_shipment_date`)} />
+                  <Button type="button" variant="ghost" size="icon" className="col-span-1" onClick={() => shipments.remove(i)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                </div>
+              ))}
+              {shipments.fields.length === 0 && <p className="py-1 text-center text-xs text-muted-foreground">Tek sevkiyat — bölmek istemiyorsanız boş bırakın. Bölmek için “Parti” ekleyin.</p>}
+            </div>
+          </div>
+
           {/* KALEMLER */}
           <div className="rounded-lg border border-border p-3">
             <div className="mb-2 flex items-center justify-between">
@@ -233,11 +268,15 @@ export function OrderForm({
                     <option value="">Ürün seç / elle</option>
                     {products.map((p) => <option key={p.id} value={p.id}>{p.product_code ? `${p.product_code} · ` : ''}{p.name_tr}</option>)}
                   </select>
-                  <Input className="col-span-3" placeholder="Ürün adı" {...register(`items.${i}.name_tr`)} />
+                  <Input className="col-span-2" placeholder="Ürün adı" {...register(`items.${i}.name_tr`)} />
                   <Input className="col-span-1" placeholder="Br." {...register(`items.${i}.unit`)} />
                   <Input className="col-span-1" type="number" step="0.01" placeholder="Adet" {...register(`items.${i}.quantity`)} />
                   <Input className="col-span-2" type="number" step="0.0001" placeholder="Birim fiyat" {...register(`items.${i}.unit_price`)} />
                   <Input className="col-span-1" type="number" step="0.01" placeholder="İsk%" {...register(`items.${i}.discount`)} />
+                  <select className={`${selectClass} col-span-1`} {...register(`items.${i}.shipment_no`, { setValueAs: (v) => (v === '' || v == null ? null : Number(v)) })}>
+                    <option value="">—</option>
+                    {shipmentNos.map((n) => <option key={n} value={n}>#{n}</option>)}
+                  </select>
                   <Button type="button" variant="ghost" size="icon" className="col-span-1" onClick={() => items.remove(i)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                 </div>
               ))}
@@ -298,10 +337,14 @@ export function OrderForm({
                     {PAYMENT_PLAN_TYPES.map((t) => <option key={t} value={t}>{PAYMENT_PLAN_TYPE_LABELS[t]}</option>)}
                   </select>
                   <Input className="col-span-2" type="number" step="0.01" placeholder="%" {...register(`payment_plan.${i}.percentage`)} />
-                  <Input className="col-span-3" type="number" step="0.01" placeholder="Tutar" {...register(`payment_plan.${i}.amount`)} />
+                  <Input className="col-span-2" type="number" step="0.01" placeholder="Tutar" {...register(`payment_plan.${i}.amount`)} />
                   <Input className="col-span-2" type="date" {...register(`payment_plan.${i}.due_date`)} />
                   <select className={`${selectClass} col-span-2`} {...register(`payment_plan.${i}.method`)}>
                     {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <select className={`${selectClass} col-span-1`} {...register(`payment_plan.${i}.shipment_no`, { setValueAs: (v) => (v === '' || v == null ? null : Number(v)) })}>
+                    <option value="">—</option>
+                    {shipmentNos.map((n) => <option key={n} value={n}>#{n}</option>)}
                   </select>
                   <Button type="button" variant="ghost" size="icon" className="col-span-1" onClick={() => plan.remove(i)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                 </div>

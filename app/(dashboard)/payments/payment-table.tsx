@@ -38,6 +38,20 @@ export function PaymentTable({ data, orders, banks }: { data: Row[]; orders: Row
     return true;
   }), [data, statusFilter]);
 
+  const summary = useMemo(() => {
+    const add = (m: Record<string, number>, cur: string, amt: number) => { m[cur] = (m[cur] ?? 0) + (Number(amt) || 0); };
+    const pending: Record<string, number> = {}, overdue: Record<string, number> = {}, paid: Record<string, number> = {};
+    let cP = 0, cO = 0, cPaid = 0;
+    for (const p of data) {
+      if (p.status === 'paid') { add(paid, p.currency, p.amount); cPaid++; }
+      else if (isOverdue(p)) { add(overdue, p.currency, p.amount); cO++; add(pending, p.currency, p.amount); cP++; }
+      else if (p.status === 'pending') { add(pending, p.currency, p.amount); cP++; }
+    }
+    return { pending, overdue, paid, cP, cO, cPaid, cAll: data.length };
+  }, [data]);
+
+  const curLine = (m: Record<string, number>) => Object.entries(m).map(([c, v]) => `${c} ${(v).toLocaleString('tr-TR', { maximumFractionDigits: 0 })}`).join(' · ') || '—';
+
   const columns = useMemo<ColumnDef<Row>[]>(() => [
     {
       id: 'select',
@@ -49,7 +63,7 @@ export function PaymentTable({ data, orders, banks }: { data: Row[]; orders: Row
     { id: 'customer', header: 'Müşteri', accessorFn: (r) => r.orders?.customers?.name ?? '—', cell: ({ getValue }) => getValue<string>() },
     { id: 'amount', header: 'Tutar', accessorFn: (r) => r.amount, cell: ({ row }) => <span className="tabular-nums font-medium">{fmt(row.original.amount, row.original.currency)}</span> },
     { accessorKey: 'method', header: 'Yöntem', cell: ({ getValue }) => PAYMENT_METHOD_LABELS[getValue<string>()] ?? getValue<string>() },
-    { accessorKey: 'due_date', header: 'Vade', cell: ({ getValue }) => getValue<string>() ?? '—' },
+    { accessorKey: 'due_date', header: 'Vade', cell: ({ row }) => <span className={isOverdue(row.original) ? 'font-medium text-red-600' : ''}>{row.original.due_date ?? '—'}</span> },
     { accessorKey: 'paid_date', header: 'Tahsil', cell: ({ getValue }) => getValue<string>() ?? '—' },
     {
       id: 'status', header: 'Durum', accessorKey: 'status',
@@ -118,16 +132,30 @@ export function PaymentTable({ data, orders, banks }: { data: Row[]; orders: Row
 
   return (
     <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border border-border bg-card p-3">
+          <div className="flex items-center justify-between"><p className="text-xs text-muted-foreground">Bekleyen</p><span className="rounded bg-amber-100 px-1.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300">{summary.cP}</span></div>
+          <p className="mt-1 text-sm font-semibold tabular-nums">{curLine(summary.pending)}</p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-3">
+          <div className="flex items-center justify-between"><p className="text-xs text-muted-foreground">Gecikmiş</p><span className="rounded bg-red-100 px-1.5 text-xs font-medium text-red-700 dark:bg-red-950 dark:text-red-300">{summary.cO}</span></div>
+          <p className="mt-1 text-sm font-semibold tabular-nums text-red-600">{curLine(summary.overdue)}</p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-3">
+          <div className="flex items-center justify-between"><p className="text-xs text-muted-foreground">Tahsil Edilen</p><span className="rounded bg-green-100 px-1.5 text-xs font-medium text-green-700 dark:bg-green-950 dark:text-green-300">{summary.cPaid}</span></div>
+          <p className="mt-1 text-sm font-semibold tabular-nums text-green-600">{curLine(summary.paid)}</p>
+        </div>
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-full max-w-xs">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={globalFilter} onChange={(e) => setGlobalFilter(e.target.value)} placeholder="Ödeme ara…" className="pl-8" />
         </div>
         <div className="flex items-center gap-1">
-          <FilterBtn f="all" label="Tümü" />
-          <FilterBtn f="pending" label="Bekleyen" />
-          <FilterBtn f="overdue" label="Gecikmiş" />
-          <FilterBtn f="paid" label="Tahsil" />
+          <FilterBtn f="all" label={`Tümü ${summary.cAll}`} />
+          <FilterBtn f="pending" label={`Bekleyen ${summary.cP}`} />
+          <FilterBtn f="overdue" label={`Gecikmiş ${summary.cO}`} />
+          <FilterBtn f="paid" label={`Tahsil ${summary.cPaid}`} />
         </div>
         <div className="ml-auto flex items-center gap-2">
           {selectedIds.length > 0 && (
@@ -165,7 +193,7 @@ export function PaymentTable({ data, orders, banks }: { data: Row[]; orders: Row
           <TableBody>
             {table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} data-state={row.getIsSelected() ? 'selected' : undefined}>
+                <TableRow key={row.id} data-state={row.getIsSelected() ? 'selected' : undefined} className={isOverdue(row.original) ? 'bg-red-50/50 dark:bg-red-950/20' : ''}>
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
                   ))}

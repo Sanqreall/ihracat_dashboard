@@ -9,7 +9,7 @@ export async function listOrders() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('orders')
-    .select('*, customers(name, code), order_items(quantity, unit_price, discount), order_additional_costs(amount)')
+    .select('*, customers(name, code), order_items(quantity, unit_price, discount), order_additional_costs(amount), order_shipments(shipment_no), payments(amount, status, currency)')
     .is('deleted_at', null)
     .order('order_date', { ascending: false })
     .order('created_at', { ascending: false });
@@ -21,7 +21,7 @@ export async function getOrder(id: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('orders')
-    .select('*, order_items(*), order_additional_costs(*), payment_plan_items(*)')
+    .select('*, order_items(*), order_shipments(*), order_additional_costs(*), payment_plan_items(*)')
     .eq('id', id)
     .single();
   if (error) throw new Error(error.message);
@@ -35,6 +35,7 @@ async function replaceChildren(
 ) {
   // Kalemler + ek maliyetler + ödeme planı: tümünü sil, yeniden ekle (basit ve tutarlı).
   await supabase.from('order_items').delete().eq('order_id', orderId);
+  await supabase.from('order_shipments').delete().eq('order_id', orderId);
   await supabase.from('order_additional_costs').delete().eq('order_id', orderId);
   await supabase.from('payment_plan_items').delete().eq('order_id', orderId);
 
@@ -58,7 +59,21 @@ async function replaceChildren(
     if (error) throw new Error(error.message);
   }
 
-  if (parsed.additional_costs.length) {
+    if (parsed.shipments.length) {
+    const { error } = await supabase.from('order_shipments').insert(
+      parsed.shipments.map((s) => ({
+        order_id: orderId,
+        shipment_no: s.shipment_no,
+        name: s.name || null,
+        notes: s.notes || null,
+        shipment_date: s.shipment_date || null,
+        actual_shipment_date: s.actual_shipment_date || null,
+      })),
+    );
+    if (error) throw new Error(error.message);
+  }
+
+if (parsed.additional_costs.length) {
     const { error } = await supabase.from('order_additional_costs').insert(
       parsed.additional_costs.map((c) => ({ order_id: orderId, description: c.description, amount: c.amount })),
     );

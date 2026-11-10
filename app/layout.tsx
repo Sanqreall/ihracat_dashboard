@@ -1,28 +1,18 @@
-import type { Metadata } from 'next';
-import { Toaster } from 'sonner';
-import { ThemeProvider } from '@/components/layout/theme-provider';
-import './globals.css';
+import type { Metadata } from "next";
+import "./globals.css";
+import { ToastProvider } from "@/components/providers";
 
 export const metadata: Metadata = {
-  title: 'İhracat ERP',
-  description: 'İhracat operasyonları — sipariş, ödeme ve nakit akışı yönetimi',
+  title: "İhracat Yönetimi",
+  description: "Sipariş, ödeme planı ve tahsilat takibi",
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="tr" suppressHydrationWarning>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var m=localStorage.getItem('yonga-theme');var c=localStorage.getItem('yonga-color-theme')||'walnut';var dark=m?m==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;var r=document.documentElement;if(dark)r.classList.add('dark');r.setAttribute('data-theme',c);}catch(e){}})();`,
-          }}
-        />
-      </head>
-      <body className="font-sans antialiased">
-        <ThemeProvider>
-          {children}
-          <Toaster richColors position="top-right" />
-        </ThemeProvider>
+    <html lang="tr">
+      <body>
+        <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
   );

@@ -1,61 +1,67 @@
-# İhracat ERP
+# İhracat Yönetimi v4
 
-İhracat operasyonları için ERP — **Next.js 15 + Supabase (SSR) + shadcn/ui** üzerine,
-Yonga ERP'nin mimarisiyle aynı düzende kuruldu. Bu sürüm: **Faz 1–5** — iskelet + şema, Müşteriler & Ürünler, Siparişler, Tahsilat & Nakit Akışı, Dashboard KPI + Raporlar (gerçek PDF/Excel). Uygulama işlevsel olarak tamam; kalan tek adım mevcut verinin taşınması (Faz 6).
+Next.js 15 + Supabase. Eski sistemin (v3) yerine geçer. Eski sistem kurulum boyunca olduğu gibi çalışmaya devam eder.
 
-## Ne var (Faz 1)
-- Next.js 15 App Router, Supabase SSR kimlik doğrulama, RLS, yetki (admin/manager/employee).
-- shadcn/ui bileşen kütüphanesi, tema (açık/koyu + renk temaları).
-- Veri şeması: müşteri, ürün, sipariş (+kalem, sevkiyat, ek maliyet, ödeme planı), ödeme, döviz kuru, banka hesabı — uuid PK + enum + soft-delete + audit + RLS.
-- Giriş, panel kabuğu, sol menü.
+## Neler değişti
 
-## Sıradaki fazlar
-2. ✓ Müşteriler + Ürünler (CRUD) — tamam · (Kurlar/Banka + Excel/PDF sıradaki)
-3. ✓ Siparişler (kalem + ek maliyet + ödeme planı, müşteri varsayılanından plan) — tamam · (çoklu sevkiyat düzenlemesi sonraki pasta)
-4. ✓ Tahsilat (plandan üretim, gecikme takibi, tahsil işaretleme) + Nakit Akışı (vade bucket'ları) — tamam
-5. ✓ Dashboard KPI + Raporlar (müşteri/durum bazlı ciro, jsPDF+DejaVu ile Türkçe PDF, xlsx Excel) — tamam
-6. ✓ Mevcut verinin taşınması (legacy_id eşlemeli) — `0002_data_migration.sql` hazır ve gerçek Postgres'te doğrulandı
+| Eski sistem | Yeni sistem |
+|---|---|
+| Plan değişince ödemelerde yeni "bekleyen" kayıt açılıyordu, tahsil edilmiş ön ödeme yetim kalıyor ve çift ön ödeme oluşuyordu | Ödemeler listesinde sadece **gerçekten gelen para** var. Bekleyen tutar = plan − tahsilat, kayıt olarak tutulmuyor. Plan değişse bile tahsilat kaybolmuyor, en eski vadeden başlayarak yeniden dağıtılıyor |
+| Giriş yapmadan tüm veri okunabiliyordu | Giriş yapmayan hiçbir şey göremez |
+| Roller sadece ekranda geçerliydi | Roller veritabanında zorunlu: görüntüleyici hiçbir şeyi değiştiremez |
+| Tüm veri tarayıcıya kopyalanıyor, 3 dakikada bir tam yedek alınıyordu | Veri sadece veritabanında duruyor. Her değişiklik kayıt geçmişine (audit_log) yazılıyor |
+| 1000 satırdan sonrası görünmüyordu | Sınır yok |
+| İptal edilen siparişler ciroda ve alacakta sayılıyordu | İptaller ciroya ve alacağa girmiyor |
+| Sevkiyat bazlı plan iskontoyu ve ek maliyeti atlıyordu | Plan toplamı kuruşu kuruşuna sipariş toplamına eşit |
+| İki kişi aynı siparişi düzenlerse biri diğerini eziyordu | Başkası değiştirdiyse kaydetmeden önce uyarıyor |
+| "Bugün" UTC'ye göreydi (gece 00:00–03:00 arası dün sayılıyordu) | Türkiye saati |
 
-## Kurulum
+## Kurulum (sadece tarayıcı)
 
-### 1) Repo + Vercel
-- Bu klasörü yeni bir GitHub reposuna yükle.
-- Vercel'de "Import Project" → bu repo.
+### 1. Supabase — yeni proje
+1. supabase.com → **New project** (bölge: Frankfurt). Eski projeye dokunma.
+2. **SQL Editor → New query** → `supabase/kurulum.sql` dosyasının tamamını yapıştır → **Run**. Sonuç "Success. No rows returned" olmalı.
+3. **Authentication → Sign In / Providers → Email** altında **"Allow new users to sign up"** seçeneğini kapat. Böylece dışarıdan kimse hesap açamaz.
+4. **Authentication → Users → Add user → Create new user**: kendi e-postan ve şifren, **Auto Confirm User** işaretli. **İlk eklenen kullanıcı otomatik yönetici olur.**
+5. **Project Settings → API**: **Project URL** ve **anon public** anahtarını kopyala. Yeni panelde bu anahtar **Publishable key** olarak geçiyor; ikisi de çalışır.
 
-### 2) Supabase
-- Yeni bir Supabase projesi aç.
-- SQL Editor → New query → `supabase/migrations/0001_init.sql` içeriğini yapıştır → **Run**.
-- Authentication → Users → **Add user** ile kendine bir kullanıcı ekle.
-  - "Raw User Meta Data" alanına: `{"role":"admin"}` (yönetici yetkisi için)
+### 2. GitHub — yeni repo
+1. github.com → **New repository** (Private) → oluştur.
+2. **uploading an existing file** bağlantısına tıkla. Zip'i bilgisayarında aç ve `ihracat-yeni` klasörünün **içindekileri** (klasörün kendisini değil) sürükleyip bırak → **Commit changes**.
 
-### 2b) Veri taşıma (mevcut ihracat verisi)
-- SQL Editor → New query → `supabase/migrations/0002_data_migration.sql` içeriğini yapıştır → **Run**.
-- Bu, yedekteki 16 müşteri, 573 ürün, 119 sipariş (676 kalem, 23 sevkiyat, 12 ek maliyet, 256 ödeme planı) ve 279 ödemeyi aktarır. Kurlar da yüklenir.
-- Tekrar çalıştırmaya güvenlidir (ON CONFLICT DO NOTHING). En sonda doğrulama sorgusu yorumdadır.
+### 3. Vercel — deploy
+1. vercel.com → **Add New → Project** → yeni repoyu seç.
+2. **Environment Variables** bölümüne ekle:
+   - `NEXT_PUBLIC_SUPABASE_URL` = Project URL
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = anon (publishable) key
+3. **Deploy**. Bitince siteyi aç ve kendi kullanıcınla giriş yap.
 
-### 3) Ortam değişkenleri (Vercel → Settings → Environment Variables)
-`.env.example` dosyasındaki değişkenleri Supabase → Project Settings → API'den doldur:
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+### 4. Eski verileri aktar (Yönetim → Veri Aktarımı)
+1. Eski Vercel projesi → **Settings → Environment Variables**: `VITE_SUPABASE_URL` ve `VITE_SUPABASE_ANON_KEY` değerlerini kopyala.
+2. Yeni sistemde **Veri Aktarımı** ekranına bu iki değeri yapıştır → **Bağlan ve oku**. Eski sistemde hiçbir şey değişmez, sadece okunur.
+3. Önizlemeyi ve uyarıları oku → **Yeni sisteme aktar**.
+4. **Karşılaştırma** tablosuna bak:
+   - **Ciro** ve **Tahsilat** sütunları eskisiyle birebir aynı olmalı.
+   - **Bekleyen** sütununda fark olabilir. Eski sistemdeki çift ya da yetim bekleyen kayıtlar yenisinde yok. Farklı çıkan siparişleri tek tek açıp kontrol et.
+5. Sorun görürsen eski sistemde düzelt, yeni sistemde **Yeni sistemi sıfırla** → tekrar aktar. Bunu istediğin kadar tekrarlayabilirsin.
+6. Rakamlar tamamsa **Aktarımı kilitle**. Kilitlendikten sonra sıfırlama yapılamaz.
 
-### 4) Deploy
-- Vercel otomatik build alır. `/login` → giriş → `/dashboard`.
+> Geçiş günü: önce eski sistemde değişiklik yapmayı bırak, son bir kez sıfırla + aktar, karşılaştır, kilitle. Sonra sadece yeni sistemi kullan.
+> Geçişten sonra eski Supabase projesini **Pause** et. Eski projede veriler giriş yapmadan okunabiliyor.
 
-## Yapı (Yonga konvansiyonu)
-- Her modül: `app/(dashboard)/<modul>/` → `page.tsx` + `actions.ts` + `*-table.tsx` + `*-form.tsx` + `error.tsx` + `loading.tsx`.
-- Yazma işlemleri `lib/auth/permissions.ts` → `requireEdit()` ile korunur.
-- Veri erişimi server action'lar (`'use server'`) + `lib/supabase/server.ts`.
-- Form doğrulama `zod` (`lib/validations/*` — modüllerle birlikte eklenecek).
+### 5. Kullanıcı ekleme
+Supabase → Authentication → Users → **Add user**. Yeni kullanıcı **Onay bekliyor** durumunda başlar ve hiçbir şey göremez. Yeni sistemde **Kullanıcılar** ekranından rolünü ver (Görüntüleyici / Editör / Yönetici).
 
+## Ödeme mantığı (kısa)
+- **Ödeme planı:** ne zaman ne kadar beklendiği (ön ödeme, sevk öncesi, vadeli, KDV, ek maliyet).
+- **Tahsilat:** gelen para. Tutarı sipariş dövizi cinsindendir. Farklı dövizle ödendiyse hesaba giren döviz ve tutar ayrıca yazılır.
+- Tahsilatlar plan kalemlerine **vadesi en eski olandan başlayarak** otomatik sayılır. İstersen tahsilatı belirli bir kaleme sabitleyebilirsin.
+- Plan kalemi silinir ya da değişirse ona sayılmış tahsilat kaybolmaz, kalan kalemlere kayar. Plana sığmayan fazla ödeme sipariş sayfasında "avans" olarak uyarı verir.
+- Tahsilatı olan sipariş silinemez. Önce tahsilatı sil ya da başka siparişe taşı.
+- Fiili sevk tarihi girilince o günün kuru kilitlenir. Tahsilatlar da kendi günündeki kurla USD'ye çevrilir.
 
-## Faz 7 — Eksik modüller + sevkiyata bölme
-- **Döviz Kurları** (`/exchange-rates`): kur ekle/düzenle/sil, satır içi düzenleme. USD tabanlı (1 birim = X USD).
-- **Banka Hesapları** (`/bank-accounts`): tam CRUD, tahsilatlarda kullanılır.
-- **Ayarlar** (`/settings`): firma bilgileri + varsayılanlar (`app_settings` içinde JSON).
-- **Sipariş → sevkiyata bölme**: sipariş formunda "Sevkiyatlar (Partiler)" bölümü; her kalem ve ödeme planı satırı bir partiye (#no) atanabilir. `order_shipments` kaydı sipariş kaydıyla birlikte yazılır.
-
-
-## Faz 8 — Görsel netlik (veri sunumu)
-- **Sipariş listesi**: üstte özet şeridi (toplam değer USD + para birimi kırılımı, tahsil edilen, kalan). Her satırda kalem sayısı, **Tutar / Ödenen** ilerleme çubuğu (% ve kalan tutar), USD karşılığı, durum filtresi ve çok sevkiyatlı siparişlerde parti rozeti.
-- **Tahsilat**: üstte Bekleyen / Gecikmiş / Tahsil özet kartları (adet + para birimi bazında tutar), gecikmiş satır vurgusu (kırmızı) ve kırmızı vade tarihi, filtre butonlarında sayaç.
-- **Nakit Akışı** ve **Panel**: kova/KPI düzeni korunur (gecikmiş kırmızı, para birimi bazında toplamlar).
+## Dosyalar
+- `supabase/kurulum.sql`: tüm veritabanı (tablolar, hesap view'ları, yetkiler, aktarım fonksiyonları)
+- `lib/migrate.ts`: eski sistemden yeni sisteme dönüşüm kuralları
+- `lib/plan.ts`: ödeme planı üretimi
+- `app/(app)/…`: ekranlar
